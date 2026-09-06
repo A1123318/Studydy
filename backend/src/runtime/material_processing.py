@@ -4,9 +4,11 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha256
+import importlib.metadata
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import tempfile
 from typing import Any
@@ -14,137 +16,33 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 
-from knowledge_map.relations import MAX_RELATION_PAIRS
-from pdf_evidence.concept_api import (
-    CONCEPT_SERVER_READY_TIMEOUT_SECONDS,
-    ConceptAPIError,
-    chat_completions_url,
-)
-from pdf_evidence.text_first_bundle import read_producer_bundle
+from pdf_evidence.material_pipeline import MaterialAnalysisError, analyze_material, validate_runtime_lock
 from pdf_evidence.ocr_page_evidence import canonical_sha256
-from pdf_evidence.text_first_run import (
-    _validate_runtime_lock,
-    run_full_text_first_pdf,
-)
+from runtime.semantic_service import SemanticServiceError, preflight_semantic_service
 
 from .storage.artifacts import open_verified_source_pdf
-from .storage.material_review_outputs import MaterialRunOutputError, publish_material_outputs
-from .storage.tables import (
-    Learner,
-    MaterialProcessingRun as MaterialProcessingRunRow,
-    database_session,
-)
+from .storage.knowledge_structures import KnowledgeStructureStoreError, publish_knowledge_structure, runtime_binding_is_valid
+from .storage.tables import Learner, MaterialProcessingRun as RunRow, database_session
 
 
-_CHUNK = 1024 * 1024
-_CONFIG_KEYS = {
-    "private_runtime_root",
-    "runtime_lock",
-    "python_executable",
-    "site_packages",
-    "concept_site_packages",
-    "ocr_model_root",
-    "relation_model_root",
-    "concept_api_base_url",
-    "concept_model",
-    "concept_server_executable",
-    "concept_model_root",
-    "concept_kv_cache_bytes",
-    "concept_max_concurrency",
-    "concept_max_model_len",
-}
-_CONFIG_PATH_KEYS = {
-    "private_runtime_root",
-    "python_executable",
-    "site_packages",
-    "concept_site_packages",
-    "ocr_model_root",
-    "relation_model_root",
-    "concept_server_executable",
-    "concept_model_root",
-}
-_LOCKED_FILES = {
-    "local_ai/runtime-lock.json": "e40e5cb4a37b5f539f0755ccb3c528426302f9295e8f0a7ba837fac71e69bf9a",
-    "backend/src/pdf_evidence/ocr_page_evidence.py": "69deb46b06762b82ec75eded692452329d7e364c2b3e8a4ff4b6ac1fa14e71c0",
-    "backend/src/pdf_evidence/concept_generation.py": "afad7726379afaba94d5d68919e8200f80ab2bef48b888f9150fe800a60c24f4",
-    "backend/src/pdf_evidence/concept_api.py": "101baffaa34a5b440b3dd354a078c5416634c3a63321dfd567cd15f4d3882750",
-    "backend/src/pdf_evidence/local_ai_process.py": "32686d52b8ef2a472dab833fdaa15bad4c45121e7c68f62af8fc05e53799578a",
-}
-_BINDING_FILES = (
-    "backend/src/pdf_evidence/artifact_reason_codes.py",
-    "backend/src/pdf_evidence/concept_evidence_output.py",
-    "backend/src/pdf_evidence/concept_api.py",
-    "backend/src/pdf_evidence/text_first_bundle.py",
-    "backend/src/pdf_evidence/text_first_run.py",
-    "backend/src/pdf_evidence/study_material_output.py",
-    "backend/src/knowledge_map/artifacts.py",
-    "backend/src/knowledge_map/formal_concepts.py",
-    "backend/src/knowledge_map/relations.py",
-    "backend/src/knowledge_map/local_generation.py",
-    "backend/src/learning_resources/map_resources.py",
-    "backend/src/learning_resources/data/resource_library_v1.json",
-    "backend/src/pdf_evidence/local_ai_process.py",
-    "backend/src/runtime/material_processing.py",
-    "backend/src/runtime/local_app.py",
-    "backend/src/pdf_evidence/source_pdf.py",
-    "backend/src/runtime/storage/material_review_outputs.py",
-)
-_OCR_PACKAGE_VERSIONS = {
-    "studydy-local-ai": "0.1.0",
-    "setuptools": "84.0.0",
-    "torch": "2.10.0+cu128",
-    "torchvision": "0.25.0+cu128",
-    "transformers": "4.57.1",
-}
-_CONCEPT_PACKAGE_VERSIONS = {"vllm": "0.26.0+cu129"}
-_RUNTIME_COMPONENTS = {
-    "layout",
-    "runtime_lock",
-    "python_runtime",
-    "ocr_package",
-    "ocr_model",
-    "relation_model",
-    "concept_runtime",
-    "concept_model",
-    "product_code",
-    "backup",
-    "transaction",
-}
+_CONFIG_KEYS = {"private_runtime_root", "runtime_lock", "python_executable", "site_packages", "ocr_model_root"}
+_RUNTIME_COMPONENTS = {"layout", "runtime_lock", "python_runtime", "ocr_package", "ocr_model", "semantic_service"}
 _RUNTIME_REASONS = {
-    "LOCAL_RUNTIME_MISSING",
-    "LOCAL_RUNTIME_UNSAFE_TARGET",
-    "LOCAL_RUNTIME_NOT_EXECUTABLE",
-    "LOCAL_RUNTIME_SIZE_MISMATCH",
-    "LOCAL_RUNTIME_HASH_MISMATCH",
-    "LOCAL_RUNTIME_VERSION_MISMATCH",
-    "LOCAL_RUNTIME_SETTINGS_MISMATCH",
-    "LOCAL_RUNTIME_LOCK_MISMATCH",
-    "LOCAL_RUNTIME_BACKUP_CONFLICT",
-    "LOCAL_RUNTIME_WRITE_FAILED",
+    "LOCAL_RUNTIME_MISSING", "LOCAL_RUNTIME_UNSAFE_TARGET", "LOCAL_RUNTIME_NOT_EXECUTABLE",
+    "LOCAL_RUNTIME_VERSION_MISMATCH", "LOCAL_RUNTIME_SMOKE_FAILED",
+    "LOCAL_RUNTIME_SETTINGS_MISMATCH", "LOCAL_RUNTIME_LOCK_MISMATCH", "LOCAL_RUNTIME_WRITE_FAILED",
 }
 
 
 class MaterialProcessingError(RuntimeError):
-    """Material processing 失敗且不揭露教材、設定或資料庫細節。"""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        component: str | None = None,
-        reason: str | None = None,
-    ) -> None:
+    def __init__(self, message: str, *, component: str | None = None, reason: str | None = None) -> None:
         super().__init__(message)
         self.component = component if component in _RUNTIME_COMPONENTS else None
         self.reason = reason if reason in _RUNTIME_REASONS else None
 
 
 def _runtime_error(component: str, reason: str) -> MaterialProcessingError:
-    return MaterialProcessingError(
-        "MATERIAL_CONFIGURATION_INVALID",
-        component=component,
-        reason=reason,
-    )
+    return MaterialProcessingError("MATERIAL_CONFIGURATION_INVALID", component=component, reason=reason)
 
 
 @dataclass(frozen=True)
@@ -155,6 +53,9 @@ class MaterialProcessingRun:
     source_artifact_id: UUID
     runtime_binding: dict[str, Any] = field(repr=False)
     status: str
+    progress_stage: str
+    completed_pages: int
+    total_pages: int | None
     error_code: str | None
     output_binding: dict[str, Any] | None = field(repr=False)
     created_at: datetime
@@ -167,478 +68,190 @@ class ClaimedMaterialProcessingRun:
     run: MaterialProcessingRun = field(repr=False)
 
 
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _canonical(value: Any) -> bytes:
-    try:
-        encoded = json.dumps(
-            value,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (RecursionError, TypeError, ValueError):
-        raise MaterialProcessingError("MATERIAL_RUN_INVALID") from None
-    return sha256(encoded).digest()
-
-
-def _key_digest(value: Any) -> bytes:
-    try:
-        encoded = value.encode("utf-8")
-    except (AttributeError, UnicodeError):
-        raise MaterialProcessingError("MATERIAL_RUN_INVALID") from None
-    if not 1 <= len(encoded) <= 256:
+def _row(row: RunRow) -> MaterialProcessingRun:
+    runtime = row.runtime_binding
+    if not runtime_binding_is_valid(runtime):
         raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-    return sha256(encoded).digest()
-
-
-def _row(row: MaterialProcessingRunRow) -> MaterialProcessingRun:
+    output = row.output_binding
+    if row.status in {"pending", "running"}:
+        valid_lifecycle = (
+            output is None and row.error_code is None and row.completed_at is None
+            and (row.status != "pending" or row.progress_stage == "queued")
+        )
+    elif row.status == "failed":
+        valid_lifecycle = (
+            output is None
+            and isinstance(row.error_code, str)
+            and re.fullmatch(r"[A-Z][A-Z0-9_]{0,99}", row.error_code) is not None
+            and row.completed_at is not None
+            and row.progress_stage != "completed"
+        )
+    else:
+        fields = {
+            "schema", "knowledge_structure_revision", "runtime_lock_sha256",
+            "page_count", "processing", "quality", "decision", "reason_codes",
+            "ocr_calls", "semantic_calls",
+        }
+        valid_lifecycle = (
+            row.status in {"succeeded", "partial"}
+            and isinstance(output, dict)
+            and set(output) == fields
+            and output["schema"] == "material-run-output-binding/v4"
+            and re.fullmatch(
+                r"knowledge-structure:sha256:[0-9a-f]{64}",
+                output["knowledge_structure_revision"],
+            )
+            is not None
+            and output["runtime_lock_sha256"] == runtime["runtime_lock_sha256"]
+            and type(output["page_count"]) is int
+            and output["page_count"] >= 1
+            and output["processing"] == row.status
+            and output["quality"] in {"accepted", "needs_review"}
+            and output["decision"] in {"retain", "review"}
+            and isinstance(output["reason_codes"], list)
+            and output["reason_codes"] == list(dict.fromkeys(output["reason_codes"]))
+            and all(
+                isinstance(reason, str)
+                and re.fullmatch(r"[A-Z][A-Z0-9_]{0,99}", reason) is not None
+                for reason in output["reason_codes"]
+            )
+            and type(output["ocr_calls"]) is int
+            and 0 <= output["ocr_calls"] <= output["page_count"]
+            and type(output["semantic_calls"]) is int
+            and output["semantic_calls"] >= 1
+            and row.progress_stage == "completed"
+            and row.completed_pages == row.total_pages == output["page_count"]
+            and row.error_code is None
+            and row.completed_at is not None
+        )
+    if (
+        not valid_lifecycle
+        or row.progress_stage not in {"queued", "evidence", "semantics", "publishing", "completed"}
+        or type(row.completed_pages) is not int
+        or row.completed_pages < 0
+        or (row.total_pages is not None and (type(row.total_pages) is not int or row.total_pages < 1))
+    ):
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
     return MaterialProcessingRun(
-        run_id=row.run_id,
-        learner_id=row.learner_id,
-        material_id=row.material_id,
-        source_artifact_id=row.source_artifact_id,
-        runtime_binding=deepcopy(row.runtime_binding),
-        status=row.status,
-        error_code=row.error_code,
-        output_binding=deepcopy(row.output_binding),
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-        completed_at=row.completed_at,
+        row.run_id, row.learner_id, row.material_id, row.source_artifact_id,
+        deepcopy(row.runtime_binding), row.status, row.progress_stage,
+        row.completed_pages, row.total_pages, row.error_code,
+        deepcopy(row.output_binding), row.created_at, row.updated_at, row.completed_at,
     )
 
 
-def _file_sha256(path: Path, *, component: str = "product_code") -> str:
+def _digest(value: Any) -> bytes:
     try:
-        with path.open("rb") as source:
-            digest = sha256()
-            while chunk := source.read(_CHUNK):
-                digest.update(chunk)
-            return digest.hexdigest()
-    except OSError:
-        raise _runtime_error(component, "LOCAL_RUNTIME_MISSING") from None
+        return sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).digest()
+    except (TypeError, ValueError):
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID") from None
 
 
-@dataclass(frozen=True)
-class _RuntimeFile:
-    path: Path
-    expected_sha256: str
-    component: str
-    expected_size: int | None = None
+def _key(value: str) -> bytes:
+    if not isinstance(value, str) or not 1 <= len(value.encode()) <= 256:
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+    return sha256(value.encode()).digest()
 
 
-def _absolute_runtime_path(
-    value: str, *, is_directory: bool, component: str
-) -> Path:
-    """確認 runtime 路徑存在且類型正確；正常 symlink 由作業系統解析。"""
-
-    path = Path(value)
+def _existing_path(value: str, *, directory: bool, component: str) -> Path:
     try:
-        path_status = path.stat()
-    except FileNotFoundError:
+        path = Path(value)
+        mode = path.stat().st_mode
+    except (OSError, TypeError):
         raise _runtime_error(component, "LOCAL_RUNTIME_MISSING") from None
-    except OSError:
-        raise _runtime_error(component, "LOCAL_RUNTIME_UNSAFE_TARGET") from None
-    expected_kind = stat.S_ISDIR if is_directory else stat.S_ISREG
-    if not path.is_absolute() or not expected_kind(path_status.st_mode):
+    if not path.is_absolute() or (stat.S_ISDIR(mode) if directory else stat.S_ISREG(mode)) is False:
         raise _runtime_error(component, "LOCAL_RUNTIME_UNSAFE_TARGET")
     return path
 
 
-def _prepare_private_runtime_root(value: str) -> None:
-    """建立 owner-only runtime root；既有寬鬆或連結目錄一律拒絕。"""
+def runtime_binding(local_config: Any) -> dict[str, Any]:
+    if not isinstance(local_config, dict) or set(local_config) != _CONFIG_KEYS:
+        raise _runtime_error("layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
+    try:
+        root = Path(local_config["private_runtime_root"])
+        site_packages = Path(local_config["site_packages"])
+        install_root = site_packages.parents[4]
+        expected = {
+            "private_runtime_root": install_root / "runtime",
+            "python_executable": install_root / "ocr/runtime/bin/python3.12",
+            "site_packages": install_root / "ocr/runtime/lib/python3.12/site-packages",
+            "ocr_model_root": install_root / "models/unlimited-ocr",
+        }
+        if root.is_symlink() or any(Path(local_config[key]) != path for key, path in expected.items()):
+            raise ValueError
+        lock = validate_runtime_lock(local_config["runtime_lock"])
+    except (IndexError, KeyError, MaterialAnalysisError, TypeError, ValueError):
+        raise _runtime_error("runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH") from None
+    binding = {
+        "schema": "material-runtime-binding/v1",
+        "python": lock["python"],
+        "runtime_lock_sha256": canonical_sha256(lock),
+        "model_id": lock["semantic_service"]["model_id"],
+        "model_revision": lock["semantic_service"]["revision"],
+        "semantic_service": {
+            "base_url": lock["semantic_service"]["base_url"],
+            "max_model_len": lock["semantic_service"]["max_model_len"],
+            "server": deepcopy(lock["semantic_service"]["server"]),
+        },
+        "ocr": {"model_id": lock["ocr"]["model_id"], "revision": lock["ocr"]["revision"]},
+        "policy": "evidence-unified-semantics-product/v1",
+    }
+    binding["runtime_binding_sha256"] = canonical_sha256(binding)
+    if not runtime_binding_is_valid(binding):
+        raise _runtime_error("runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH")
+    return binding
 
+
+def validate_installed_local_runtime(local_config: Any) -> dict[str, Any]:
+    binding = runtime_binding(local_config)
+    assert isinstance(local_config, dict)
+    executable = _existing_path(local_config["python_executable"], directory=False, component="python_runtime")
+    if not os.access(executable, os.X_OK):
+        raise _runtime_error("python_runtime", "LOCAL_RUNTIME_NOT_EXECUTABLE")
+    site_packages = _existing_path(local_config["site_packages"], directory=True, component="ocr_package")
+    model_root = _existing_path(local_config["ocr_model_root"], directory=True, component="ocr_model")
+    _existing_path(str(model_root / "config.json"), directory=False, component="ocr_model")
+    lock = local_config["runtime_lock"]
+    expected = lock["packages"]
+    try:
+        distributions = importlib.metadata.distributions(path=[str(site_packages)])
+        installed = {
+            distribution.metadata["Name"].lower().replace("_", "-"): distribution.version
+            for distribution in distributions
+            if distribution.metadata.get("Name")
+        }
+    except Exception:
+        raise _runtime_error("ocr_package", "LOCAL_RUNTIME_VERSION_MISMATCH") from None
+    if any(installed.get(name.replace("_", "-")) != version for name, version in expected.items() if name != "backend"):
+        raise _runtime_error("ocr_package", "LOCAL_RUNTIME_VERSION_MISMATCH")
+    return binding
+
+
+def _prepare_runtime_root(value: str) -> None:
     path = Path(value)
     if not path.is_absolute() or path.is_symlink():
         raise _runtime_error("layout", "LOCAL_RUNTIME_UNSAFE_TARGET")
     try:
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path_status = path.lstat()
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not os.access(path, os.R_OK | os.W_OK | os.X_OK):
+            raise OSError
     except OSError:
         raise _runtime_error("layout", "LOCAL_RUNTIME_WRITE_FAILED") from None
-    if (
-        not stat.S_ISDIR(path_status.st_mode)
-        or stat.S_ISLNK(path_status.st_mode)
-        or path_status.st_uid != os.getuid()
-        or stat.S_IMODE(path_status.st_mode) & 0o077
-    ):
-        raise _runtime_error("layout", "LOCAL_RUNTIME_UNSAFE_TARGET")
 
 
-def _runtime_files(local_config: dict[str, Any]) -> tuple[_RuntimeFile, ...]:
-    """把 runtime lock 對應到 OCR、Qwen 與 Relation verifier 本機檔案。"""
-
-    runtime_lock = local_config["runtime_lock"]
-    python_executable = _absolute_runtime_path(
-        local_config["python_executable"],
-        is_directory=False,
-        component="python_runtime",
-    )
-    if not os.access(python_executable, os.X_OK):
-        raise _runtime_error("python_runtime", "LOCAL_RUNTIME_NOT_EXECUTABLE")
-    site_packages = _absolute_runtime_path(
-        local_config["site_packages"], is_directory=True, component="ocr_package"
-    )
-    _absolute_runtime_path(
-        local_config["concept_site_packages"],
-        is_directory=True,
-        component="concept_runtime",
-    )
-    ocr_model_root = _absolute_runtime_path(
-        local_config["ocr_model_root"], is_directory=True, component="ocr_model"
-    )
-    relation_model_root = _absolute_runtime_path(
-        local_config["relation_model_root"],
-        is_directory=True,
-        component="relation_model",
-    )
-    concept_server_executable = _absolute_runtime_path(
-        local_config["concept_server_executable"],
-        is_directory=False,
-        component="concept_runtime",
-    )
-    if not os.access(concept_server_executable, os.X_OK):
-        raise _runtime_error("concept_runtime", "LOCAL_RUNTIME_NOT_EXECUTABLE")
-    concept_model_root = _absolute_runtime_path(
-        local_config["concept_model_root"],
-        is_directory=True,
-        component="concept_model",
-    )
-    package_root = site_packages / "studydy_local_ai"
-    files = [
-        _RuntimeFile(
-            python_executable,
-            runtime_lock["python"]["executable_sha256"],
-            "python_runtime",
-        ),
-        _RuntimeFile(
-            concept_server_executable,
-            runtime_lock["semantic"]["server"]["executable_sha256"],
-            "concept_runtime",
-        ),
-        *(
-            _RuntimeFile(package_root / name, expected_sha256, "ocr_package")
-            for name, expected_sha256 in runtime_lock["ocr"][
-                "package_sources"
-            ].items()
-        ),
-        _RuntimeFile(
-            ocr_model_root / "config.json",
-            runtime_lock["ocr"]["config_sha256"],
-            "ocr_model",
-        ),
-        *(
-            _RuntimeFile(
-                ocr_model_root / name, expected_sha256, "ocr_model"
-            )
-            for name, expected_sha256 in runtime_lock["ocr"]["reviewed_code"].items()
-        ),
-    ]
-    for required_file in runtime_lock["ocr"]["required_files"]:
-        name = required_file["name"]
-        if Path(name).name != name:
-            raise _runtime_error("runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH")
-        files.append(
-            _RuntimeFile(
-                ocr_model_root / name,
-                required_file["sha256"],
-                "ocr_model",
-                required_file["size"],
-            )
-        )
-    for required_file in runtime_lock["semantic"]["required_files"]:
-        name = required_file["name"]
-        if Path(name).name != name:
-            raise _runtime_error("runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH")
-        files.append(
-            _RuntimeFile(
-                concept_model_root / name,
-                required_file["sha256"],
-                "concept_model",
-                required_file.get("size"),
-            )
-        )
-    for required_file in runtime_lock["relation_verifier"]["required_files"]:
-        name = required_file["name"]
-        if Path(name).name != name:
-            raise _runtime_error("runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH")
-        files.append(
-            _RuntimeFile(
-                relation_model_root / name,
-                required_file["sha256"],
-                "relation_model",
-                required_file.get("size"),
-            )
-        )
-    return tuple(files)
-
-
-def _distribution_versions(
-    site_packages: Path,
-    expected_versions: dict[str, str],
-    *,
-    component: str,
-) -> dict[str, str]:
-    """直接讀取固定 site-packages metadata，不執行待驗 runtime 程式。"""
-
-    found: dict[str, str] = {}
+def runtime_preflight(local_config: Any) -> dict[str, Any]:
+    binding = validate_installed_local_runtime(local_config)
+    assert isinstance(local_config, dict)
     try:
-        metadata_files = tuple(site_packages.glob("*.dist-info/METADATA"))
-        for metadata_file in metadata_files:
-            name = version = None
-            with metadata_file.open("r", encoding="utf-8") as metadata:
-                for line in metadata:
-                    if line.startswith("Name: "):
-                        name = line[6:].strip().lower().replace("_", "-")
-                    elif line.startswith("Version: "):
-                        version = line[9:].strip()
-                    if name is not None and version is not None:
-                        break
-            if name in expected_versions:
-                if name in found:
-                    raise _runtime_error(
-                        component, "LOCAL_RUNTIME_VERSION_MISMATCH"
-                    )
-                found[name] = version
-    except (OSError, UnicodeError):
-        raise _runtime_error(component, "LOCAL_RUNTIME_VERSION_MISMATCH") from None
-    return found
-
-
-def validate_installed_local_runtime(
-    local_config: Any,
-) -> tuple[dict[str, Any], int]:
-    """唯讀核對固定 runtime binding、必要檔案與套件版本。"""
-
-    binding = formal_runtime_binding(local_config)
-    assert isinstance(local_config, dict)
-    runtime_files = _runtime_files(local_config)
-    for runtime_file in runtime_files:
-        try:
-            file_status = runtime_file.path.stat()
-        except FileNotFoundError:
-            raise _runtime_error(
-                runtime_file.component, "LOCAL_RUNTIME_MISSING"
-            ) from None
-        except OSError:
-            raise _runtime_error(
-                runtime_file.component, "LOCAL_RUNTIME_UNSAFE_TARGET"
-            ) from None
-        if not stat.S_ISREG(file_status.st_mode):
-            raise _runtime_error(
-                runtime_file.component, "LOCAL_RUNTIME_UNSAFE_TARGET"
-            )
-        if (
-            runtime_file.expected_size is not None
-            and file_status.st_size != runtime_file.expected_size
-        ):
-            raise _runtime_error(
-                runtime_file.component, "LOCAL_RUNTIME_SIZE_MISMATCH"
-            )
-        if (
-            _file_sha256(
-                runtime_file.path, component=runtime_file.component
-            )
-            != runtime_file.expected_sha256
-        ):
-            raise _runtime_error(
-                runtime_file.component, "LOCAL_RUNTIME_HASH_MISMATCH"
-            )
-    site_packages = Path(local_config["site_packages"])
-    if (
-        _distribution_versions(
-            site_packages,
-            _OCR_PACKAGE_VERSIONS,
-            component="ocr_package",
-        )
-        != _OCR_PACKAGE_VERSIONS
-    ):
-        raise _runtime_error("ocr_package", "LOCAL_RUNTIME_VERSION_MISMATCH")
-    concept_site_packages = Path(local_config["concept_site_packages"])
-    if (
-        _distribution_versions(
-            concept_site_packages,
-            _CONCEPT_PACKAGE_VERSIONS,
-            component="concept_runtime",
-        )
-        != _CONCEPT_PACKAGE_VERSIONS
-    ):
-        raise _runtime_error(
-            "concept_runtime", "LOCAL_RUNTIME_VERSION_MISMATCH"
-        )
-    return binding, len(runtime_files)
-
-
-def formal_runtime_preflight(local_config: Any) -> dict[str, Any]:
-    """唯讀驗證成功後，才準備本次執行使用的 private root。"""
-
-    binding, _ = validate_installed_local_runtime(local_config)
-    assert isinstance(local_config, dict)
-    _prepare_private_runtime_root(local_config["private_runtime_root"])
+        preflight_semantic_service(local_config["runtime_lock"])
+    except SemanticServiceError as error:
+        reason = "LOCAL_RUNTIME_SETTINGS_MISMATCH" if error.reason_code.endswith(("CONFIG_INVALID", "IDENTITY_MISMATCH")) else "LOCAL_RUNTIME_MISSING"
+        raise _runtime_error("semantic_service", reason) from None
+    _prepare_runtime_root(local_config["private_runtime_root"])
     return binding
 
 
-def formal_runtime_binding(local_config: Any) -> dict[str, Any]:
-    """驗證固定 local-only config，DB 只保存不含 private path 的 exact binding。"""
-
-    if not isinstance(local_config, dict) or set(local_config) != _CONFIG_KEYS:
-        raise _runtime_error("layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    for key in _CONFIG_PATH_KEYS:
-        value = local_config.get(key)
-        if not isinstance(value, str) or not value or "://" in value:
-            raise _runtime_error("layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    site_packages = Path(local_config["site_packages"])
-    try:
-        root = site_packages.parents[4]
-    except IndexError:
-        raise _runtime_error(
-            "layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH"
-        ) from None
-    expected_paths = {
-        "private_runtime_root": root / "runtime",
-        "python_executable": root / "ocr/runtime/bin/python3.12",
-        "site_packages": root / "ocr/runtime/lib/python3.12/site-packages",
-        "concept_site_packages": root / "vllm/lib/python3.12/site-packages",
-        "ocr_model_root": root / "models/unlimited-ocr",
-        "relation_model_root": root / "models/mdeberta-v3-base-mnli-xnli",
-        "concept_server_executable": root / "vllm/bin/vllm",
-        "concept_model_root": root / "models/qwen3-14b-awq",
-    }
-    if any(
-        Path(local_config[name]) != expected
-        for name, expected in expected_paths.items()
-    ):
-        raise _runtime_error("layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    concept_model = local_config.get("concept_model")
-    if not isinstance(concept_model, str) or not concept_model or len(concept_model) > 256:
-        raise _runtime_error("concept_model", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    concept_kv_cache_bytes = local_config.get("concept_kv_cache_bytes")
-    if type(concept_kv_cache_bytes) is not int or concept_kv_cache_bytes < 1:
-        raise _runtime_error("concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    concept_max_concurrency = local_config.get("concept_max_concurrency")
-    if type(concept_max_concurrency) is not int or concept_max_concurrency != 1:
-        raise _runtime_error("concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    concept_max_model_len = local_config.get("concept_max_model_len")
-    if type(concept_max_model_len) is not int or concept_max_model_len < 1:
-        raise _runtime_error("concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    try:
-        chat_completions_url(local_config.get("concept_api_base_url"))
-    except ConceptAPIError:
-        raise _runtime_error(
-            "concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH"
-        ) from None
-    if local_config["concept_api_base_url"] != "http://127.0.0.1:8101":
-        raise _runtime_error(
-            "concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH"
-        )
-    runtime_root = Path(local_config["private_runtime_root"])
-    if not runtime_root.is_absolute() or runtime_root.is_symlink():
-        raise _runtime_error("layout", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    try:
-        _validate_runtime_lock(local_config["runtime_lock"])
-    except (TypeError, ValueError):
-        raise _runtime_error(
-            "runtime_lock", "LOCAL_RUNTIME_LOCK_MISMATCH"
-        ) from None
-    if concept_model != local_config["runtime_lock"]["semantic"]["model_id"]:
-        raise _runtime_error("concept_model", "LOCAL_RUNTIME_SETTINGS_MISMATCH")
-    semantic_lock = local_config["runtime_lock"]["semantic"]
-    if (
-        semantic_lock["server"]
-        != {
-            "package": "vllm",
-            "version": _CONCEPT_PACKAGE_VERSIONS["vllm"],
-            "executable_sha256": "6d34800bbe39c7b1d94043fa0a7badafd894dbc422e0212f94ebe16547b2097a",
-        }
-        or concept_max_model_len
-        != semantic_lock["input_token_budget"]["maximum_input_tokens"]
-        + semantic_lock["generation"]["max_tokens"]
-    ):
-        raise _runtime_error(
-            "concept_runtime", "LOCAL_RUNTIME_SETTINGS_MISMATCH"
-        )
-
-    repository_root = Path(__file__).resolve().parents[3]
-    for relative_path, expected_sha256 in _LOCKED_FILES.items():
-        component = (
-            "runtime_lock"
-            if relative_path == "local_ai/runtime-lock.json"
-            else "product_code"
-        )
-        if (
-            _file_sha256(repository_root / relative_path, component=component)
-            != expected_sha256
-        ):
-            raise _runtime_error(component, "LOCAL_RUNTIME_HASH_MISMATCH")
-    code_hashes = {
-        relative_path: _file_sha256(repository_root / relative_path)
-        for relative_path in _BINDING_FILES
-    }
-    binding = {
-        "schema": "formal-material-runtime-binding/v6",
-        "runtime_lock_sha256": canonical_sha256(local_config["runtime_lock"]),
-        "code_hashes": code_hashes,
-        "document_policy": "whole-document-review-aggregation/v1",
-        "page_range": {"minimum": 1, "caller_subset": False},
-        "call_ceilings": {
-            "ocr_calls_per_page": 1,
-            "ocr_initial_loads": 1,
-            "concept_initial_loads": 2,
-            "relation_verifier_initial_loads": 1,
-            "relation_verifier_calls_per_material": MAX_RELATION_PAIRS,
-        },
-        "timeouts_seconds": {
-            "resident_lock": 5,
-            "ocr_page": 120,
-            "concept_attempt": 300,
-            "concept_server_ready": CONCEPT_SERVER_READY_TIMEOUT_SECONDS,
-            "relation_verifier": local_config["runtime_lock"][
-                "relation_verifier"
-            ]["timeout_seconds"],
-        },
-        "retry_policy": {
-            "ocr_attempts": 1,
-            "concept_attempts": 2,
-        },
-        "concept_api": {
-            "base_url": local_config["concept_api_base_url"],
-            "model": concept_model,
-            "model_revision": local_config["runtime_lock"]["semantic"]["revision"],
-            "model_binding_manifest_sha256": local_config["runtime_lock"]["semantic"][
-                "binding_manifest_sha256"
-            ],
-            "protocol": local_config["runtime_lock"]["semantic"]["api_protocol"],
-            "kv_cache_bytes": concept_kv_cache_bytes,
-            "max_concurrency": concept_max_concurrency,
-            "max_model_len": concept_max_model_len,
-            "server": deepcopy(semantic_lock["server"]),
-            "structured_output": deepcopy(semantic_lock["structured_output"]),
-            "input_token_budget": deepcopy(semantic_lock["input_token_budget"]),
-        },
-        "relation_verifier": deepcopy(
-            local_config["runtime_lock"]["relation_verifier"]
-        ),
-        "residency_policy": (
-            "ocr-child-then-owned-loopback-concept-server-"
-            "then-relation-verifier/v4"
-        ),
-        "network_policy": "loopback-concept-api-no-credentials/v1",
-        "retention_policy": {
-            "provider_raw": "not_persisted",
-            "validated_cache": "local_private_cache",
-            "run_handoff": "deleted_before_terminal_publish",
-        },
-    }
-    binding["runtime_binding_sha256"] = canonical_sha256(binding)
-    return binding
-
-
-def _source_hash(
-    learner_id: UUID, material_id: UUID, artifact_id: UUID, *, dsn: str | None
-) -> str:
+def _source_hash(learner_id: UUID, material_id: UUID, artifact_id: UUID, *, dsn: str | None) -> str:
     try:
         with open_verified_source_pdf(learner_id, artifact_id, dsn=dsn) as source:
             if source.material_id != material_id:
@@ -659,82 +272,45 @@ def create_material_processing_run(
     *,
     dsn: str | None = None,
 ) -> MaterialProcessingRun:
-    """建立唯一 pending run；client 無法指定頁面、模型或 processing policy。"""
-
-    if not all(
-        isinstance(value, UUID)
-        for value in (learner_id, material_id, source_artifact_id)
-    ):
+    if not all(isinstance(value, UUID) for value in (learner_id, material_id, source_artifact_id)):
         raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-    runtime_binding = formal_runtime_binding(local_config)
-    source_sha256 = _source_hash(
-        learner_id, material_id, source_artifact_id, dsn=dsn
-    )
-    key = _key_digest(idempotency_key)
-    fingerprint = _canonical(
-        {
-            "material_id": str(material_id),
-            "source_artifact_id": str(source_artifact_id),
-            "source_sha256": source_sha256,
-            "runtime_binding": runtime_binding,
-        }
-    )
+    binding = runtime_binding(local_config)
+    source_sha256 = _source_hash(learner_id, material_id, source_artifact_id, dsn=dsn)
+    key = _key(idempotency_key)
+    fingerprint = _digest({
+        "material_id": str(material_id), "source_artifact_id": str(source_artifact_id),
+        "source_sha256": source_sha256, "runtime_binding": binding,
+    })
     try:
         with database_session(dsn) as session:
-            owner = session.execute(
-                select(Learner.learner_id)
-                .where(Learner.learner_id == learner_id)
-                .with_for_update()
-            ).scalar_one_or_none()
-            if owner is None:
+            if session.scalar(select(Learner.learner_id).where(Learner.learner_id == learner_id).with_for_update()) is None:
                 raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-            existing = session.scalar(
-                select(MaterialProcessingRunRow)
-                .where(
-                    MaterialProcessingRunRow.learner_id == learner_id,
-                    MaterialProcessingRunRow.idempotency_key_sha256 == key,
-                )
-                .with_for_update()
-            )
+            existing = session.scalar(select(RunRow).where(RunRow.learner_id == learner_id, RunRow.idempotency_key_sha256 == key).with_for_update())
             if existing is not None:
                 if bytes(existing.request_fingerprint) != fingerprint:
                     raise MaterialProcessingError("MATERIAL_RUN_IDEMPOTENCY_CONFLICT")
                 return _row(existing)
-            created = _now()
-            row = MaterialProcessingRunRow(
-                run_id=uuid4(),
-                learner_id=learner_id,
-                material_id=material_id,
-                source_artifact_id=source_artifact_id,
-                idempotency_key_sha256=key,
-                request_fingerprint=fingerprint,
-                runtime_binding=runtime_binding,
-                status="pending",
-                created_at=created,
-                updated_at=created,
+            now = datetime.now(UTC)
+            created = RunRow(
+                run_id=uuid4(), learner_id=learner_id, material_id=material_id,
+                source_artifact_id=source_artifact_id, idempotency_key_sha256=key,
+                request_fingerprint=fingerprint, runtime_binding=binding, status="pending",
+                progress_stage="queued", completed_pages=0, total_pages=None,
+                created_at=now, updated_at=now,
             )
-            session.add(row)
+            session.add(created)
             session.flush()
-            return _row(row)
+            return _row(created)
     except MaterialProcessingError:
         raise
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
 
-def read_material_processing_run(
-    learner_id: UUID, run_id: UUID, *, dsn: str | None = None
-) -> MaterialProcessingRun:
-    if not isinstance(learner_id, UUID) or not isinstance(run_id, UUID):
-        raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
+def read_material_processing_run(learner_id: UUID, run_id: UUID, *, dsn: str | None = None) -> MaterialProcessingRun:
     try:
         with database_session(dsn) as session:
-            found = session.scalar(
-                select(MaterialProcessingRunRow).where(
-                    MaterialProcessingRunRow.learner_id == learner_id,
-                    MaterialProcessingRunRow.run_id == run_id,
-                )
-            )
+            found = session.scalar(select(RunRow).where(RunRow.learner_id == learner_id, RunRow.run_id == run_id))
         if found is None:
             raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
         return _row(found)
@@ -745,77 +321,66 @@ def read_material_processing_run(
 
 
 def recover_interrupted_material_runs(*, dsn: str | None = None) -> int:
-    """Worker 啟動後先終結舊 running rows，再開始 claim pending。"""
-
     try:
         with database_session(dsn) as session:
             rows = session.execute(
-                update(MaterialProcessingRunRow)
-                .where(MaterialProcessingRunRow.status == "running")
-                .values(
-                    status="failed",
-                    error_code="RESTART_INTERRUPTED",
-                    completed_at=func.clock_timestamp(),
-                    updated_at=func.clock_timestamp(),
-                )
-                .returning(MaterialProcessingRunRow.run_id)
+                update(RunRow).where(RunRow.status == "running").values(
+                    status="failed", error_code="RESTART_INTERRUPTED",
+                    completed_at=func.clock_timestamp(), updated_at=func.clock_timestamp(),
+                ).returning(RunRow.run_id)
             ).all()
         return len(rows)
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
 
-def claim_next_material_processing_run(
-    *, dsn: str | None = None
-) -> ClaimedMaterialProcessingRun | None:
-    """以 PostgreSQL row lock claim 最早 pending run。"""
-
+def claim_next_material_processing_run(*, dsn: str | None = None) -> ClaimedMaterialProcessingRun | None:
     try:
         with database_session(dsn) as session:
-            found = session.scalar(
-                select(MaterialProcessingRunRow)
-                .where(MaterialProcessingRunRow.status == "pending")
-                .order_by(
-                    MaterialProcessingRunRow.created_at,
-                    MaterialProcessingRunRow.run_id,
-                )
-                .with_for_update(skip_locked=True)
-                .limit(1)
-            )
-            if found is None:
+            row = session.scalar(select(RunRow).where(RunRow.status == "pending").order_by(RunRow.created_at, RunRow.run_id).with_for_update(skip_locked=True).limit(1))
+            if row is None:
                 return None
-            found.status = "running"
-            found.updated_at = session.scalar(select(func.clock_timestamp()))
+            row.status = "running"
+            row.updated_at = session.scalar(select(func.clock_timestamp()))
             session.flush()
-            return ClaimedMaterialProcessingRun(_row(found))
+            return ClaimedMaterialProcessingRun(_row(row))
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
 
-def _record_run_failure(run_id: UUID, reason: str, *, dsn: str | None) -> None:
-    safe_reason = (
-        reason
-        if isinstance(reason, str)
-        and reason
-        and len(reason) <= 100
-        and all(character.isupper() or character.isdigit() or character == "_" for character in reason)
-        else "MATERIAL_ANALYSIS_FAILED"
-    )
+_NEXT_STAGE = {"queued": "evidence", "evidence": "semantics", "semantics": "publishing"}
+
+
+def _record_progress(run_id: UUID, stage: str, completed: int, total: int, *, dsn: str | None) -> None:
+    if stage not in _NEXT_STAGE.values() or type(completed) is not int or type(total) is not int or not 0 <= completed <= total or total < 1:
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
     try:
         with database_session(dsn) as session:
-            session.execute(
-                update(MaterialProcessingRunRow)
-                .where(
-                    MaterialProcessingRunRow.run_id == run_id,
-                    MaterialProcessingRunRow.status == "running",
-                )
-                .values(
-                    status="failed",
-                    error_code=safe_reason,
-                    completed_at=func.clock_timestamp(),
-                    updated_at=func.clock_timestamp(),
-                )
-            )
+            row = session.scalar(select(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").with_for_update())
+            if row is None or (row.total_pages is not None and row.total_pages != total):
+                raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+            if row.progress_stage == stage:
+                if completed < row.completed_pages:
+                    raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+            elif _NEXT_STAGE.get(row.progress_stage) != stage:
+                raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+            elif row.progress_stage != "queued" and row.completed_pages != total:
+                raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+            row.progress_stage, row.completed_pages, row.total_pages = stage, completed, total
+            row.updated_at = session.scalar(select(func.clock_timestamp()))
+    except MaterialProcessingError:
+        raise
+    except Exception:
+        raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
+
+
+def _record_failure(run_id: UUID, reason: str, *, dsn: str | None) -> None:
+    safe = reason if isinstance(reason, str) and 1 <= len(reason) <= 100 and all(character.isupper() or character.isdigit() or character == "_" for character in reason) else "MATERIAL_ANALYSIS_FAILED"
+    try:
+        with database_session(dsn) as session:
+            session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(
+                status="failed", error_code=safe, completed_at=func.clock_timestamp(), updated_at=func.clock_timestamp(),
+            ))
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
@@ -826,71 +391,33 @@ def execute_claimed_material_processing_run(
     *,
     dsn: str | None = None,
 ) -> MaterialProcessingRun:
-    """執行 exact whole PDF，驗證 producer bundle 後才發布兩個 revisions。"""
-
     if not isinstance(claim, ClaimedMaterialProcessingRun):
         raise MaterialProcessingError("MATERIAL_RUN_CLAIM_INVALID")
     run = claim.run
     try:
-        if formal_runtime_preflight(local_config) != run.runtime_binding:
+        if runtime_preflight(local_config) != run.runtime_binding:
             raise MaterialProcessingError("MATERIAL_CONFIGURATION_INVALID")
-        with tempfile.TemporaryDirectory(prefix="studydy-material-run-") as directory:
-            private = Path(directory)
-            private.chmod(0o700)
-            source_path = private / "source.pdf"
-            with open_verified_source_pdf(
-                run.learner_id, run.source_artifact_id, dsn=dsn
-            ) as source:
+        with tempfile.TemporaryDirectory(prefix="studydy-material-") as directory:
+            source_path = Path(directory) / "source.pdf"
+            with open_verified_source_pdf(run.learner_id, run.source_artifact_id, dsn=dsn) as source:
                 if source.material_id != run.material_id:
                     raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-                source_sha256 = source.sha256
                 with source_path.open("xb") as destination:
-                    while chunk := source.file.read(_CHUNK):
+                    while chunk := source.file.read(1024 * 1024):
                         destination.write(chunk)
-            producer_run_id = f"text-first-run:{run.run_id}"
-            run_full_text_first_pdf(
-                {
-                    "media_type": "application/pdf",
-                    "source_path": str(source_path),
-                    "expected_source_sha256": source_sha256,
-                },
+                source_sha256 = source.sha256
+            structure = analyze_material(
+                {"media_type": "application/pdf", "source_path": str(source_path), "expected_source_sha256": source_sha256},
                 deepcopy(local_config),
-                run_id=producer_run_id,
-                produced_at=_now().isoformat(),
-                runtime_binding_sha256=run.runtime_binding[
-                    "runtime_binding_sha256"
-                ],
+                run_id=str(run.run_id),
+                progress_callback=lambda stage, completed, total: _record_progress(run.run_id, stage, completed, total, dsn=dsn),
             )
-        producer_bundle = read_producer_bundle(
-            Path(local_config["private_runtime_root"]), producer_run_id
-        )
-        bundle = producer_bundle["bundle"]
-        if bundle["processing"] == "failed":
-            _record_run_failure(
-                run.run_id,
-                bundle["reason_codes"][0]
-                if bundle["reason_codes"]
-                else "MATERIAL_ANALYSIS_FAILED",
-                dsn=dsn,
-            )
-            return read_material_processing_run(run.learner_id, run.run_id, dsn=dsn)
-        publish_material_outputs(
-            run.learner_id,
-            run.material_id,
-            run.run_id,
-            source_sha256,
-            run.runtime_binding["runtime_binding_sha256"],
-            producer_bundle,
-            local_config=deepcopy(local_config),
-            runtime_root=Path(local_config["private_runtime_root"]),
-            dsn=dsn,
-        )
-    except OSError as error:
-        _record_run_failure(run.run_id, str(error), dsn=dsn)
-    except MaterialRunOutputError as error:
-        _record_run_failure(run.run_id, str(error), dsn=dsn)
-    except MaterialProcessingError as error:
-        _record_run_failure(run.run_id, str(error), dsn=dsn)
+        if structure["status"]["processing"] == "failed":
+            raise MaterialProcessingError("NO_CANONICAL_CONCEPT")
+        _record_progress(run.run_id, "publishing", structure["page_count"], structure["page_count"], dsn=dsn)
+        publish_knowledge_structure(run.learner_id, run.material_id, run.run_id, structure, dsn=dsn)
+    except (KnowledgeStructureStoreError, MaterialAnalysisError, MaterialProcessingError) as error:
+        _record_failure(run.run_id, getattr(error, "reason_code", None) or str(error), dsn=dsn)
     except Exception:
-        _record_run_failure(run.run_id, "MATERIAL_ANALYSIS_FAILED", dsn=dsn)
+        _record_failure(run.run_id, "MATERIAL_ANALYSIS_FAILED", dsn=dsn)
     return read_material_processing_run(run.learner_id, run.run_id, dsn=dsn)

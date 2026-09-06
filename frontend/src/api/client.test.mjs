@@ -3,349 +3,91 @@ import test from "node:test";
 
 import { ApiClientError, StudydyApiClient } from "./client.ts";
 
-const requestId = "6f9619ff-8b86-4e3a-a2f1-2bb9424d5c71";
-const materialId = "9f9619ff-8b86-4e3a-a2f1-2bb9424d5c72";
-const artifactId = "af9619ff-8b86-4e3a-a2f1-2bb9424d5c73";
-const runId = "bf9619ff-8b86-4e3a-a2f1-2bb9424d5c74";
-const mapRevision = `knowledge-map:sha256:${"d".repeat(64)}`;
+const materialId = "11111111-1111-4111-8111-111111111111";
+const runId = "22222222-2222-4222-8222-222222222222";
+const sessionId = "33333333-3333-4333-8333-333333333333";
+const structureRevision = `knowledge-structure:sha256:${"a".repeat(64)}`;
+const conceptId = `concept:sha256:${"b".repeat(64)}`;
+const claimId = `claim:sha256:${"c".repeat(64)}`;
+const evidenceId = `evidence:sha256:${"d".repeat(64)}`;
+const blockId = `block:sha256:${"e".repeat(64)}`;
 
-function apiError(status, reasonCode) {
-  return Response.json({
-    schema: "api-error/v1",
-    request_id: requestId,
-    reason_code: reasonCode,
-    retryable: status === 503,
-    message: "Request could not be completed.",
-  }, { status });
-}
-
-function pendingRun() {
+function runView() {
   return {
-    schema: "material-processing-run/v2",
-    run_id: runId,
-    material_id: materialId,
-    source_artifact_id: artifactId,
-    status: "pending",
-    output_binding: null,
-    error_code: null,
-    created_at: "2026-08-19T00:00:00Z",
-    updated_at: "2026-08-19T00:00:00Z",
-    completed_at: null,
-  };
-}
-
-function successfulRun() {
-  return {
-    ...pendingRun(),
-    status: "succeeded",
+    schema: "material-processing-run/v4", run_id: runId, material_id: materialId,
+    source_artifact_id: "44444444-4444-4444-8444-444444444444", status: "succeeded",
+    progress_stage: "completed", completed_pages: 1, total_pages: 1, error_code: null,
+    created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:01Z", completed_at: "2026-09-05T00:00:01Z",
     output_binding: {
-      schema: "material-run-output-binding/v3",
-      producer_bundle_id: `text-first-producer-bundle:sha256:${"1".repeat(64)}`,
-      producer_run_id: `text-first-run:${runId}`,
-      concept_evidence_output_id: `concept-evidence-output:sha256:${"2".repeat(64)}`,
-      study_material_output_revision: `study-material-output:sha256:${"3".repeat(64)}`,
-      knowledge_map_revision: mapRevision,
-      runtime_binding_sha256: "4".repeat(64),
-      page_count: 40,
-      processing: "succeeded",
-      quality: "needs_review",
-      decision: "review",
-      reason_codes: ["SEMANTIC_REVIEW_REQUIRED"],
-      ocr_calls: 40,
-      concept_calls: 40,
+      schema: "material-run-output-binding/v4", knowledge_structure_revision: structureRevision,
+      runtime_lock_sha256: "f".repeat(64), page_count: 1, processing: "succeeded",
+      quality: "accepted", decision: "retain", reason_codes: [], ocr_calls: 0, semantic_calls: 1,
     },
-    updated_at: "2026-08-19T00:01:00Z",
-    completed_at: "2026-08-19T00:01:00Z",
   };
 }
 
-function mapView() {
-  const pageRef = `page:sha256:${"5".repeat(64)}`;
+function structureView() {
   return {
-    schema: "knowledge-map-view/v6",
-    material_ref: `material:sha256:${"6".repeat(64)}`,
-    knowledge_map_revision: mapRevision,
-    source_output_id: `study-material-output:sha256:${"3".repeat(64)}`,
-    status: {
-      processing: "partial",
-      quality: "needs_review",
-      decision: "review",
-      reason_codes: ["KNOWLEDGE_MAP_REVIEW_REQUIRED"],
-    },
+    schema: "knowledge-structure-view/v2", material_id: `material:sha256:${"1".repeat(64)}`,
+    knowledge_structure_revision: structureRevision,
+    status: { processing: "succeeded", quality: "accepted", decision: "retain", reason_codes: [] },
+    document_tree: { material_id: `material:sha256:${"1".repeat(64)}`, sections: [{ section_id: `section:sha256:${"2".repeat(64)}`, title: "Stacks", order: 0, heading_evidence_id: null, concept_ids: [conceptId] }] },
     concepts: [{
-      formal_concept_id: `formal-concept:sha256:${"7".repeat(64)}`,
-      label: "Public concept",
-      claims: [{
-        claim_id: `claim:sha256:${"9".repeat(64)}`,
-        text: "Public definition",
-        evidence: [{
-          evidence_id: `evidence:sha256:${"8".repeat(64)}`,
-          page_ref: pageRef,
-          page_number: 40,
-          kind: "paragraph",
-          region: { coordinate_space: "unrotated_pdf_points", bbox: [72, 80, 300, 120] },
-        }],
-      }],
-      source_concept_ids: [`concept:sha256:${"a".repeat(64)}`],
-      source_page_numbers: [40],
-      supplementary_resources: [],
-      quality: "needs_review",
-      decision: "review",
-      reason_codes: ["SEMANTIC_REVIEW_REQUIRED"],
+      concept_id: conceptId, label: "Stack", aliases: [], section_ids: [`section:sha256:${"2".repeat(64)}`], source_pages: [1],
+      claims: [{ claim_id: claimId, text: "A stack is LIFO.", evidence: [{ evidence_id: evidenceId, page_ref: `page:sha256:${"3".repeat(64)}`, page: 1, block_order: 0, kind: "paragraph", source: "native_text", source_locator: { page: 1, block_id: blockId, region: [1, 2, 3, 4] }, quote: "A stack is LIFO." }] }],
     }],
-    relations: [],
-    relation_diagnostics: {
-      possible_pairs: 0,
-      candidate_pairs: 0,
-      selected_pairs: 0,
-      selected_signal_counts: {},
-      evidence_gated_pairs: 0,
-      rejected_no_evidence: 0,
-      direction_conflicts: 0,
-      verifier_calls: 0,
-      verifier_accepted: 0,
-      verifier_rejected: 0,
-      verifier_unsupported: 0,
-      structural_proposals: 0,
-      contains_proposals: 0,
-      prerequisite_proposals: 0,
-      related_proposals: 0,
-      accepted_relations: 0,
-    },
-    resource_binding: {
-      context_revision: `map-resource-context:sha256:${"1".repeat(64)}`,
-      library_revision: `resource-library:sha256:${"2".repeat(64)}`,
-      matching_policy: "resource-context-exact-distinct-source/v3",
-      promotion_policy: "resource-formal-concept-promotion/v1",
-    },
-    resource_diagnostics: {
-      matches: 0,
-      promoted_matches: 0,
-      promoted_resources: 0,
-      dropped_matches: 0,
-      split_review_matches: 0,
-    },
-    resource_decisions: [],
-    initial_learning_path: [`formal-concept:sha256:${"7".repeat(64)}`],
-    excluded_pages: [],
+    relations: [], initial_learning_path: [{ position: 1, concept_id: conceptId, reason: "document_order" }], excluded_pages: [],
   };
 }
 
-function mapViewWithRelation() {
-  const view = mapView();
-  const source = view.concepts[0];
-  const target = structuredClone(source);
-  target.formal_concept_id = `formal-concept:sha256:${"b".repeat(64)}`;
-  target.claims[0].claim_id = `claim:sha256:${"c".repeat(64)}`;
-  target.claims[0].evidence[0].evidence_id = `evidence:sha256:${"e".repeat(64)}`;
-  target.source_concept_ids = [`concept:sha256:${"f".repeat(64)}`];
-  view.concepts.push(target);
-  view.initial_learning_path.push(target.formal_concept_id);
-  view.relations.push({
-    relation_id: `formal-relation:sha256:${"a".repeat(64)}`,
-    type: "related",
-    source_formal_concept_id: source.formal_concept_id,
-    target_formal_concept_id: target.formal_concept_id,
-    relation_evidence: [{
-      owner_formal_concept_id: source.formal_concept_id,
-      claim_id: source.claims[0].claim_id,
-      evidence_ids: [source.claims[0].evidence[0].evidence_id],
-    }],
-    quality: "needs_review",
-    decision: "review",
-    reason_codes: ["RELATION_REVIEW_REQUIRED"],
-    is_in_prerequisite_cycle: false,
-  });
-  Object.assign(view.relation_diagnostics, {
-    possible_pairs: 1,
-    candidate_pairs: 1,
-    selected_pairs: 1,
-    selected_signal_counts: { shared_evidence: 1 },
-    evidence_gated_pairs: 1,
-    related_proposals: 1,
-    accepted_relations: 1,
-  });
-  return view;
-}
-
-test("protected request 的 401 會 refresh 後重送", async () => {
-  const paths = [];
-  let protectedCalls = 0;
+test("material run and final structure use only final endpoints", async () => {
+  const requests = [];
   const client = new StudydyApiClient(async (input) => {
-    const path = String(input);
-    paths.push(path);
-    if (path.endsWith("/refresh")) return new Response(null, { status: 204 });
-    protectedCalls += 1;
-    return protectedCalls === 1 ? apiError(401, "SESSION_REQUIRED") : Response.json(pendingRun());
+    requests.push(String(input));
+    return Response.json(String(input).includes("knowledge-structures") ? structureView() : runView());
   });
   assert.equal((await client.getMaterialRun(runId)).run_id, runId);
-  assert.deepEqual(paths, [
-    "/v1/session/refresh",
-    `/v1/material-processing-runs/${runId}`,
-    "/v1/session/refresh",
-    `/v1/material-processing-runs/${runId}`,
-  ]);
+  const view = await client.getKnowledgeStructure({ materialId, structureRevision });
+  assert.equal(view.concepts[0].concept_id, conceptId);
+  assert.match(requests[1], /knowledge-structures/);
+  assert.doesNotMatch(requests[1], /run_id=/);
 });
 
-test("upload network retry 沿用同一 idempotency key", async () => {
-  const keys = [];
-  let calls = 0;
-  const client = new StudydyApiClient(async (input, init) => {
-    if (String(input).endsWith("/refresh")) return new Response(null, { status: 204 });
-    calls += 1;
-    keys.push(new Headers(init?.headers).get("Idempotency-Key"));
-    if (calls === 1) throw new TypeError("offline");
-    return Response.json({
-      schema: "material/v1",
-      material_id: materialId,
-      source_artifact_id: artifactId,
-      source_sha256: "a".repeat(64),
-      size_bytes: 8,
-    }, { status: 201 });
-  });
-  await client.createMaterial(new Blob(["%PDF-1.7"], { type: "application/pdf" }), "same-intent");
-  assert.deepEqual(keys, ["same-intent", "same-intent"]);
-});
+test("unknown relation type and leaked private answer fail closed", async () => {
+  const invalid = structureView();
+  invalid.relations.push({ relation_id: `relation:sha256:${"9".repeat(64)}`, source_concept_id: conceptId, target_concept_id: conceptId, type: "related", learner_reason: "related" });
+  const client = new StudydyApiClient(async () => Response.json(invalid));
+  await assert.rejects(client.getKnowledgeStructure({ materialId, structureRevision }), (error) => error instanceof ApiClientError && error.kind === "schema");
 
-test("terminal binding 不完整時拒絕假成功", async () => {
-  const invalid = { ...successfulRun(), output_binding: { ...successfulRun().output_binding, quality: "accepted" } };
-  let calls = 0;
-  const client = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1 ? new Response(null, { status: 204 }) : Response.json(invalid);
-  });
-  await assert.rejects(
-    client.getMaterialRun(runId),
-    (error) => error instanceof ApiClientError && error.reasonCode === "RESPONSE_SCHEMA_MISMATCH",
-  );
-});
-
-test("terminal binding 接受單頁多批 concept calls 並拒絕負數", async () => {
-  const accepted = successfulRun();
-  accepted.output_binding.page_count = 1;
-  accepted.output_binding.ocr_calls = 1;
-  accepted.output_binding.concept_calls = 3;
-  let calls = 0;
-  const acceptedClient = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1 ? new Response(null, { status: 204 }) : Response.json(accepted);
-  });
-  assert.equal((await acceptedClient.getMaterialRun(runId)).output_binding.concept_calls, 3);
-
-  const invalid = successfulRun();
-  invalid.output_binding.concept_calls = -1;
-  calls = 0;
-  const rejectedClient = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1 ? new Response(null, { status: 204 }) : Response.json(invalid);
-  });
-  await assert.rejects(
-    rejectedClient.getMaterialRun(runId),
-    (error) => error instanceof ApiClientError && error.reasonCode === "RESPONSE_SCHEMA_MISMATCH",
-  );
-});
-
-test("Map v4 使用 exact run/revision 並要求 claim PDF locator", async () => {
-  const paths = [];
-  const client = new StudydyApiClient(async (input) => {
-    paths.push(String(input));
-    return String(input).endsWith("/refresh")
-      ? new Response(null, { status: 204 })
-      : Response.json(mapView());
-  });
-  const view = await client.getKnowledgeMap({ materialId, runId, mapRevision });
-  assert.equal(view.concepts[0].claims[0].evidence[0].page_number, 40);
-  assert.equal(view.status.processing, "partial");
-  assert.equal(view.excluded_pages.length, 0);
-  assert.deepEqual(view.initial_learning_path, mapView().initial_learning_path);
-  assert.deepEqual(paths, [
-    "/v1/session/refresh",
-    `/v1/materials/${materialId}/knowledge-maps/${encodeURIComponent(mapRevision)}?run_id=${runId}`,
-  ]);
-
-  const foreign = mapView();
-  foreign.concepts[0].claims[0].evidence[0].page_number = 41;
-  let calls = 0;
-  const invalidClient = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1 ? new Response(null, { status: 204 }) : Response.json(foreign);
-  });
-  await assert.rejects(
-    invalidClient.getKnowledgeMap({ materialId, runId, mapRevision }),
-    (error) => error instanceof ApiClientError && error.reasonCode === "RESPONSE_SCHEMA_MISMATCH",
-  );
-});
-
-test("Map v6 pair-level Relation Evidence 必須保留真實 claim owner", async () => {
-  let calls = 0;
-  const acceptedClient = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1
-      ? new Response(null, { status: 204 })
-      : Response.json(mapViewWithRelation());
-  });
-  assert.equal((await acceptedClient.getKnowledgeMap({ materialId, runId, mapRevision }))
-    .relations.length, 1);
-
-  const invalid = mapViewWithRelation();
-  invalid.relations[0].relation_evidence[0].evidence_ids = [
-    invalid.concepts[1].claims[0].evidence[0].evidence_id,
-  ];
-  calls = 0;
-  const rejectedClient = new StudydyApiClient(async () => {
-    calls += 1;
-    return calls === 1 ? new Response(null, { status: 204 }) : Response.json(invalid);
-  });
-  await assert.rejects(
-    rejectedClient.getKnowledgeMap({ materialId, runId, mapRevision }),
-    (error) => error instanceof ApiClientError && error.reasonCode === "RESPONSE_SCHEMA_MISMATCH",
-  );
-});
-
-test("Map v6 recursively rejects unexpected、duplicate、nonfinite、type 與 count mutations", async (context) => {
-  const mutations = {
-    unexpected: (view) => { view.concepts[0].unexpected_field = true; },
-    duplicate: (view) => { view.concepts.push(structuredClone(view.concepts[0])); },
-    nonfinite: (view) => { view.concepts[0].claims[0].evidence[0].region.bbox[0] = Number.NaN; },
-    type: (view) => { view.concepts[0].claims[0].evidence[0].page_number = true; },
-    count: (view) => { view.concepts[0].claims = []; },
-    reference: (view) => { view.concepts[0].claims[0].evidence[0].page_number = 41; },
-    excluded: (view) => {
-      view.status.processing = "succeeded";
-      view.excluded_pages = [{
-        page_ref: `page:sha256:${"b".repeat(64)}`,
-        page_number: 2,
-        page_evidence_id: null,
-        last_stage: "page_evidence",
-        processing: "failed",
-        quality: "needs_review",
-        decision: "reject",
-        reason_codes: ["NO_USABLE_EVIDENCE"],
-      }];
-    },
+  const assessment = {
+    schema: "single-choice-assessment/v2", assessment_revision: `assessment:sha256:${"4".repeat(64)}`,
+    study_session_id: sessionId, knowledge_structure_revision: structureRevision,
+    question_id: `question:sha256:${"5".repeat(64)}`, target_concept_id: conceptId,
+    target_claim_id: claimId, source_evidence_ids: [evidenceId], question_type: "single_choice",
+    prompt: "Question", options: Array.from({ length: 4 }, (_, index) => ({ option_id: `option:sha256:${String(index + 1).repeat(64)}`, text: String(index) })),
+    correct_option_id: `option:sha256:${"1".repeat(64)}`,
   };
-  for (const [name, mutate] of Object.entries(mutations)) {
-    await context.test(name, async () => {
-      const invalid = mapView();
-      mutate(invalid);
-      let calls = 0;
-      const client = new StudydyApiClient(async () => {
-        calls += 1;
-        return calls === 1 ? new Response(null, { status: 204 }) : Response.json(invalid);
-      });
-      await assert.rejects(
-        client.getKnowledgeMap({ materialId, runId, mapRevision }),
-        (error) => error instanceof ApiClientError && error.reasonCode === "RESPONSE_SCHEMA_MISMATCH",
-      );
-    });
-  }
+  const leaked = new StudydyApiClient(async () => Response.json(assessment));
+  await assert.rejects(leaked.getAssessment(sessionId, assessment.assessment_revision), (error) => error instanceof ApiClientError && error.kind === "schema");
 });
 
-test("client surface 不含 deferred downstream methods", () => {
-  const client = new StudydyApiClient(async () => new Response(null, { status: 204 }));
-  for (const name of ["getAssessment", "submitLearningUpdate", "getLearningResourceResult", "getLearningState"]) {
-    assert.equal(client[name], undefined);
-  }
-  assert.equal(client.sourceArtifactUrl(artifactId), `/v1/artifacts/${artifactId}`);
-  assert.equal(client.sourceArtifactUrl(artifactId, 40), `/v1/artifacts/${artifactId}#page=40`);
+test("session creation is coalesced and safe API errors stay fixed", async () => {
+  let calls = 0;
+  const client = new StudydyApiClient(async () => { calls += 1; return new Response(null, { status: 204 }); });
+  await Promise.all([client.ensureSession(), client.ensureSession(), client.ensureSession()]);
+  assert.equal(calls, 1);
+
+  const paths = [];
+  const recovered = new StudydyApiClient(async (input) => {
+    paths.push(String(input));
+    if (String(input).endsWith("/refresh")) {
+      return Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: "SESSION_REQUIRED", retryable: false, message: "Request could not be completed." }, { status: 401 });
+    }
+    return new Response(null, { status: 204 });
+  });
+  await recovered.ensureSession();
+  assert.deepEqual(paths, ["/v1/session/refresh", "/v1/session"]);
+
+  const failed = new StudydyApiClient(async () => Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, { status: 503 }));
+  await assert.rejects(failed.getMaterialRun(runId), (error) => error instanceof ApiClientError && error.reasonCode === "STORAGE_UNAVAILABLE" && error.retryable);
 });

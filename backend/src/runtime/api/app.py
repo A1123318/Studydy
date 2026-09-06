@@ -14,18 +14,43 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHttpException
 from starlette.routing import Match
 
 from .models import (
+    AnswerFeedbackView,
+    AnswerSubmissionCreate,
     ApiErrorView,
-    KnowledgeMapView,
+    AssessmentCreate,
+    AssessmentView,
+    GuidanceApply,
+    KnowledgeStructureView,
     MaterialProcessingCreate,
     MaterialProcessingRunView,
     MaterialView,
+    LearnerProgressView,
+    StudySessionCreate,
+    StudySessionView,
+    project_answer_feedback,
+    project_assessment,
+    project_learner_progress,
     project_material_run,
+    project_study_session,
+)
+from learning_adaptation.learner_progress import (
+    apply_guidance,
+    derive_learner_progress,
+)
+from learning_adaptation.answer_events import submit_answer
+from learning_adaptation.assessments import generate_assessment, read_assessment
+from learning_adaptation.study_sessions import (
+    complete_study_session,
+    create_study_session,
+    read_study_session,
 )
 from ..learner_session import (
+    IDLE_LIFETIME,
     SessionError,
     TrustedLearner,
     create_session,
@@ -36,14 +61,14 @@ from ..learner_session import (
 from ..material_processing import (
     MaterialProcessingError,
     create_material_processing_run,
-    formal_runtime_preflight,
+    runtime_preflight,
     read_material_processing_run,
 )
 from ..storage.artifacts import (
     open_verified_source_pdf,
     publish_idempotent_source_pdf,
 )
-from ..storage.material_review_outputs import read_material_run_outputs
+from ..storage.knowledge_structures import read_knowledge_structure
 from ..workers import start_runtime_workers
 
 
@@ -56,7 +81,9 @@ _ERROR_STATUS = {
     "ORIGIN_NOT_ALLOWED": (403, False),
     "RESOURCE_NOT_FOUND": (404, False),
     "IDEMPOTENCY_CONFLICT": (409, False),
+    "NO_SAFE_ASSESSMENT": (422, False),
     "MATERIAL_TOO_LARGE": (413, False),
+    "MATERIAL_PDF_INVALID": (400, False),
     "UNSUPPORTED_MEDIA_TYPE": (415, False),
     "STORAGE_UNAVAILABLE": (503, True),
     "INTERNAL_ERROR": (500, False),
@@ -110,7 +137,7 @@ class ApiSettings:
             raise ValueError("API_SETTINGS_INVALID")
         try:
             copied = deepcopy(self.local_config)
-            formal_runtime_preflight(copied)
+            runtime_preflight(copied)
         except MaterialProcessingError as error:
             raise ApiSettingsError(error.component, error.reason) from None
         except Exception:
@@ -171,22 +198,50 @@ def _error_response(reason_code: str, *, status_code: int | None = None) -> JSON
 
 def _fixed_exception(error: Exception) -> str:
     reason = str(error)
-    if reason in {"ARTIFACT_IDEMPOTENCY_CONFLICT", "MATERIAL_RUN_IDEMPOTENCY_CONFLICT"}:
+    if "IDEMPOTENCY_CONFLICT" in reason or reason in {
+        "MATERIAL_RUN_IDEMPOTENCY_CONFLICT",
+        "ANSWER_ALREADY_SUBMITTED",
+        "LEARNER_GUIDANCE_STALE",
+        "ANSWER_SUBMISSION_STALE",
+    }:
         return "IDEMPOTENCY_CONFLICT"
     if reason in {
         "MATERIAL_RUN_NOT_FOUND",
         "MATERIAL_RUN_UNAVAILABLE",
-        "MATERIAL_OUTPUT_UNAVAILABLE",
+        "KNOWLEDGE_STRUCTURE_UNAVAILABLE",
         "ARTIFACT_NOT_AVAILABLE",
+        "STUDY_SESSION_UNAVAILABLE",
+        "STUDY_SESSION_MAP_UNAVAILABLE",
+        "ANSWER_STUDY_SESSION_UNAVAILABLE",
+        "ANSWER_ASSESSMENT_UNAVAILABLE",
+        "ASSESSMENT_UNAVAILABLE",
+        "ASSESSMENT_SESSION_UNAVAILABLE",
+        "LEARNER_PROGRESS_UNAVAILABLE",
     }:
         return "RESOURCE_NOT_FOUND"
     if reason in {
+        "NO_SAFE_ASSESSMENT",
+    }:
+        return "NO_SAFE_ASSESSMENT"
+    if reason in {
         "ARTIFACT_REQUEST_INVALID",
-        "ARTIFACT_PDF_INVALID",
         "MATERIAL_RUN_INVALID",
+        "STUDY_SESSION_REQUEST_INVALID",
+        "STUDY_SESSION_TARGET_INVALID",
+        "ANSWER_SUBMISSION_INVALID",
+        "ANSWER_OPTION_INVALID",
+        "ASSESSMENT_REQUEST_INVALID",
+        "ASSESSMENT_TARGET_INVALID",
     }:
         return "REQUEST_INVALID"
-    if "STORAGE" in reason or reason in {"SESSION_CREATE_FAILED", "ARTIFACT_PUBLISH_FAILED"}:
+    if reason == "ARTIFACT_PDF_INVALID":
+        return "MATERIAL_PDF_INVALID"
+    if "STORAGE" in reason or reason in {
+        "SESSION_CREATE_FAILED",
+        "ARTIFACT_PUBLISH_FAILED",
+        "SEMANTIC_SERVICE_UNAVAILABLE",
+        "SEMANTIC_SERVICE_TIMEOUT",
+    }:
         return "STORAGE_UNAVAILABLE"
     return "INTERNAL_ERROR"
 
@@ -236,6 +291,7 @@ def _set_session_cookie(response: Response, token: str, settings: ApiSettings) -
         secure=settings.secure_cookie,
         samesite="strict",
         path="/",
+        max_age=int(IDLE_LIFETIME.total_seconds()),
     )
 
 
@@ -250,7 +306,13 @@ def _verified_source_iterator(context: Any, source: Any) -> Iterator[bytes]:
 def _install_openapi(app: FastAPI) -> None:
     """補上 raw PDF、cookie/header 與固定錯誤契約。"""
 
-    idempotent_paths = {"/v1/materials", "/v1/material-processing-runs"}
+    idempotent_paths = {
+        "/v1/materials",
+        "/v1/material-processing-runs",
+        "/v1/study-sessions",
+        "/v1/study-sessions/{study_session_id}/assessments",
+        "/v1/study-sessions/{study_session_id}/assessments/{assessment_revision}/submissions",
+    }
     public_paths = {"/v1/session"}
 
     def openapi() -> dict[str, Any]:
@@ -312,12 +374,18 @@ def _install_openapi(app: FastAPI) -> None:
                     response_codes.add(401)
                 if method in {"post", "delete"}:
                     response_codes.add(403)
-                if method == "get" and "{" in path:
+                if "{" in path:
                     response_codes.add(404)
                 if path in idempotent_paths and method == "post":
                     response_codes.add(409)
                 if path == "/v1/materials" and method == "post":
                     response_codes.update({413, 415})
+                if (
+                    path
+                    == "/v1/study-sessions/{study_session_id}/assessments"
+                    and method == "post"
+                ):
+                    response_codes.add(422)
                 response_codes.add(503)
                 for code in sorted(response_codes):
                     operation.setdefault("responses", {})[str(code)] = deepcopy(error_response)
@@ -330,14 +398,15 @@ def _install_openapi(app: FastAPI) -> None:
 
 
 def create_app(settings: ApiSettings) -> FastAPI:
-    """建立只含 material run、review Map 與 source PDF 的固定 `/v1` surface。"""
+    """建立 material review 與 StudySession closed-loop 的固定 `/v1` surface。"""
 
     if not isinstance(settings, ApiSettings):
         raise ValueError("API_SETTINGS_INVALID")
-
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        workers = start_runtime_workers(dsn=settings.dsn, local_config=settings.local_config)
+        workers = start_runtime_workers(
+            dsn=settings.dsn, local_config=settings.local_config
+        )
         try:
             yield
         finally:
@@ -345,14 +414,13 @@ def create_app(settings: ApiSettings) -> FastAPI:
 
     app = FastAPI(
         title="Studydy Material Review API",
-        version="2.0.0",
+        version="3.0.0",
         openapi_version="3.1.0",
         openapi_url=None,
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
     )
-
     @app.get("/v1/openapi.json", include_in_schema=False)
     async def openapi_document() -> Response:
         return Response(canonical_openapi_bytes(app), media_type="application/json")
@@ -484,19 +552,191 @@ def create_app(settings: ApiSettings) -> FastAPI:
         return project_material_run(read_material_processing_run(learner.learner_id, run_id, dsn=settings.dsn))
 
     @app.get(
-        "/v1/materials/{material_id}/knowledge-maps/{map_revision}",
-        response_model=KnowledgeMapView,
+        "/v1/materials/{material_id}/knowledge-structures/{structure_revision}",
+        response_model=KnowledgeStructureView,
         response_model_by_alias=True,
-        operation_id="getKnowledgeMapReview",
+        operation_id="getKnowledgeStructure",
         tags=["review"],
     )
-    async def read_map_route(request: Request, material_id: UUID, map_revision: str, run_id: UUID) -> KnowledgeMapView:
-        _require_query(request, {"run_id"})
+    async def read_map_route(request: Request, material_id: UUID, structure_revision: str) -> KnowledgeStructureView:
+        _require_query(request, set())
         learner = _trusted_learner(request, settings)
-        outputs = read_material_run_outputs(learner.learner_id, material_id, run_id, dsn=settings.dsn)
-        if outputs.knowledge_map_revision != map_revision:
-            raise _ApiFailure("RESOURCE_NOT_FOUND")
-        return KnowledgeMapView.model_validate(deepcopy(outputs.knowledge_map_view))
+        stored = read_knowledge_structure(
+            learner.learner_id, material_id, revision=structure_revision, dsn=settings.dsn
+        )
+        return KnowledgeStructureView.model_validate(deepcopy(stored.view))
+
+    @app.post(
+        "/v1/study-sessions",
+        response_model=StudySessionView,
+        response_model_by_alias=True,
+        status_code=201,
+        operation_id="createStudySession",
+        tags=["learning"],
+    )
+    async def create_study_session_route(
+        request: Request, body: StudySessionCreate
+    ) -> StudySessionView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        stored = create_study_session(
+            learner,
+            body.material_id,
+            body.knowledge_structure_revision,
+            _idempotency_key(request),
+            current_concept_id=body.current_concept_id,
+            dsn=settings.dsn,
+        )
+        return project_study_session(stored)
+
+    @app.get(
+        "/v1/study-sessions/{study_session_id}",
+        response_model=StudySessionView,
+        response_model_by_alias=True,
+        operation_id="getStudySession",
+        tags=["learning"],
+    )
+    async def read_study_session_route(
+        request: Request, study_session_id: UUID
+    ) -> StudySessionView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        return project_study_session(
+            read_study_session(learner, study_session_id, dsn=settings.dsn)
+        )
+
+    @app.post(
+        "/v1/study-sessions/{study_session_id}/complete",
+        response_model=StudySessionView,
+        response_model_by_alias=True,
+        operation_id="completeStudySession",
+        tags=["learning"],
+    )
+    async def complete_study_session_route(
+        request: Request, study_session_id: UUID
+    ) -> StudySessionView:
+        _require_query(request, set())
+        await _require_empty_body(request)
+        learner = _trusted_learner(request, settings)
+        return project_study_session(
+            complete_study_session(
+                learner, study_session_id, dsn=settings.dsn
+            )
+        )
+
+    @app.post(
+        "/v1/study-sessions/{study_session_id}/assessments",
+        response_model=AssessmentView,
+        response_model_by_alias=True,
+        status_code=201,
+        operation_id="createAssessment",
+        tags=["learning"],
+    )
+    async def create_assessment_route(
+        request: Request,
+        study_session_id: UUID,
+        body: AssessmentCreate,
+    ) -> AssessmentView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        key = _idempotency_key(request)
+        stored = await run_in_threadpool(
+            generate_assessment,
+            learner,
+            study_session_id,
+            body.target_claim_id,
+            key,
+            deepcopy(settings.local_config),
+            dsn=settings.dsn,
+        )
+        return project_assessment(stored)
+
+    @app.get(
+        "/v1/study-sessions/{study_session_id}/assessments/{assessment_revision}",
+        response_model=AssessmentView,
+        response_model_by_alias=True,
+        operation_id="getAssessment",
+        tags=["learning"],
+    )
+    async def read_assessment_route(
+        request: Request,
+        study_session_id: UUID,
+        assessment_revision: str,
+    ) -> AssessmentView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        stored = read_assessment(
+            learner, study_session_id, assessment_revision, dsn=settings.dsn
+        )
+        return project_assessment(stored)
+
+    @app.post(
+        "/v1/study-sessions/{study_session_id}/assessments/{assessment_revision}/submissions",
+        response_model=AnswerFeedbackView,
+        response_model_by_alias=True,
+        status_code=201,
+        operation_id="submitAssessmentAnswer",
+        tags=["learning"],
+    )
+    async def submit_answer_route(
+        request: Request,
+        study_session_id: UUID,
+        assessment_revision: str,
+        body: AnswerSubmissionCreate,
+    ) -> AnswerFeedbackView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        submitted = submit_answer(
+            learner,
+            study_session_id,
+            assessment_revision,
+            body.question_id,
+            body.selected_option_id,
+            _idempotency_key(request),
+            dsn=settings.dsn,
+        )
+        return project_answer_feedback(submitted.feedback)
+
+    @app.get(
+        "/v1/study-sessions/{study_session_id}/progress",
+        response_model=LearnerProgressView,
+        response_model_by_alias=True,
+        operation_id="getLearnerProgress",
+        tags=["learning"],
+    )
+    async def read_learner_progress_route(
+        request: Request, study_session_id: UUID
+    ) -> LearnerProgressView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        return project_learner_progress(
+            derive_learner_progress(
+                learner, study_session_id, dsn=settings.dsn
+            )
+        )
+
+    @app.post(
+        "/v1/study-sessions/{study_session_id}/guidance/apply",
+        response_model=LearnerProgressView,
+        response_model_by_alias=True,
+        operation_id="applyGuidance",
+        tags=["learning"],
+    )
+    async def apply_guidance_route(
+        request: Request,
+        study_session_id: UUID,
+        body: GuidanceApply,
+    ) -> LearnerProgressView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        return project_learner_progress(
+            apply_guidance(
+                learner,
+                study_session_id,
+                body.guidance_revision,
+                dsn=settings.dsn,
+            )
+        )
 
     @app.get("/v1/artifacts/{artifact_id}", operation_id="getSourceArtifact", tags=["artifacts"], response_class=StreamingResponse)
     async def read_artifact_route(request: Request, artifact_id: UUID) -> StreamingResponse:

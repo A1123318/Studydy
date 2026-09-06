@@ -10,9 +10,9 @@ import unicodedata
 import pymupdf
 
 
-PAGE_SCHEMA = "page-evidence/v3"
-NATIVE_SCHEMA = "page-native/v2"
-PROCESSING_POLICY = "native-first-page-evidence/v1"
+PAGE_SCHEMA = "page-evidence/v4"
+NATIVE_SCHEMA = "page-native/v3"
+PROCESSING_POLICY = "native-first-page-evidence/v7"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -104,12 +104,10 @@ def extract_page(
     material_id = f"material:sha256:{source_sha256}"
     material_revision = _ref("material-revision", {"source_sha256": source_sha256})
     page_ref = _ref("page", {"source_sha256": source_sha256, "page_number": page_number})
-    section_id = _ref("section", {"page_ref": page_ref})
     native_evidence = {
         "schema": NATIVE_SCHEMA,
         "material_id": material_id,
         "material_revision": material_revision,
-        "section_id": section_id,
         "page_ref": page_ref,
         "page_number": page_number,
         "raw_text": raw_text,
@@ -119,7 +117,6 @@ def extract_page(
     return {
         "material_id": material_id,
         "material_revision": material_revision,
-        "section_id": section_id,
         "page_ref": page_ref,
         "page_number": page_number,
         "geometry": {
@@ -215,19 +212,48 @@ def _distance(first: list[float], second: list[float]) -> float:
     return math.hypot(dx, dy)
 
 
+def _weighted_font_size(samples: list[tuple[float, int]]) -> float:
+    """以可見字元數取中位字級，避免單一 emphasized span 主導整行。"""
+
+    samples = sorted(
+        (size, weight) for size, weight in samples if size > 0 and weight > 0
+    )
+    total = sum(weight for _, weight in samples)
+    if total == 0:
+        return 0
+    accumulated = 0
+    for size, weight in samples:
+        accumulated += weight
+        if accumulated * 2 >= total:
+            return size
+    return samples[-1][0]
+
+
+def _body_font_size(blocks: list[dict[str, Any]]) -> float:
+    """以頁內最多可見文字使用的字級作為 body baseline。"""
+
+    weights: dict[float, int] = {}
+    for block in blocks:
+        size = round(block["font_size"], 1)
+        visible_count = sum(not character.isspace() for character in block["text"])
+        if size > 0 and visible_count > 0:
+            weights[size] = weights.get(size, 0) + visible_count
+    return max(weights, key=lambda size: (weights[size], -size), default=0)
+
+
 def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
-    """依 PDF 原生閱讀順序取出有 bbox 的文字行。"""
+    """保留原生順序，依區塊、換行與版面合併連續文字，不跨欄猜讀序。"""
 
     native = page.get("native_evidence", {}).get("raw_text", {})
     blocks: list[dict[str, Any]] = []
-    for source_block in native.get("blocks", []) if isinstance(native, dict) else []:
+    for source_index, source_block in enumerate(native.get("blocks", []) if isinstance(native, dict) else []):
         if not isinstance(source_block, dict) or source_block.get("type") != 0:
             continue
         for line in source_block.get("lines", []):
             if not isinstance(line, dict):
                 continue
             pieces = []
-            font_sizes = []
+            font_samples = []
             for span in line.get("spans", []):
                 if not isinstance(span, dict):
                     continue
@@ -243,7 +269,17 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
                     pieces.append(text)
                 size = span.get("size")
                 if type(size) in {int, float} and math.isfinite(size):
-                    font_sizes.append(float(size))
+                    font_samples.append(
+                        (
+                            float(size),
+                            sum(
+                                not character.isspace()
+                                for character in text
+                            )
+                            if isinstance(text, str)
+                            else 0,
+                        )
+                    )
             text = "".join(pieces)
             bbox = line.get("bbox")
             if (
@@ -257,7 +293,8 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
                         "type": "text",
                         "text": text,
                         "bbox": bbox,
-                        "max_font_size": max(font_sizes, default=0),
+                        "font_size": _weighted_font_size(font_samples),
+                        "source_index": source_index,
                     }
                 )
     boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
@@ -268,7 +305,7 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
     ]
     is_centered_title_page = (
         bool(content_blocks)
-        and max(block["max_font_size"] for block in content_blocks) >= 30
+        and max(block["font_size"] for block in content_blocks) >= 30
         and all(
             block["bbox"][2] - block["bbox"][0] <= boundary.width * 0.35
             and boundary.x0 + boundary.width * 0.35
@@ -277,20 +314,70 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
             for block in content_blocks
         )
     )
+    body_font_size = _body_font_size(content_blocks)
     for block in blocks:
-        block["type"] = "title" if is_centered_title_page else "text"
-        del block["max_font_size"]
-    return blocks
+        visible_text = "".join(
+            character for character in block["text"] if not character.isspace()
+        )
+        is_heading = (
+            not is_centered_title_page
+            and body_font_size > 0
+            and block["font_size"] - body_font_size
+            >= max(1.5, body_font_size * 0.15)
+            and 2 <= len(visible_text) <= 160
+            and sum(character.isalnum() for character in visible_text) >= 2
+            and block["bbox"][3] < boundary.y0 + boundary.height * 0.9
+        )
+        block["type"] = (
+            "title" if is_centered_title_page or is_heading else "text"
+        )
+    grouped: list[dict[str, Any]] = []
+    for block in blocks:
+        previous = grouped[-1] if grouped else None
+        box = block["bbox"]
+        definition_start = "::=" in block["text"]
+        if previous is not None:
+            last = previous["last_bbox"]
+            height = max(last[3] - last[1], box[3] - box[1])
+            overlap = min(last[2], box[2]) - max(last[0], box[0])
+            new_item = re.match(r"^(?:[•▪►●◦‣\uf06e]|[-–]\s|\d+[.)]\s)", block["text"].lstrip())
+            wrapped = (
+                not re.search(r"[.!?。！？:：;；}]\s*$", previous["text"])
+                and abs(box[0] - last[0]) <= max(24, block["font_size"] * 2)
+            )
+            # 形式定義的 ::= 後方縮排說明屬於該定義；下一個定義必須另起單位。
+            definition_body = (
+                previous["definition_indent"] is not None
+                and box[0] >= previous["definition_indent"] + block["font_size"] * 0.5
+            )
+            continuous = (
+                (block["source_index"] == previous["source_index"] or wrapped or definition_body)
+                and not definition_start
+                and not new_item
+                and block["type"] == previous["type"]
+                and abs(block["font_size"] - previous["font_size"]) <= 1
+                and box[1] > last[1] + height * 0.3
+                and box[1] - last[3] <= height * 0.6
+                and overlap > 0
+            )
+            if continuous:
+                previous["text"] += "\n" + block["text"]
+                previous["bbox"] = [min(previous["bbox"][0], box[0]), min(previous["bbox"][1], box[1]), max(previous["bbox"][2], box[2]), max(previous["bbox"][3], box[3])]
+                previous["last_bbox"] = box
+                previous["source_index"] = block["source_index"]
+                continue
+        grouped.append({**block, "last_bbox": box, "definition_indent": box[0] if definition_start else None})
+    return [{key: block[key] for key in ("type", "text", "bbox")} for block in grouped]
 
 
-def route_page(page: dict[str, Any]) -> str:
-    """只在原生文字足以回查時略過 OCR；其餘頁面一律交給 OCR。"""
+def _native_text_readable(page: dict[str, Any]) -> bool:
+    """字元品質只判斷原生文字能否保留，不代表整頁內容完整。"""
 
     blocks = _native_text_blocks(page)
     text = " ".join(block["text"] for block in blocks)
     visible = [character for character in text if not character.isspace()]
     if len(visible) < 8:
-        return "OCR_needed"
+        return False
     bad = sum(
         character == "\ufffd"
         or unicodedata.category(character) in {"Cc", "Cs", "Co"}
@@ -298,8 +385,32 @@ def route_page(page: dict[str, Any]) -> str:
     )
     meaningful = sum(character.isalnum() for character in visible)
     if bad * 10 > len(visible) or meaningful * 2 < len(visible):
-        return "OCR_needed"
-    return "native_sufficient"
+        return False
+    return True
+
+def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
+    """找出占實質版面、卻幾乎沒有原生文字覆蓋的圖片；小裝飾不觸發 OCR。"""
+    boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
+    blocks = _native_text_blocks(page)
+    regions = []
+    for image in page["images"]:
+        bbox = image.get("bbox") if isinstance(image, dict) else None
+        if not isinstance(bbox, list) or len(bbox) != 4 or any(type(v) not in {int, float} or not math.isfinite(v) for v in bbox):
+            continue
+        region = pymupdf.Rect(bbox) & boundary
+        area = region.get_area()
+        if area < boundary.get_area() * 0.01:
+            continue
+        covered = sum((region & pymupdf.Rect(block["bbox"])).get_area() for block in blocks)
+        if covered < area * 0.1:
+            regions.append(_box(region))
+    return regions
+
+
+def route_page(page: dict[str, Any]) -> str:
+    """可讀文字與缺漏圖片分開判斷，標題不能替程式碼截圖通過分流。"""
+    return "native_sufficient" if _native_text_readable(page) and not _uncovered_image_regions(page) else "OCR_needed"
+
 
 
 def _native_region(
@@ -340,6 +451,25 @@ def build_page_evidence(
     produced_at: str,
 ) -> dict[str, Any]:
     """從 OCR block 建立同頁 Evidence；child contract 仍整體 fail closed。"""
+    if not isinstance(ocr_blocks, list):
+        raise ValueError("OCR_OUTPUT_INVALID")
+    native_blocks = None
+    regions = _uncovered_image_regions(page) if _native_text_readable(page) else []
+    if regions:
+        native_blocks = _native_text_blocks(page)
+        selected = []
+        native_texts = {" ".join(block["text"].split()) for block in native_blocks}
+        for block in ocr_blocks:
+            if not isinstance(block, dict) or set(block) != {"type", "text", "bbox"} or not isinstance(block["text"], str):
+                raise ValueError("OCR_OUTPUT_INVALID")
+            if not isinstance(block["type"], str) or _OCR_TYPE.fullmatch(block["type"]) is None:
+                raise ValueError("OCR_OUTPUT_INVALID")
+            _, bbox = _locator(block["bbox"], page)
+            box = pymupdf.Rect(bbox)
+            if any((box & pymupdf.Rect(region)).get_area() >= box.get_area() * 0.5 for region in regions):
+                if " ".join(block["text"].split()) not in native_texts:
+                    selected.append(block)
+        ocr_blocks = selected
     return _build_page_evidence(
         page,
         ocr_blocks,
@@ -347,6 +477,7 @@ def build_page_evidence(
         produced_at=produced_at,
         route="OCR_needed",
         source="unlimited_ocr",
+        native_blocks=native_blocks,
     )
 
 
@@ -378,6 +509,7 @@ def _build_page_evidence(
     produced_at: str,
     route: str,
     source: str,
+    native_blocks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if route not in {"native_sufficient", "OCR_needed"}:
         raise ValueError("PAGE_ROUTE_INVALID")
@@ -386,7 +518,7 @@ def _build_page_evidence(
         ("OCR_needed", "unlimited_ocr"),
     }:
         raise ValueError("PAGE_ROUTE_INVALID")
-    if not isinstance(source_blocks, list) or not source_blocks:
+    if not isinstance(source_blocks, list) or (not source_blocks and not native_blocks):
         raise ValueError("OCR_OUTPUT_INVALID")
     native_evidence = page.get("native_evidence")
     if (
@@ -395,12 +527,19 @@ def _build_page_evidence(
         or native_evidence.get("page_ref") != page.get("page_ref")
         or native_evidence.get("material_id") != page.get("material_id")
         or native_evidence.get("material_revision") != page.get("material_revision")
-        or native_evidence.get("section_id") != page.get("section_id")
     ):
         raise ValueError("OCR_LOCATOR_INVALID")
     evidence_blocks: list[dict[str, Any]] = []
     has_rejected_block = False
-    for reading_order, block in enumerate(source_blocks):
+    entries = [(block, source) for block in source_blocks]
+    if native_blocks is not None:
+        entries.extend((block, "native_text") for block in native_blocks)
+        def position(entry):
+            block, origin = entry
+            bbox = block["bbox"] if origin == "native_text" else _locator(block["bbox"], page)[1]
+            return (bbox[1], bbox[0])
+        entries.sort(key=position)
+    for reading_order, (block, source) in enumerate(entries):
         if not isinstance(block, dict) or set(block) != {"type", "text", "bbox"}:
             raise ValueError("OCR_OUTPUT_INVALID")
         ocr_type = block["type"]
@@ -421,10 +560,12 @@ def _build_page_evidence(
             "block",
             {"page_ref": page["page_ref"], "reading_order": reading_order, "region": region},
         )
+        kind = _kind(ocr_type)
         identity = {
             "page_ref": page["page_ref"],
             "block_id": block_id,
-            "ocr_type": ocr_type,
+            "kind": kind,
+            "source": source,
             "text": text,
             "reading_order": reading_order,
             "region": region,
@@ -434,7 +575,7 @@ def _build_page_evidence(
                 "evidence_id": _ref("evidence", identity),
                 "block_id": block_id,
                 "ocr_type": ocr_type,
-                "kind": _kind(ocr_type),
+                "kind": kind,
                 "text": text,
                 "reading_order": reading_order,
                 "locator": {
@@ -491,13 +632,14 @@ def _build_page_evidence(
             }
         )
     reasons = ["PAGE_CONTENT_REVIEW_REQUIRED"]
+    if native_blocks is not None and not any(block["source"] == "unlimited_ocr" for block in evidence_blocks):
+        reasons.append("IMAGE_TEXT_NOT_RECOVERED")
     if has_rejected_block or has_rejected_image:
         reasons.append("OCR_OUTPUT_INVALID")
     artifact = {
         "schema": PAGE_SCHEMA,
         "material_id": page["material_id"],
         "material_revision": page["material_revision"],
-        "section_id": page["section_id"],
         "page_ref": page["page_ref"],
         "page_number": page["page_number"],
         "geometry": page["geometry"],
@@ -511,7 +653,7 @@ def _build_page_evidence(
         "processing_policy": PROCESSING_POLICY,
         "normalizer_policy": NORMALIZER_POLICY,
         "produced_at": produced_at,
-        "processing": "partial" if has_rejected_block or has_rejected_image else "succeeded",
+        "processing": "partial" if has_rejected_block or has_rejected_image or "IMAGE_TEXT_NOT_RECOVERED" in reasons else "succeeded",
         "quality": "needs_review",
         "decision": "review",
         "reason_codes": reasons,
