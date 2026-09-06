@@ -199,6 +199,7 @@ export type ConceptLearningStateView = {
   correct_answers: number;
   qualified_correct_items: number;
   covered_claim_ids: string[];
+  mastered_claim_ids: string[];
   weak_claim_ids: string[];
   latest_is_correct: boolean | null;
 };

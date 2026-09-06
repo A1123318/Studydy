@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage, type StudydyApiClient } from "../../api/client";
-import type { AnswerFeedbackView, KnowledgeStructureView, LearnerProgressView, StudySessionView } from "../../api/contracts";
+import type { KnowledgeStructureView, LearnerProgressView, StudySessionView } from "../../api/contracts";
 import { writeRoute, type AppRoute } from "../../app/routes";
 import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
@@ -148,9 +148,9 @@ export function StudySessionPage({ apiClient, route }: {
             <AssessmentPanel
               apiClient={apiClient}
               concept={current}
-              onNoSafeItem={(isUnavailable) => { if (isUnavailable) void refresh(); }}
+              recommendedClaimId={data.progress.next_action.target_concept_id === current.concept_id ? data.progress.next_action.target_claim_id : null}
+              onProgressChanged={() => { void refresh(); }}
               onReloadSession={() => { void refresh(); }}
-              onSubmitted={(_feedback: AnswerFeedbackView) => { void refresh(); }}
               sourceArtifactId={data.sourceArtifactId}
               studySessionId={route.studySessionId}
               view={data.view}

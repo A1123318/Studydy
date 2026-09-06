@@ -60,7 +60,8 @@ def _first_unmastered_claim(concept: ConceptContext, states: dict[str, ConceptLe
     state = states[concept.concept_id]
     weak = set(state.weak_claim_ids)
     uncovered = [claim.claim_id for claim in concept.claims if claim.claim_id not in state.covered_claim_ids]
-    return next((claim.claim_id for claim in concept.claims if claim.claim_id in weak), None) or (uncovered[0] if uncovered else concept.claims[0].claim_id if concept.claims else None)
+    remaining = [claim.claim_id for claim in concept.claims if claim.claim_id not in state.mastered_claim_ids]
+    return next((claim.claim_id for claim in concept.claims if claim.claim_id in weak), None) or (uncovered[0] if uncovered else remaining[0] if remaining else None)
 
 
 def _next_action(context, session: StoredStudySession, states: list[ConceptLearningState]) -> NextAction:

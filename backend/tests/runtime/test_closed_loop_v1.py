@@ -598,6 +598,7 @@ def test_http_upload_worker_assessment_and_guidance_are_one_closed_loop(
             },
         ).json()
         claim_id = view["concepts"][0]["claims"][0]["claim_id"]
+        old_progress = client.get(f"/v1/study-sessions/{study['study_session_id']}/progress").json()
         for number in (1, 2):
             assessment = client.post(
                 f"/v1/study-sessions/{study['study_session_id']}/assessments",
@@ -620,6 +621,14 @@ def test_http_upload_worker_assessment_and_guidance_are_one_closed_loop(
             assert feedback.status_code == 201 and feedback.json()["is_correct"] is True
         progress = client.get(f"/v1/study-sessions/{study['study_session_id']}/progress").json()
         assert progress["concept_states"][0]["status"] == "mastered"
+        stale = client.post(
+            f"/v1/study-sessions/{study['study_session_id']}/guidance/apply",
+            headers=mutation_headers,
+            json={"schema": "guidance-apply/v2", "guidance_revision": old_progress["guidance_revision"]},
+        )
+        assert stale.status_code == 409
+        assert stale.json()["reason_code"] == "IDEMPOTENCY_CONFLICT"
+        assert client.get(f"/v1/study-sessions/{study['study_session_id']}/progress").json() == progress
         completed = client.post(
             f"/v1/study-sessions/{study['study_session_id']}/guidance/apply",
             headers=mutation_headers,
@@ -627,3 +636,32 @@ def test_http_upload_worker_assessment_and_guidance_are_one_closed_loop(
         )
         assert completed.status_code == 200
         assert client.get(f"/v1/study-sessions/{study['study_session_id']}").json()["status"] == "completed"
+
+
+def test_successful_retry_clears_obsolete_no_safe_guidance(closed_loop):
+    learner, source, settings, structure, dsn, _token = closed_loop
+    study = create_study_session(learner, source.material_id, structure["revision"], "study", dsn=dsn)
+    concept = structure["concepts"][0]
+    claim_id = concept["claims"][0]["claim_id"]
+    rejected = _assessment_response("unsafe", "Ambiguous question", concept["evidence_refs"][0])
+    rejected["candidates"][0]["safety"] = "reject"
+    with pytest.raises(AssessmentError, match="NO_SAFE_ASSESSMENT"):
+        generate_assessment(
+            learner, study.study_session_id, claim_id, "unavailable", settings,
+            dsn=dsn, client=Client(), semantic_call=lambda *_args, **_kwargs: rejected,
+        )
+    unavailable = derive_learner_progress(learner, study.study_session_id, dsn=dsn)
+    assert unavailable.next_action.action == "no_safe"
+    assessment = generate_assessment(
+        learner, study.study_session_id, claim_id, "retry", settings,
+        dsn=dsn, client=Client(), semantic_call=lambda *_args, **_kwargs: _assessment_response(
+            "definition", "根據教材，Stack 使用哪種順序？", concept["evidence_refs"][0],
+        ),
+    )
+    assert assessment.public_document["target_claim_id"] == claim_id
+    restored = derive_learner_progress(learner, study.study_session_id, dsn=dsn)
+    assert restored.next_action.action == "assess"
+    assert restored.event_watermark == 0
+    assert restored.concept_states[0].status == "not_started"
+    with pytest.raises(LearnerProgressError, match="LEARNER_GUIDANCE_STALE"):
+        apply_guidance(learner, study.study_session_id, unavailable.guidance_revision, dsn=dsn)

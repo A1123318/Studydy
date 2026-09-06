@@ -34,6 +34,7 @@ def _state(concept_id: str, status: str) -> ConceptLearningState:
         correct_answers=0,
         qualified_correct_items=0,
         covered_claim_ids=[],
+        mastered_claim_ids=[],
         weak_claim_ids=[],
         latest_is_correct=None,
     )
@@ -71,3 +72,29 @@ def test_no_safe_defer_then_resume_never_mutates_canonical_path():
     )
     assert resumed.action == "resume" and resumed.target_concept_id == A
     assert context.initial_learning_path == before_path
+
+
+def test_guidance_moves_past_mastered_claim_after_all_claims_are_covered():
+    """A 的兩個重點都已答過，第一個已掌握後應繼續第二個。"""
+    from learning_adaptation.answer_events import StoredAnswerEvent
+    from learning_adaptation.learning_states import derive_learning_states
+
+    context = _context()
+    context = MapContext(context.material_id, context.knowledge_structure_revision, (
+        ConceptContext(A, "Foundation", (
+            ClaimContext(CLAIM_A, "First", ()), ClaimContext(CLAIM_B, "Second", ()),
+        ), ()), context.concepts[1],
+    ), context.initial_learning_path)
+    session = _session(context, A)
+    events = tuple(StoredAnswerEvent(
+        uuid4(), session.study_session_id, context.material_id,
+        context.knowledge_structure_revision, f"assessment-{n}", f"question-{n}",
+        f"semantic-{n}", True, A, claim, (), "correct", True, n,
+        datetime.now(UTC), b"x" * 32, b"y" * 32,
+    ) for n, claim in enumerate((CLAIM_A, CLAIM_A, CLAIM_B), 1))
+    states = derive_learning_states(context, events)
+    assert states[0].status == "learning"
+    assert states[0].qualified_correct_items == 3
+    action = _next_action(context, session, list(states))
+    assert action.action == "assess"
+    assert action.target_claim_id == CLAIM_B
