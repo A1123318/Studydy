@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v3"
+PROCESSING_POLICY = "native-first-page-evidence/v5"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -242,11 +242,11 @@ def _body_font_size(blocks: list[dict[str, Any]]) -> float:
 
 
 def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
-    """依 PDF 原生閱讀順序取出有 bbox 的文字行。"""
+    """保留原生順序，依區塊、換行與版面合併連續文字，不跨欄猜讀序。"""
 
     native = page.get("native_evidence", {}).get("raw_text", {})
     blocks: list[dict[str, Any]] = []
-    for source_block in native.get("blocks", []) if isinstance(native, dict) else []:
+    for source_index, source_block in enumerate(native.get("blocks", []) if isinstance(native, dict) else []):
         if not isinstance(source_block, dict) or source_block.get("type") != 0:
             continue
         for line in source_block.get("lines", []):
@@ -294,6 +294,7 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
                         "text": text,
                         "bbox": bbox,
                         "font_size": _weighted_font_size(font_samples),
+                        "source_index": source_index,
                     }
                 )
     boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
@@ -330,8 +331,43 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
         block["type"] = (
             "title" if is_centered_title_page or is_heading else "text"
         )
-        del block["font_size"]
-    return blocks
+    grouped: list[dict[str, Any]] = []
+    for block in blocks:
+        previous = grouped[-1] if grouped else None
+        box = block["bbox"]
+        definition_start = "::=" in block["text"]
+        if previous is not None:
+            last = previous["last_bbox"]
+            height = max(last[3] - last[1], box[3] - box[1])
+            overlap = min(last[2], box[2]) - max(last[0], box[0])
+            new_item = re.match(r"^(?:[•▪►●◦‣\uf06e]|[-–]\s|\d+[.)]\s)", block["text"].lstrip())
+            wrapped = (
+                not re.search(r"[.!?。！？:：;；}]\s*$", previous["text"])
+                and abs(box[0] - last[0]) <= max(24, block["font_size"] * 2)
+            )
+            # 形式定義的 ::= 後方縮排說明屬於該定義；下一個定義必須另起單位。
+            definition_body = (
+                previous["definition_indent"] is not None
+                and box[0] >= previous["definition_indent"] + block["font_size"] * 0.5
+            )
+            continuous = (
+                (block["source_index"] == previous["source_index"] or wrapped or definition_body)
+                and not definition_start
+                and not new_item
+                and block["type"] == previous["type"]
+                and abs(block["font_size"] - previous["font_size"]) <= 1
+                and box[1] > last[1] + height * 0.3
+                and box[1] - last[3] <= height * 0.6
+                and overlap > 0
+            )
+            if continuous:
+                previous["text"] += "\n" + block["text"]
+                previous["bbox"] = [min(previous["bbox"][0], box[0]), min(previous["bbox"][1], box[1]), max(previous["bbox"][2], box[2]), max(previous["bbox"][3], box[3])]
+                previous["last_bbox"] = box
+                previous["source_index"] = block["source_index"]
+                continue
+        grouped.append({**block, "last_bbox": box, "definition_indent": box[0] if definition_start else None})
+    return [{key: block[key] for key in ("type", "text", "bbox")} for block in grouped]
 
 
 def route_page(page: dict[str, Any]) -> str:

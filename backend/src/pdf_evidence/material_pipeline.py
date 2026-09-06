@@ -107,7 +107,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
                 "max_tokens", "prompt", "retry_attempts", "generation", "max_new_input_tokens",
             }
             or material["request_schema"] != "material-semantics-request/v2"
-            or material["response_schema"] != "material-semantics-response/v2"
+            or material["response_schema"] != "material-semantics-response/v4"
             or material["bundle_policy"] != "tokenized-contiguous-evidence/v3"
             or material["max_new_input_tokens"] != 1536
             or material["max_tokens"] != 4096
@@ -137,7 +137,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or not assessment["prompt"]
             or ocr["page_schema"] != "page-evidence/v4"
             or ocr["native_schema"] != "page-native/v3"
-            or ocr["processing_policy"] != "native-first-page-evidence/v3"
+            or ocr["processing_policy"] != "native-first-page-evidence/v5"
             or ocr["normalizer_policy"] != "ocr-text-nfc-line-preserving/v1"
             or material["retry_attempts"] != 2
         ):
