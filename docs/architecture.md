@@ -53,15 +53,19 @@ the runtime lock; packing and inference use the same template options. Relation 
 supported edges while distinguishing necessary dependencies, concrete uses, and the entities being
 compared.
 
-Assessment uses the v2 response contract with three plain-text distractors. Qwen checks that the
-question matches the designated answer and avoids a clear second correct answer. Distractors may
-appear elsewhere in the Evidence; no token-substitution proof or source-wide word exclusion is
-required. Code retains exact answer/source binding, distinct option identities, private answers and
-server-side scoring. Safe practice with uncertain novelty can publish without adding a distinct
-mastery credit. Generation provenance v5 records the source-span-single-choice/v4 policy.
-Assessment explicitly disables thinking in both tokenization and generation to keep short quiz
-requests from exhausting their output budget in reasoning. Material generation retains its pinned
-thinking/xhigh settings; both tasks use the same resident service.
+Assessment generates three candidates with the v2 response contract, then makes one bounded batch
+check through the same resident Qwen service. The checker receives source Evidence and reordered
+options without the proposed answer key. Publication requires a unique selected answer matching
+the generator's exact source span, and no duplicate of a prior question. Rewording the same task,
+referent and conditions is a duplicate; different requested attributes, referents or application
+scenarios can assess the same knowledge. Distractors may occur elsewhere in Evidence.
+Code retains exact source binding, option identities, private answers, scoring and idempotency.
+Novelty and angle remain legacy provenance fields, with no veto over new checked items' mastery
+eligibility. Existing stored eligibility remains unchanged. Each Claim still needs two distinct
+eligible correct items and a correct latest answer. Provenance v6 records the blind-check option
+order and verdict under source-span-single-choice/v5; legacy v5 provenance remains readable.
+Generation and checking both disable thinking and have fixed output budgets. Material generation
+retains its pinned thinking/xhigh settings; all tasks share the same resident service and model.
 
 The only Relation types are `prerequisite`, `part_of`, `application`, `example`, and `contrast`.
 `prerequisite` is the only Relation that can change Initial Path order or create a learner prerequisite

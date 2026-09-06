@@ -139,6 +139,9 @@ def _stored(row: Assessment) -> StoredAssessment:
         "model_revision", "policy", "source_evidence_ids",
         "learning_angle", "novelty", "mastery_qualified",
     }
+    modern = provenance.get("schema") == "assessment-generation-provenance/v6"
+    if modern:
+        provenance_fields.add("verification")
     try:
         options = public["options"]
         option_ids = [option["option_id"] for option in options]
@@ -178,7 +181,7 @@ def _stored(row: Assessment) -> StoredAssessment:
         or set(provenance) != provenance_fields
         or public["schema"] != "single-choice-assessment/v2"
         or private["schema"] != "single-choice-answer/v2"
-        or provenance["schema"] != "assessment-generation-provenance/v5"
+        or provenance["schema"] not in {"assessment-generation-provenance/v5", "assessment-generation-provenance/v6"}
         or revision != row.assessment_revision
         or public["assessment_revision"] != revision
         or private["assessment_revision"] != revision
@@ -243,7 +246,7 @@ def _stored(row: Assessment) -> StoredAssessment:
         is None
         or provenance["model_id"] != "Qwen/Qwen3.8-27B-FP8"
         or re.fullmatch(r"[0-9a-f]{40}", provenance["model_revision"]) is None
-        or provenance["policy"] != "source-span-single-choice/v4"
+        or provenance["policy"] != ("source-span-single-choice/v5" if modern else "source-span-single-choice/v4")
         or provenance["learning_angle"] != row.learning_angle
         or not isinstance(row.learning_angle, str)
         or not row.learning_angle.strip()
@@ -260,6 +263,17 @@ def _stored(row: Assessment) -> StoredAssessment:
         )
     ):
         raise AssessmentError("ASSESSMENT_UNAVAILABLE")
+    if modern:
+        verification = provenance["verification"]
+        if (not isinstance(verification, dict)
+            or set(verification) != {"options", "selected_option_index", "duplicate_prior_index"}
+            or verification["options"] != sorted(option_texts, key=_normalized)
+            or type(verification["selected_option_index"]) is not int
+            or not 0 <= verification["selected_option_index"] < 4
+            or verification["options"][verification["selected_option_index"]] != private["correct_answer"]
+            or verification["duplicate_prior_index"] is not None
+            or row.mastery_qualified is not True):
+            raise AssessmentError("ASSESSMENT_UNAVAILABLE")
     return StoredAssessment(
         row.assessment_revision, row.study_session_id, row.knowledge_structure_revision,
         row.question_id, row.semantic_identity, row.learning_angle,
@@ -370,6 +384,81 @@ def _candidate(candidate: Any, claim: ClaimContext, used_identities: set[str]) -
     }
 
 
+
+def assessment_check_schema(count: int, prior_count: int) -> dict[str, Any]:
+    return {
+        "type": "object", "additionalProperties": False,
+        "required": ["schema", "verdicts"],
+        "properties": {
+            "schema": {"type": "string", "const": "assessment-check-response/v1"},
+            "verdicts": {"type": "array", "minItems": count, "maxItems": count,
+                "items": {"type": "object", "additionalProperties": False,
+                    "required": ["question_index", "answer_status", "selected_option_index", "duplicate_prior_index"],
+                    "properties": {
+                        "question_index": {"type": "integer", "minimum": 0, "maximum": count - 1},
+                        "answer_status": {"type": "string", "enum": ["unique", "none", "multiple"]},
+                        "selected_option_index": {"type": ["integer", "null"], "minimum": 0, "maximum": 3},
+                        "duplicate_prior_index": {"type": ["integer", "null"], "minimum": 0, "maximum": prior_count - 1} if prior_count else {"type": "null"},
+                    }},
+            },
+        },
+    }
+
+
+def _checked_candidate(client, runtime_lock, claim, candidates, prior, semantic_call):
+    if not candidates:
+        return None
+    # Sorting hides the generator's designated first/correct option from the solver.
+    questions = [
+        {"question_index": index, "prompt": candidate["prompt"],
+         "options": sorted(candidate["options"], key=_normalized)}
+        for index, candidate in enumerate(candidates)
+    ]
+    response = semantic_call(
+        client, runtime_lock=runtime_lock, task="assessment_check",
+        request={
+            "schema": "assessment-check-request/v1",
+            "claim": claim.text,
+            "evidence": [{"evidence_id": item.evidence_id, "exact_text": item.quote} for item in claim.evidence],
+            "questions": questions,
+            "prior_questions": [
+                {"question_index": index, "prompt": item.public_document["prompt"],
+                 "options": [option["text"] for option in item.public_document["options"]]}
+                for index, item in enumerate(prior)
+            ],
+        },
+        response_schema=assessment_check_schema(len(questions), len(prior)),
+    )
+    if (not isinstance(response, dict) or set(response) != {"schema", "verdicts"}
+        or response["schema"] != "assessment-check-response/v1"
+        or not isinstance(response["verdicts"], list) or len(response["verdicts"]) != len(questions)):
+        raise AssessmentError("ASSESSMENT_CHECK_INVALID")
+    checked = {}
+    for verdict in response["verdicts"]:
+        if not isinstance(verdict, dict) or set(verdict) != {
+            "question_index", "answer_status", "selected_option_index", "duplicate_prior_index"
+        }:
+            raise AssessmentError("ASSESSMENT_CHECK_INVALID")
+        index, selected, duplicate = (verdict[key] for key in ("question_index", "selected_option_index", "duplicate_prior_index"))
+        if (type(index) is not int or not 0 <= index < len(questions) or index in checked
+            or verdict["answer_status"] not in {"unique", "none", "multiple"}
+            or (selected is not None and (type(selected) is not int or not 0 <= selected < 4))
+            or (duplicate is not None and (type(duplicate) is not int or not 0 <= duplicate < len(prior)))
+            or (verdict["answer_status"] == "unique") != (selected is not None)):
+            raise AssessmentError("ASSESSMENT_CHECK_INVALID")
+        checked[index] = verdict
+    for index, candidate in enumerate(candidates):
+        verdict = checked[index]
+        selected = verdict["selected_option_index"]
+        if (verdict["answer_status"] == "unique" and verdict["duplicate_prior_index"] is None
+            and questions[index]["options"][selected] == candidate["correct_answer"]):
+            return {**candidate, "verification": {
+                "options": questions[index]["options"],
+                "selected_option_index": selected,
+                "duplicate_prior_index": None,
+            }}
+    return None
+
 def _documents(
     study: StudySession,
     concept: ConceptContext,
@@ -377,7 +466,6 @@ def _documents(
     candidate: dict[str, Any],
     *,
     runtime_lock: dict[str, Any],
-    prior_angles: set[str],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], bool]:
     question_identity = {
         "study_session_id": str(study.study_session_id),
@@ -393,10 +481,9 @@ def _documents(
         key=lambda option: option["option_id"],
     )
     correct_option_id = next(option["option_id"] for option in option_documents if option["text"] == candidate["correct_answer"])
-    mastery_qualified = not prior_angles or (
-        candidate["novelty"] == "distinct"
-        and _normalized(candidate["learning_angle"]) not in prior_angles
-    )
+    # A published item has passed an independent source solve and duplicate check.
+    # Novelty and angle remain provenance only; old stored eligibility is not rewritten.
+    mastery_qualified = True
     public_core = {
         "schema": "single-choice-assessment/v2",
         "study_session_id": str(study.study_session_id),
@@ -418,7 +505,7 @@ def _documents(
     }
     service = runtime_lock["semantic_service"]
     provenance_core = {
-        "schema": "assessment-generation-provenance/v5",
+        "schema": "assessment-generation-provenance/v6",
         "runtime_lock_sha256": canonical_sha256(runtime_lock),
         "model_id": service["model_id"],
         "model_revision": service["revision"],
@@ -427,6 +514,7 @@ def _documents(
         "learning_angle": candidate["learning_angle"],
         "novelty": candidate["novelty"],
         "mastery_qualified": mastery_qualified,
+        "verification": deepcopy(candidate["verification"]),
     }
     revision = "assessment:sha256:" + canonical_sha256(
         {
@@ -480,13 +568,14 @@ def generate_assessment(
                     request=_request(study, concept, claim, prior),
                     response_schema=assessment_response_schema(),
                 )
+                if not isinstance(response, dict) or set(response) != {"schema", "candidates"} or response["schema"] != "assessment-semantics-response/v2" or not isinstance(response["candidates"], list) or len(response["candidates"]) != 3:
+                    raise AssessmentError("ASSESSMENT_OUTPUT_INVALID")
+                used = {row.semantic_identity for row in prior}
+                candidates = [projected for item in response["candidates"] if (projected := _candidate(item, claim, used)) is not None]
+                chosen = _checked_candidate(http, runtime_lock, claim, candidates, prior, semantic_call)
             finally:
                 if owned:
                     http.close()
-            if not isinstance(response, dict) or set(response) != {"schema", "candidates"} or response["schema"] != "assessment-semantics-response/v2" or not isinstance(response["candidates"], list) or len(response["candidates"]) != 3:
-                raise AssessmentError("ASSESSMENT_OUTPUT_INVALID")
-            used = {row.semantic_identity for row in prior}
-            chosen = next((projected for item in response["candidates"] if (projected := _candidate(item, claim, used)) is not None), None)
             if chosen is None:
                 if target_claim_id not in study.no_safe_claim_ids:
                     study.no_safe_claim_ids = [*study.no_safe_claim_ids, target_claim_id]
@@ -496,7 +585,6 @@ def generate_assessment(
                 public, private, provenance, mastery_qualified = _documents(
                     study, concept, claim, chosen,
                     runtime_lock=runtime_lock,
-                    prior_angles={_normalized(row.learning_angle) for row in prior},
                 )
                 session.execute(insert(Assessment).values(
                     assessment_revision=public["assessment_revision"],

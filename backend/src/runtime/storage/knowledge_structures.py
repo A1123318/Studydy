@@ -40,6 +40,8 @@ def runtime_binding_is_valid(value: Any) -> bool:
         identity = {
             key: item for key, item in value.items() if key != "runtime_binding_sha256"
         }
+        # Existing Maps retain the runtime that produced them across template updates.
+        transformers_version = value["semantic_service"]["server"]["transformers"]
         return (
             value["schema"] == "material-runtime-binding/v1"
             and value["python"] == "3.12"
@@ -57,9 +59,10 @@ def runtime_binding_is_valid(value: Any) -> bool:
                 "server": {
                     "package": "vllm", "version": "0.28.0", "python": "3.12",
                     "torch": "2.13.0+cu130", "cuda": "13.0",
-                    "transformers": "5.16.1",
+                    "transformers": transformers_version,
                 },
             }
+            and transformers_version in {"5.15.1", "5.16.1"}
             and value["ocr"] == {
                 "model_id": "Unlimited-OCR",
                 "revision": "07dea832e22aefee32ad281d4b80551282e1c168",

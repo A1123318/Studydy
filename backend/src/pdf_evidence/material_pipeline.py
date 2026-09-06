@@ -66,7 +66,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
         assessment = lock["assessment"]
         ocr = lock["ocr"]
         if (
-            lock["schema"] != "studydy-runtime-lock/v15"
+            lock["schema"] != "studydy-runtime-lock/v16"
             or lock["python"] != "3.12"
             or lock["packages"] != {
                 "studydy-local-ai": "0.1.0",
@@ -99,7 +99,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
                 "python": "3.12",
                 "torch": "2.13.0+cu130",
                 "cuda": "13.0",
-                "transformers": "5.16.1",
+                "transformers": "5.15.1",
             }
             or semantic["authentication"] != "environment-bearer:VLLM_API_KEY"
             or set(material) != {
@@ -121,20 +121,24 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or set(assessment) != {
                 "request_schema", "response_schema", "public_schema", "private_schema",
                 "provenance_schema", "policy", "candidate_count", "option_count",
-                "max_tokens", "generation", "prompt",
+                "max_tokens", "generation", "prompt", "check_max_tokens", "check_generation", "check_prompt",
             }
             or assessment["request_schema"] != "assessment-semantics-request/v1"
             or assessment["response_schema"] != "assessment-semantics-response/v2"
             or assessment["public_schema"] != "single-choice-assessment/v2"
             or assessment["private_schema"] != "single-choice-answer/v2"
-            or assessment["provenance_schema"] != "assessment-generation-provenance/v5"
-            or assessment["policy"] != "source-span-single-choice/v4"
+            or assessment["provenance_schema"] != "assessment-generation-provenance/v6"
+            or assessment["policy"] != "source-span-single-choice/v5"
             or assessment["candidate_count"] != 3
             or assessment["option_count"] != 4
             or assessment["max_tokens"] != 4096
             or assessment["generation"] != {"chat_template_kwargs": {"enable_thinking": False}}
             or not isinstance(assessment["prompt"], str)
             or not assessment["prompt"]
+            or assessment["check_max_tokens"] != 1536
+            or assessment["check_generation"] != {"temperature": 0, "chat_template_kwargs": {"enable_thinking": False}}
+            or not isinstance(assessment["check_prompt"], str)
+            or not assessment["check_prompt"]
             or ocr["page_schema"] != "page-evidence/v4"
             or ocr["native_schema"] != "page-native/v3"
             or ocr["processing_policy"] != "native-first-page-evidence/v7"
