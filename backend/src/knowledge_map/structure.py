@@ -123,6 +123,41 @@ def _ordered_pages(pages: Any) -> list[dict[str, Any]]:
     return ordered
 
 
+def _non_content_evidence_ids(pages: list[dict[str, Any]]) -> set[str]:
+    """只排除有邊界位置及頁面角色依據的文字；原始 Evidence 不刪除。"""
+
+    excluded: set[str] = set()
+    recurring: dict[tuple[Any, ...], list[tuple[int, str]]] = {}
+    for page in pages:
+        bounds = page.get("geometry", {}).get("unrotated_points")
+        if not bounds:
+            continue
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+        for block in page["evidence_blocks"]:
+            box = block["locator"]["region"]
+            edge = "bottom" if box[1] >= bounds[1] + height * 0.9 else "top" if box[3] <= bounds[1] + height * 0.08 else None
+            text = " ".join(block["text"].split())
+            if edge is None or len(text) > 200:
+                continue
+            # 程式中的版權字串仍是教材，不因靠近頁尾就移除。
+            if re.search(r"[;{}]|(?<![<>=!])=(?!=)", text):
+                continue
+            if re.search(r"©\s*\d{4}|\bcopyright\s*(?:©|\(c\))?\s*\d{4}|all rights reserved|版權所有", text, re.IGNORECASE):
+                excluded.add(block["evidence_id"])
+                continue
+            if block["kind"] == "heading" or _CODE_OR_FORMULA.search(text):
+                continue
+            # 頁碼須跨頁同位置且保持頁序差；固定數值不是頁碼。
+            number = re.fullmatch(r"(?:(?:page|p\.)\s*)?(?:(\d+)\.)?(\d{1,4})", text, re.IGNORECASE)
+            identity = ("page", number[1], int(number[2]) - page["page_number"]) if number else ("running", text)
+            key = (edge, round((box[0] - bounds[0]) / width, 1), *identity)
+            recurring.setdefault(key, []).append((page["page_number"], block["evidence_id"]))
+    for occurrences in recurring.values():
+        if len({page for page, _ in occurrences}) >= 2:
+            excluded.update(reference for _, reference in occurrences)
+    return excluded
+
+
 def build_document_context(
     pages: list[dict[str, Any]],
     *,
@@ -135,6 +170,7 @@ def build_document_context(
     if type(page_count) is not int or page_count < len(ordered):
         raise ValueError("DOCUMENT_EVIDENCE_INVALID")
     material_id = ordered[0]["material_id"]
+    non_content_ids = _non_content_evidence_ids(ordered)
     sections: list[dict[str, Any]] = []
     evidence: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
@@ -200,6 +236,7 @@ def build_document_context(
         "sections": sections,
         "evidence": evidence,
         "excluded_pages": excluded,
+        "non_content_evidence_ids": sorted(non_content_ids),
     }
 
 
@@ -209,7 +246,8 @@ def build_semantic_bundles(
 ) -> Iterator[dict[str, Any]]:
     """以實際 prompt tokens 填滿連續 Evidence；每次納入最新 concept catalog。"""
 
-    evidence = context["evidence"]
+    excluded = set(context.get("non_content_evidence_ids", []))
+    evidence = [item for item in context["evidence"] if item["evidence_id"] not in excluded]
 
     def bundle(start: int, end: int) -> dict[str, Any]:
         items = evidence[start:end]
@@ -250,15 +288,7 @@ def build_semantic_bundles(
 
 
 def semantic_response_schema(evidence_handles: list[int]) -> dict[str, Any]:
-    span = {
-        "type": "array", "minItems": 3, "maxItems": 3,
-        "prefixItems": [
-            {"type": "integer", "enum": evidence_handles},
-            {"type": "integer", "minimum": 0},
-            {"type": "integer", "minimum": 0},
-        ],
-        "items": False,
-    }
+    span = {"type": "integer", "enum": evidence_handles}
     claim = {
         "type": "object",
         "additionalProperties": False,
@@ -353,24 +383,16 @@ def semantic_request(
 
 
 def _expand_claim(claim: Any, sources: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """短引用只在本次 material context 有效；原文依 Unicode 字元範圍還原。"""
+    """模型只選完整 Evidence ID；引用文字由程式展開，不接受手算字元範圍。"""
 
     if not isinstance(claim, dict) or set(claim) != {"m", "s"} or not isinstance(claim["s"], list):
         return None
     spans = []
-    for span in claim["s"]:
-        if not isinstance(span, list) or len(span) != 3 or any(type(value) is not int or value < 0 for value in span):
-            return None
-        handle, start, end = span
-        if handle >= len(sources):
+    for handle in claim["s"]:
+        if type(handle) is not int or not 0 <= handle < len(sources):
             return None
         source = sources[handle]
-        text = source["exact_text"]
-        if start == end == 0:
-            end = len(text)
-        if not 0 <= start < end <= len(text):
-            return None
-        spans.append({"evidence_id": source["evidence_id"], "quote": text[start:end]})
+        spans.append({"evidence_id": source["evidence_id"], "quote": source["exact_text"]})
     return {
         "meaning": " ".join(span["quote"] for span in spans) if claim["m"] is None else claim["m"],
         "source_spans": spans,
@@ -393,7 +415,7 @@ def _project_claim(claim: Any, evidence: dict[str, dict[str, Any]]) -> dict[str,
             return None
         source = evidence.get(span["evidence_id"])
         quote = span["quote"]
-        if not isinstance(quote, str) or not quote or source is None or quote not in source["exact_text"]:
+        if not isinstance(quote, str) or not quote or source is None or quote != source["exact_text"]:
             return None
         item = {"evidence_id": span["evidence_id"], "quote": quote}
         if item not in projected:
@@ -428,7 +450,8 @@ def apply_semantic_response(
         raise ValueError("SEMANTIC_OUTPUT_INVALID")
     if not isinstance(response["concepts"], list) or not isinstance(response["relations"], list):
         raise ValueError("SEMANTIC_OUTPUT_INVALID")
-    evidence = {item["evidence_id"]: item for item in bundle["evidence"]}
+    non_content_ids = set(context.get("non_content_evidence_ids", []))
+    evidence = {item["evidence_id"]: item for item in bundle["evidence"] if item["evidence_id"] not in non_content_ids}
     all_evidence = {item["evidence_id"] for item in context["evidence"]}
     all_sections = {section["section_id"] for section in context["sections"]}
     response_keys: set[str] = set()
@@ -760,7 +783,7 @@ def build_knowledge_structure(
             "runtime_lock_sha256": runtime_lock_sha256,
             "model_id": model_id,
             "model_revision": model_revision,
-            "semantic_policy": "unified-material-evidence-projection/v1",
+            "semantic_policy": "unified-material-evidence-projection/v2",
         },
         "page_count": context["page_count"],
         "evidence": deepcopy(context["evidence"]),
@@ -820,7 +843,7 @@ def validate_knowledge_structure(document: Any) -> bool:
             or re.fullmatch(r"[0-9a-f]{64}", provenance["runtime_lock_sha256"]) is None
             or provenance["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or re.fullmatch(r"[0-9a-f]{40}", provenance["model_revision"]) is None
-            or provenance["semantic_policy"] != "unified-material-evidence-projection/v1"
+            or provenance["semantic_policy"] != "unified-material-evidence-projection/v2"
         ):
             return False
         evidence = document["evidence"]
@@ -999,7 +1022,7 @@ def validate_knowledge_structure(document: Any) -> bool:
                     not isinstance(span, dict)
                     or set(span) != {"evidence_id", "quote"}
                     or span["evidence_id"] not in known_evidence
-                    or span["quote"] not in evidence_by_id[span["evidence_id"]]["exact_text"]
+                    or span["quote"] != evidence_by_id[span["evidence_id"]]["exact_text"]
                     for span in claim["source_spans"]
                 ):
                     return False

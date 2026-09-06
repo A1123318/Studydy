@@ -27,8 +27,7 @@ def _compact_response(response, context):
     def span(reference):
         handle = handles[reference["evidence_id"]]
         text = context["evidence"][handle]["exact_text"]
-        start = text.find(reference["quote"])
-        return [handle, start, start + len(reference["quote"])]
+        return handle if reference["quote"] in text else len(context["evidence"])
     return {
         "concepts": [{
             "k": concept["key"], "l": concept["label"], "a": concept["aliases"],
@@ -209,7 +208,7 @@ def test_projection_repairs_only_technical_claim_and_keeps_valid_sibling():
     claims = state.concepts["pointer"]["claims"]
     assert [claim["text"] for claim in claims] == [
         "The null character is written as '\\0'.",
-        "int *value;",
+        "A pointer declaration can be written as int *value;",
     ]
     assert claims[0]["projection"] == "source_literal_repair"
     assert state.rejected_claims == 1
@@ -238,6 +237,16 @@ def test_every_required_technical_literal_uses_source_bound_text(source, meaning
         "source_spans": [{"evidence_id": evidence_id, "quote": source}],
         "projection": "source_literal_repair",
     }
+
+
+def test_partial_quote_cannot_replace_complete_meaning():
+    """引用必須是完整支持單位，不能用缺少數值的片段修復意思。"""
+    source = {"exact_text": "The threshold is -7."}
+    for meaning in ["The threshold is -7.", "The threshold is"]:
+        assert _project_claim(
+            {"meaning": meaning, "source_spans": [{"evidence_id": "e1", "quote": "The threshold is"}]},
+            {"e1": source},
+        ) is None
 
 
 def test_typed_relations_and_prerequisite_are_the_only_path_authority():
@@ -465,22 +474,22 @@ def test_compact_wire_reconstructs_relation_basis_and_canonical_support(relation
     assert relation["context_refs"] == [section["section_id"] for section in context["sections"]]
 
 
-def test_compact_spans_preserve_unicode_literals_and_reject_unseen_evidence():
+def test_whole_units_preserve_unicode_literals_and_reject_offsets_or_unseen_evidence():
     text = "中文😀 '\\0' a <= b 5 kg"
     context = build_document_context([_page(1, [_block(1, 0, "paragraph", text), _block(1, 1, "paragraph", "unseen")])], page_count=1)
     bundle = {"sections": context["sections"], "evidence": context["evidence"][:1]}
     state = SemanticState()
     apply_wire_response({
         "concepts": [{"k": "c0", "l": "Literal", "a": [], "c": [
-            {"m": None, "s": [[0, 0, 0]]},
+            {"m": None, "s": [0]},
             {"m": None, "s": [[0, 2, 3]]},
-            {"m": None, "s": [[0, 0, 999]]},
-            {"m": None, "s": [[1, 0, 0]]},
-            {"m": None, "s": [[True, 0, 0]]},
+            {"m": None, "s": [99]},
+            {"m": None, "s": [1]},
+            {"m": None, "s": [True]},
         ]}], "relations": [],
     }, context=context, bundle=bundle, state=state)
-    assert [claim["text"] for claim in state.concepts["c0"]["claims"]] == [text, "😀"]
-    assert state.rejected_claims == 3
+    assert [claim["text"] for claim in state.concepts["c0"]["claims"]] == [text]
+    assert state.rejected_claims == 4
 
 
 def test_token_packing_rechecks_current_catalog_and_never_drops_evidence():

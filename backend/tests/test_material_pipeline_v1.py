@@ -49,13 +49,13 @@ def _semantic(calls: list[dict]):
     def call(_client, **arguments):
         request = arguments["request"]
         calls.append(request)
-        allowed = arguments["response_schema"]["properties"]["concepts"]["items"]["properties"]["c"]["items"]["properties"]["s"]["items"]["prefixItems"][0]["enum"]
+        allowed = arguments["response_schema"]["properties"]["concepts"]["items"]["properties"]["c"]["items"]["properties"]["s"]["items"]["enum"]
         assert allowed == [row[0] for section in request["sections"] for row in section["evidence"]]
         first = next(item for section in request["sections"] for item in section["evidence"] if item[2] != "heading")
         return {
             "concepts": [{
                 "k": "algorithm", "l": "Algorithm", "a": [],
-                "c": [{"m": None, "s": [[first[0], 0, 0]]}],
+                "c": [{"m": None, "s": [first[0]]}],
             }],
             "relations": [],
         }

@@ -19,11 +19,19 @@ and Assessment semantics. Code owns source identity, Evidence/span binding, exac
 schema, ownership, endpoints, duplicates/conflicts, prerequisite cycles, private answers, scoring,
 and stale/idempotency/concurrency behavior.
 
-Material semantics uses the compact v2 wire contract. Each Evidence row contains only a material-local
-integer handle, page, kind, and exact text, grouped once under its section title. Claims select
-`[handle, start, end]` Unicode character ranges (`[handle, 0, 0]` selects the whole block); a null meaning
-reuses the selected source text. Code restores canonical IDs, quotes, section references, and the
-Relation basis. These temporary handles are never persisted as canonical identities.
+Material requests retain document-global integer handles, page, kind, and exact text under section
+titles. Response v4 Claims select whole Evidence handles with `s: [handle, ...]`; character offsets
+are not accepted. Native Evidence joins geometrically consecutive lines within a PDF text block or a wrapped
+continuation across blocks, respecting heading levels, columns and new list items while preserving
+line breaks and bounding boxes. A null meaning reuses the
+selected units. Code expands quotes and canonical references; technical-literal protection still
+applies, but partial quotations cannot replace a complete meaning.
+
+Original Evidence remains available. Claim candidates omit explicit copyright text in page margins,
+repeated marginal running text, and page numbers consistent with page order across pages. Headings,
+code-like text and non-margin content are preserved; an arbitrary bottom crop is not used. Filtered
+handles are never renumbered. These rules reduce known citation failures, not prove semantic
+support for every retained body-text citation.
 
 Bundles are packed using the resident tokenizer with the actual prompt and current Concept catalog,
 reserving 4096 output tokens within the unchanged 32768-token context. New Evidence per bundle

@@ -4,13 +4,35 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from knowledge_map.structure import build_document_context
+from knowledge_map.structure import (
+    SemanticState, apply_semantic_response, build_document_context,
+    build_semantic_bundles, semantic_request, semantic_response_schema,
+)
 from pdf_evidence.ocr_page_evidence import (
+    _native_text_blocks,
     build_native_page_evidence,
     build_page_evidence,
     extract_page,
     route_page,
 )
+
+
+def test_wrapped_statement_crosses_pdf_blocks_but_not_columns_or_new_items():
+    """PDF 物件邊界不等於句界；跨欄與新條列不能被拼成同一陳述。"""
+    def block(text, x, y):
+        return {"type": 0, "lines": [{"bbox": [x, y, x + 180, y + 15],
+                                     "spans": [{"text": text, "size": 12}]}]}
+    page = {"geometry": {"unrotated_points": [0, 0, 612, 792]},
+            "native_evidence": {"raw_text": {"blocks": [
+                block("The sensor returns", 72, 100),
+                block("three samples.", 84, 119),
+                block("• The interval is 17 ms.", 72, 138),
+                block("Left column", 72, 180),
+                block("Right column", 330, 180),
+            ]}}}
+    texts = [b["text"] for b in _native_text_blocks(page)]
+    assert texts == ["The sensor returns\nthree samples.", "• The interval is 17 ms.",
+                     "Left column", "Right column"]
 
 
 def _pdf(path: Path, *, rotated=False):
@@ -206,6 +228,55 @@ def test_empty_and_garbled_native_text_route_to_ocr(tmp_path):
         "blocks": [{"type": 0, "lines": [{"bbox": [1, 1, 20, 20], "spans": [{"text": "��������"}]}]}]
     }
     assert route_page(page) == "OCR_needed"
+
+
+def test_running_metadata_is_preserved_but_not_a_claim_source(tmp_path):
+    """頁尾先寫入 PDF 也不能成為 Claim；正文、頁底程式及固定數值保留。"""
+    path = tmp_path / "public-layout.pdf"
+    document = pymupdf.open()
+    for number in range(1, 4):
+        page = document.new_page(width=612, height=792)
+        page.insert_text((300, 782), str(number), fontsize=8)
+        page.insert_text((400, 782), "Publisher Copyright 2025", fontsize=8)
+        page.insert_text((72, 70), "Sensors", fontsize=22)
+        page.insert_text((72, 120), "A sensor sends readings\nto the controller.", fontsize=12)
+        page.insert_text((72, 210), "Copyright protects this text.", fontsize=12)
+        page.insert_text((72, 745), "int capacity[17];", fontsize=12)
+        page.insert_text((300, 745), 'char label[] = "Copyright 2025";', fontsize=8)
+        page.insert_text((72, 765), "42", fontsize=12)
+    document.save(path)
+    document.close()
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pymupdf.open(path) as document:
+        pages = [build_native_page_evidence(
+            extract_page(document, sha, n), input_binding={}, produced_at="x",
+        ) for n in range(1, 4)]
+    context = build_document_context(pages, page_count=3)
+    state = SemanticState()
+    bundle = next(build_semantic_bundles(context, state=state, fits=lambda _: True))
+    request = semantic_request(context, bundle, state)
+    rows = [row for section in request["sections"] for row in section["evidence"]]
+    assert any("Publisher Copyright" in e["exact_text"] for e in context["evidence"])
+    assert all("Publisher Copyright" not in row[3] for row in rows)
+    assert not any(row[3] in {"1", "2", "3"} for row in rows)
+    assert any(row[3] == "A sensor sends readings\nto the controller." for row in rows)
+    assert any(row[3] == "Copyright protects this text." for row in rows)
+    assert any(row[3] == "int capacity[17];" for row in rows)
+    assert any(row[3] == 'char label[] = "Copyright 2025";' for row in rows)
+    assert any(row[3] == "42" for row in rows)
+    allowed = semantic_response_schema([row[0] for row in rows])["properties"]["concepts"]["items"]["properties"]["c"]["items"]["properties"]["s"]["items"]["enum"]
+    footer = next(i for i, e in enumerate(context["evidence"]) if "Publisher Copyright" in e["exact_text"])
+    body = next(row[0] for row in rows if row[3].startswith("A sensor sends"))
+    assert footer not in allowed
+    assert context["evidence"][body]["exact_text"].startswith("A sensor sends")
+    apply_semantic_response({"concepts": [{"k": "sensor", "l": "Sensor", "a": [], "c": [
+        {"m": "A sensor sends readings to a controller.", "s": [footer]},
+        {"m": None, "s": [footer]},
+        {"m": None, "s": [body]},
+    ]}], "relations": []}, context=context, bundle=bundle, state=state)
+    assert state.rejected_claims == 2
+    assert len(state.concepts["sensor"]["claims"]) == 1
+    assert "controller" in state.concepts["sensor"]["claims"][0]["text"]
 
 
 def test_render_guard_rejects_geometry_before_page_content_or_pixmap_reads():

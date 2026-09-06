@@ -95,7 +95,7 @@ def _structure(run_id: str, source_sha256: str, lock: dict) -> dict:
     response = {
         "concepts": [{
             "k": "stack", "l": "Stack", "a": [],
-            "c": [{"m": None, "s": [[0, 0, 0]]}],
+            "c": [{"m": None, "s": [0]}],
         }],
         "relations": [],
     }
