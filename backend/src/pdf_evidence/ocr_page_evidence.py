@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v4"
+PROCESSING_POLICY = "native-first-page-evidence/v5"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -335,6 +335,7 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
     for block in blocks:
         previous = grouped[-1] if grouped else None
         box = block["bbox"]
+        definition_start = "::=" in block["text"]
         if previous is not None:
             last = previous["last_bbox"]
             height = max(last[3] - last[1], box[3] - box[1])
@@ -344,8 +345,14 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
                 not re.search(r"[.!?。！？:：;；}]\s*$", previous["text"])
                 and abs(box[0] - last[0]) <= max(24, block["font_size"] * 2)
             )
+            # 形式定義的 ::= 後方縮排說明屬於該定義；下一個定義必須另起單位。
+            definition_body = (
+                previous["definition_indent"] is not None
+                and box[0] >= previous["definition_indent"] + block["font_size"] * 0.5
+            )
             continuous = (
-                (block["source_index"] == previous["source_index"] or wrapped)
+                (block["source_index"] == previous["source_index"] or wrapped or definition_body)
+                and not definition_start
                 and not new_item
                 and block["type"] == previous["type"]
                 and abs(block["font_size"] - previous["font_size"]) <= 1
@@ -359,7 +366,7 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
                 previous["last_bbox"] = box
                 previous["source_index"] = block["source_index"]
                 continue
-        grouped.append({**block, "last_bbox": box})
+        grouped.append({**block, "last_bbox": box, "definition_indent": box[0] if definition_start else None})
     return [{key: block[key] for key in ("type", "text", "bbox")} for block in grouped]
 
 

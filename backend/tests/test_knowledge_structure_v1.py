@@ -249,19 +249,39 @@ def test_partial_quote_cannot_replace_complete_meaning():
         ) is None
 
 
-def test_typed_relations_and_prerequisite_are_the_only_path_authority():
+@pytest.mark.parametrize("source,meaning,expected", [
+    ("Previous reference and return destination", "null", None),
+    ("The interval is -7.", "null", "The interval is -7."),
+    ("A nullable value is permitted.", "null", None),
+    ("Use null when no value exists.", "null", "null"),
+    ("Use NULL for the sentinel.", "NULL", "NULL"),
+])
+def test_null_placeholder_rejection_preserves_source_literals(source, meaning, expected):
+    result = _project_claim(
+        {"meaning": meaning, "source_spans": [{"evidence_id": "e1", "quote": source}]},
+        {"e1": {"exact_text": source}},
+    )
+    assert (result["text"] if result is not None else None) == expected
+
+
+@pytest.mark.parametrize("source,target", [("array", "pointer"), ("pointer", "array")])
+def test_relations_keep_endpoint_order_and_only_prerequisite_orders_path(source, target):
     context = _context()
     state = SemanticState()
     bundle = _bundles(context)[0]
     response = _response(context)
     response["relations"].append({
         **deepcopy(response["relations"][0]),
-        "source_concept": "array",
-        "target_concept": "pointer",
+        "source_concept": source,
+        "target_concept": target,
         "type": "contrast",
-        "learner_reason": "Compares contiguous storage with address indirection.",
+        "learner_reason": "The former stores contiguous values; the latter stores an address." if source == "array" else "The former stores an address; the latter stores contiguous values.",
         "inference_basis": "comparison",
     })
+    comparison = deepcopy(response["relations"][-1])
+    reverse = deepcopy(comparison)
+    reverse["source_concept"], reverse["target_concept"] = target, source
+    response["relations"].append(reverse)
     apply_semantic_response(response, context=context, bundle=bundle, state=state)
     structure = build_knowledge_structure(
         context,
@@ -278,6 +298,10 @@ def test_typed_relations_and_prerequisite_are_the_only_path_authority():
     assert validate_knowledge_structure(structure)
     assert [relation["type"] for relation in structure["relations"]] == ["prerequisite", "contrast"]
     labels = {concept["concept_id"]: concept["label"] for concept in structure["concepts"]}
+    contrast = structure["relations"][1]
+    assert labels[contrast["source_concept_id"]] == source.title()
+    assert labels[contrast["target_concept_id"]] == target.title()
+    assert contrast["learner_reason"] == comparison["learner_reason"]
     assert [labels[step["concept_id"]] for step in structure["initial_learning_path"]] == ["Pointer", "Array"]
     view = build_knowledge_structure_view(structure)
     assert view["schema"] == "knowledge-structure-view/v2"

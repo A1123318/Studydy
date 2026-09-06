@@ -35,6 +35,24 @@ def test_wrapped_statement_crosses_pdf_blocks_but_not_columns_or_new_items():
                      "Left column", "Right column"]
 
 
+def test_formal_definition_keeps_indented_body_and_separates_next_definition():
+    """定義分隔符與縮排共同定界，不依函式名稱或 PDF 物件邊界切句。"""
+    def line(text, x, y):
+        return {"bbox": [x, y, x + 220, y + 15], "spans": [{"text": text, "size": 12}]}
+    page = {"geometry": {"unrotated_points": [0, 0, 612, 792]},
+            "native_evidence": {"raw_text": {"blocks": [
+                {"type": 0, "lines": [line("For any buffer", 72, 100), line("Buffer Allocate(limit) ::=", 72, 119)]},
+                {"type": 0, "lines": [line("create an empty buffer", 144, 138), line("Boolean Available(buffer) ::=", 72, 157)]},
+                {"type": 0, "lines": [line("if buffer has room", 144, 176), line("return TRUE", 144, 195), line("Boolean Ready(buffer) ::= TRUE", 72, 214)]},
+            ]}}}
+    assert [b["text"] for b in _native_text_blocks(page)] == [
+        "For any buffer",
+        "Buffer Allocate(limit) ::=\ncreate an empty buffer",
+        "Boolean Available(buffer) ::=\nif buffer has room\nreturn TRUE",
+        "Boolean Ready(buffer) ::= TRUE",
+    ]
+
+
 def _pdf(path: Path, *, rotated=False):
     document = pymupdf.open()
     page = document.new_page(width=144, height=216)

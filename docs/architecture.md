@@ -32,6 +32,10 @@ repeated marginal running text, and page numbers consistent with page order acro
 code-like text and non-margin content are preserved; an arbitrary bottom crop is not used. Filtered
 handles are never renumbered. These rules reduce known citation failures, not prove semantic
 support for every retained body-text citation.
+Formal `::=` definitions keep their indented bodies and start a new unit at the next definition.
+An unsupported literal string `null` is rejected as a Claim; source-backed null terminology and
+valid literal-restored content remain supported. Contrast relations retain their proposed endpoint
+order so positional explanations stay consistent; reverse duplicates are still removed.
 
 Bundles are packed using the resident tokenizer with the actual prompt and current Concept catalog,
 reserving 4096 output tokens within the unchanged 32768-token context. New Evidence per bundle

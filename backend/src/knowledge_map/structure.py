@@ -399,6 +399,13 @@ def _expand_claim(claim: Any, sources: list[dict[str, Any]]) -> dict[str, Any] |
     }
 
 
+def _unsupported_null_meaning(text: str, source_text: str) -> bool:
+    """來源可以教 null，但未獲來源支持的空值字串不是學習內容。"""
+    return text.casefold() == "null" and re.search(
+        r"(?<![A-Za-z0-9_])null(?![A-Za-z0-9_])", source_text, re.IGNORECASE
+    ) is None
+
+
 def _project_claim(claim: Any, evidence: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     if not isinstance(claim, dict) or set(claim) != {"meaning", "source_spans"}:
         return None
@@ -430,6 +437,9 @@ def _project_claim(claim: Any, evidence: dict[str, dict[str, Any]]) -> dict[str,
     if (_CODE_OR_FORMULA.search(meaning) or _CODE_OR_FORMULA.search(source_text)) and meaning not in source_text:
         needs_literal_repair = True
     text = source_text if needs_literal_repair else meaning
+    # 不把模型誤填的 JSON 空值字串當教材；來源真的討論 null 時仍可保留。
+    if _unsupported_null_meaning(text, source_text):
+        return None
     return {
         "text": text,
         "source_spans": projected,
@@ -706,8 +716,7 @@ def build_knowledge_structure(
             rejected_relations += 1
             continue
         relation_type = proposal["type"]
-        if relation_type == "contrast" and source > target:
-            source, target = target, source
+        # 比較兩端不排序，避免反轉理由中的前者／後者；下方仍做雙向去重。
         identity = (source, target, relation_type)
         reverse = (target, source, relation_type)
         if identity in directed_relations or reverse in directed_relations:
@@ -783,7 +792,7 @@ def build_knowledge_structure(
             "runtime_lock_sha256": runtime_lock_sha256,
             "model_id": model_id,
             "model_revision": model_revision,
-            "semantic_policy": "unified-material-evidence-projection/v2",
+            "semantic_policy": "unified-material-evidence-projection/v3",
         },
         "page_count": context["page_count"],
         "evidence": deepcopy(context["evidence"]),
@@ -843,7 +852,7 @@ def validate_knowledge_structure(document: Any) -> bool:
             or re.fullmatch(r"[0-9a-f]{64}", provenance["runtime_lock_sha256"]) is None
             or provenance["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or re.fullmatch(r"[0-9a-f]{40}", provenance["model_revision"]) is None
-            or provenance["semantic_policy"] != "unified-material-evidence-projection/v2"
+            or provenance["semantic_policy"] != "unified-material-evidence-projection/v3"
         ):
             return False
         evidence = document["evidence"]
@@ -1032,6 +1041,8 @@ def validate_knowledge_structure(document: Any) -> bool:
                     return False
                 claim_ids.add(claim["claim_id"])
                 source_text = " ".join(span["quote"] for span in claim["source_spans"])
+                if _unsupported_null_meaning(claim["text"], source_text):
+                    return False
                 if claim["projection"] == "source_literal_repair":
                     if claim["text"] != source_text:
                         return False
@@ -1149,7 +1160,6 @@ def validate_knowledge_structure(document: Any) -> bool:
             if (
                 direction in relation_directions
                 or reverse in relation_directions
-                or (relation_type == "contrast" and source_id > target_id)
             ):
                 return False
             reason = relation["learner_reason"]
