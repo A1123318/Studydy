@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v3"
+PROCESSING_POLICY = "native-first-page-evidence/v6"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -334,14 +334,14 @@ def _native_text_blocks(page: dict[str, Any]) -> list[dict[str, Any]]:
     return blocks
 
 
-def route_page(page: dict[str, Any]) -> str:
-    """只在原生文字足以回查時略過 OCR；其餘頁面一律交給 OCR。"""
+def _native_text_readable(page: dict[str, Any]) -> bool:
+    """字元品質只判斷原生文字能否保留，不代表整頁內容完整。"""
 
     blocks = _native_text_blocks(page)
     text = " ".join(block["text"] for block in blocks)
     visible = [character for character in text if not character.isspace()]
     if len(visible) < 8:
-        return "OCR_needed"
+        return False
     bad = sum(
         character == "\ufffd"
         or unicodedata.category(character) in {"Cc", "Cs", "Co"}
@@ -349,8 +349,32 @@ def route_page(page: dict[str, Any]) -> str:
     )
     meaningful = sum(character.isalnum() for character in visible)
     if bad * 10 > len(visible) or meaningful * 2 < len(visible):
-        return "OCR_needed"
-    return "native_sufficient"
+        return False
+    return True
+
+def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
+    """找出占實質版面、卻幾乎沒有原生文字覆蓋的圖片；小裝飾不觸發 OCR。"""
+    boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
+    blocks = _native_text_blocks(page)
+    regions = []
+    for image in page["images"]:
+        bbox = image.get("bbox") if isinstance(image, dict) else None
+        if not isinstance(bbox, list) or len(bbox) != 4 or any(type(v) not in {int, float} or not math.isfinite(v) for v in bbox):
+            continue
+        region = pymupdf.Rect(bbox) & boundary
+        area = region.get_area()
+        if area < boundary.get_area() * 0.01:
+            continue
+        covered = sum((region & pymupdf.Rect(block["bbox"])).get_area() for block in blocks)
+        if covered < area * 0.1:
+            regions.append(_box(region))
+    return regions
+
+
+def route_page(page: dict[str, Any]) -> str:
+    """可讀文字與缺漏圖片分開判斷，標題不能替程式碼截圖通過分流。"""
+    return "native_sufficient" if _native_text_readable(page) and not _uncovered_image_regions(page) else "OCR_needed"
+
 
 
 def _native_region(
@@ -391,6 +415,25 @@ def build_page_evidence(
     produced_at: str,
 ) -> dict[str, Any]:
     """從 OCR block 建立同頁 Evidence；child contract 仍整體 fail closed。"""
+    if not isinstance(ocr_blocks, list):
+        raise ValueError("OCR_OUTPUT_INVALID")
+    native_blocks = None
+    regions = _uncovered_image_regions(page) if _native_text_readable(page) else []
+    if regions:
+        native_blocks = _native_text_blocks(page)
+        selected = []
+        native_texts = {" ".join(block["text"].split()) for block in native_blocks}
+        for block in ocr_blocks:
+            if not isinstance(block, dict) or set(block) != {"type", "text", "bbox"} or not isinstance(block["text"], str):
+                raise ValueError("OCR_OUTPUT_INVALID")
+            if not isinstance(block["type"], str) or _OCR_TYPE.fullmatch(block["type"]) is None:
+                raise ValueError("OCR_OUTPUT_INVALID")
+            _, bbox = _locator(block["bbox"], page)
+            box = pymupdf.Rect(bbox)
+            if any((box & pymupdf.Rect(region)).get_area() >= box.get_area() * 0.5 for region in regions):
+                if " ".join(block["text"].split()) not in native_texts:
+                    selected.append(block)
+        ocr_blocks = selected
     return _build_page_evidence(
         page,
         ocr_blocks,
@@ -398,6 +441,7 @@ def build_page_evidence(
         produced_at=produced_at,
         route="OCR_needed",
         source="unlimited_ocr",
+        native_blocks=native_blocks,
     )
 
 
@@ -429,6 +473,7 @@ def _build_page_evidence(
     produced_at: str,
     route: str,
     source: str,
+    native_blocks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if route not in {"native_sufficient", "OCR_needed"}:
         raise ValueError("PAGE_ROUTE_INVALID")
@@ -437,7 +482,7 @@ def _build_page_evidence(
         ("OCR_needed", "unlimited_ocr"),
     }:
         raise ValueError("PAGE_ROUTE_INVALID")
-    if not isinstance(source_blocks, list) or not source_blocks:
+    if not isinstance(source_blocks, list) or (not source_blocks and not native_blocks):
         raise ValueError("OCR_OUTPUT_INVALID")
     native_evidence = page.get("native_evidence")
     if (
@@ -450,7 +495,15 @@ def _build_page_evidence(
         raise ValueError("OCR_LOCATOR_INVALID")
     evidence_blocks: list[dict[str, Any]] = []
     has_rejected_block = False
-    for reading_order, block in enumerate(source_blocks):
+    entries = [(block, source) for block in source_blocks]
+    if native_blocks is not None:
+        entries.extend((block, "native_text") for block in native_blocks)
+        def position(entry):
+            block, origin = entry
+            bbox = block["bbox"] if origin == "native_text" else _locator(block["bbox"], page)[1]
+            return (bbox[1], bbox[0])
+        entries.sort(key=position)
+    for reading_order, (block, source) in enumerate(entries):
         if not isinstance(block, dict) or set(block) != {"type", "text", "bbox"}:
             raise ValueError("OCR_OUTPUT_INVALID")
         ocr_type = block["type"]
@@ -543,6 +596,8 @@ def _build_page_evidence(
             }
         )
     reasons = ["PAGE_CONTENT_REVIEW_REQUIRED"]
+    if native_blocks is not None and not any(block["source"] == "unlimited_ocr" for block in evidence_blocks):
+        reasons.append("IMAGE_TEXT_NOT_RECOVERED")
     if has_rejected_block or has_rejected_image:
         reasons.append("OCR_OUTPUT_INVALID")
     artifact = {
@@ -562,7 +617,7 @@ def _build_page_evidence(
         "processing_policy": PROCESSING_POLICY,
         "normalizer_policy": NORMALIZER_POLICY,
         "produced_at": produced_at,
-        "processing": "partial" if has_rejected_block or has_rejected_image else "succeeded",
+        "processing": "partial" if has_rejected_block or has_rejected_image or "IMAGE_TEXT_NOT_RECOVERED" in reasons else "succeeded",
         "quality": "needs_review",
         "decision": "review",
         "reason_codes": reasons,

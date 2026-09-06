@@ -331,3 +331,46 @@ def test_wrong_page_identity_and_malformed_child_block_still_fail_hard(tmp_path)
             input_binding={},
             produced_at="x",
         )
+
+
+def test_native_title_does_not_hide_uncovered_image_and_ocr_keeps_native(tmp_path):
+    path = tmp_path / "mixed.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [20, 65, 130, 190]}]
+    assert route_page(page) == "OCR_needed"
+    artifact = build_page_evidence(
+        page,
+        [
+            {"type": "text", "text": "Public native text", "bbox": [100, 50, 950, 180]},
+            {"type": "code", "text": "if (left > right) swap(left, right);", "bbox": [150, 310, 900, 850]},
+        ],
+        input_binding={}, produced_at="x",
+    )
+    blocks = artifact["evidence_blocks"]
+    assert [(b["source"], b["text"]) for b in blocks] == [
+        ("native_text", "Public native text"),
+        ("unlimited_ocr", "if (left > right) swap(left, right);"),
+    ]
+    context = build_document_context([artifact], page_count=1)
+    assert len(context["evidence"]) == 2
+    assert all(b["locator"]["page"] == 1 for b in blocks)
+
+
+def test_small_logo_does_not_trigger_ocr(tmp_path):
+    path = tmp_path / "logo.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [130, 0, 140, 10]}]
+    assert route_page(page) == "native_sufficient"
+
+
+def test_unrecovered_image_retains_native_with_review_status(tmp_path):
+    path = tmp_path / "missing-image-text.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [20, 65, 130, 190]}]
+    artifact = build_page_evidence(page, [], input_binding={}, produced_at="x")
+    assert artifact["processing"] == "partial"
+    assert "IMAGE_TEXT_NOT_RECOVERED" in artifact["reason_codes"]
+    assert artifact["evidence_blocks"][0]["text"] == "Public native text"

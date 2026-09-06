@@ -137,7 +137,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or not assessment["prompt"]
             or ocr["page_schema"] != "page-evidence/v4"
             or ocr["native_schema"] != "page-native/v3"
-            or ocr["processing_policy"] != "native-first-page-evidence/v3"
+            or ocr["processing_policy"] != "native-first-page-evidence/v6"
             or ocr["normalizer_policy"] != "ocr-text-nfc-line-preserving/v1"
             or material["retry_attempts"] != 2
         ):
