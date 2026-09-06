@@ -74,7 +74,7 @@ def _service(lock: Any) -> dict[str, Any]:
         service = lock["semantic_service"]
         origin = _origin(service["base_url"])
         if (
-            lock["schema"] != "studydy-runtime-lock/v15"
+            lock["schema"] != "studydy-runtime-lock/v16"
             or lock["python"] != "3.12"
             or service["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or service["max_model_len"] != 32768
@@ -214,11 +214,12 @@ def request_semantics(
 
     service = _service(runtime_lock)
     try:
-        task_lock = runtime_lock[task]
-        prompt = task_lock["prompt"]
-        max_tokens = task_lock["max_tokens"]
+        task_lock = runtime_lock["assessment" if task == "assessment_check" else task]
+        prefix = "check_" if task == "assessment_check" else ""
+        prompt = task_lock[prefix + "prompt"]
+        max_tokens = task_lock[prefix + "max_tokens"]
         if (
-            task not in {"material_semantics", "assessment"}
+            task not in {"material_semantics", "assessment", "assessment_check"}
             or not isinstance(prompt, str)
             or not prompt
             or type(max_tokens) is not int
@@ -228,7 +229,7 @@ def request_semantics(
         ):
             raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
         messages = _messages(prompt, request)
-        generation = deepcopy(task_lock["generation"])
+        generation = deepcopy(task_lock[prefix + "generation"])
         if _token_count(client, service, messages, generation.get("chat_template_kwargs")) + max_tokens > service["max_model_len"]:
             raise SemanticServiceError("SEMANTIC_INPUT_TOO_LARGE")
         response = client.post(

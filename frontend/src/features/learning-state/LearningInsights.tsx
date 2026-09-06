@@ -25,9 +25,10 @@ export function LearningInsights({ currentConceptId, progress }: {
       <div className="state-dimensions">
         <article><span><Icon name="learning" /></span><small>作答次數</small><strong>{current.attempts}</strong></article>
         <article><span><Icon name="check" /></span><small>答對次數</small><strong>{current.correct_answers}</strong></article>
-        <article><span><Icon name="book" /></span><small>不同安全題目</small><strong>{current.qualified_correct_items}</strong></article>
+        <article><span><Icon name="book" /></span><small>有效答對題數</small><strong>{current.qualified_correct_items}</strong></article>
         <article><span><Icon name="file" /></span><small>已練習重點</small><strong>{current.covered_claim_ids.length}</strong></article>
       </div>
+      <p>每個教材重點需答對 2 道不同且通過檢查的題目，最近一次作答也需答對。</p>
       {finding ? <div className="weakness-card is-warning"><Icon name="warning" /><div><strong>最近答案需要複習</strong><p>回到教材 Evidence，再嘗試另一題。</p></div></div> : <div className="no-weakness"><Icon name="check" /><span>目前沒有觀察到新的弱點。</span></div>}
     </section>
   );

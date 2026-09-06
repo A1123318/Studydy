@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from knowledge_map.structure import SemanticState, apply_semantic_response, build_document_context, build_knowledge_structure
 from learning_adaptation.answer_events import AnswerSubmissionError, read_answer_events, submit_answer
-from learning_adaptation.assessments import AssessmentError, generate_assessment, read_assessment
+from learning_adaptation.assessments import AssessmentError, generate_assessment as _generate_assessment, read_assessment
 from learning_adaptation.learner_progress import LearnerProgressError, apply_guidance, derive_learner_progress
 from learning_adaptation.study_sessions import create_study_session, read_study_session
 from runtime.learner_session import TrustedLearner, create_session
@@ -26,6 +26,24 @@ from runtime.storage.knowledge_structures import publish_knowledge_structure, re
 from runtime.storage.migrations import run_migrations
 from pdf_evidence.ocr_page_evidence import canonical_sha256
 import runtime.api.app as api_app
+
+
+
+def generate_assessment(*args, semantic_call, **kwargs):
+    """Controlled model responses for persistence tests; real solver quality is tested separately."""
+    answers = {}
+    def model(client, **request):
+        if request["task"] == "assessment_check":
+            return {"schema": "assessment-check-response/v1", "verdicts": [
+                {"question_index": question["question_index"], "answer_status": "unique",
+                 "selected_option_index": question["options"].index(answers[question["prompt"]]),
+                 "duplicate_prior_index": None}
+                for question in request["request"]["questions"]
+            ]}
+        response = semantic_call(client, **request)
+        answers.update({candidate["prompt"]: candidate["correct_answer"] for candidate in response["candidates"]})
+        return response
+    return _generate_assessment(*args, semantic_call=model, **kwargs)
 
 
 class Client:
@@ -257,14 +275,14 @@ def test_concurrent_same_assessment_intent_publishes_once(closed_loop):
 
 
 @pytest.mark.parametrize("second_novelty,second_correct,expected_status,qualified_count", [
-    ("uncertain", True, "learning", 1),
+    ("uncertain", True, "mastered", 2),
     ("distinct", False, "needs_review", 1),
     ("distinct", True, "mastered", 2),
 ])
-def test_publication_and_mastery_remain_separate_after_real_persistence(
+def test_checked_answers_support_mastery_without_novelty_gate(
     closed_loop, second_novelty, second_correct, expected_status, qualified_count
 ):
-    """安全題可發布；不確定的新意或答錯不能累積成虛假掌握。"""
+    """不同有效題目可檢查同一知識；新意標籤不否決答對，答錯仍形成弱點。"""
     learner, source, settings, structure, dsn, _token = closed_loop
     concept = structure["concepts"][0]
     claim_id = concept["claims"][0]["claim_id"]
@@ -274,11 +292,16 @@ def test_publication_and_mastery_remain_separate_after_real_persistence(
             f"angle-{number}", f"教材中的 Stack 順序，第 {number} 題？", concept["evidence_refs"][0]
         )
         response["candidates"][0]["novelty"] = "distinct" if number == 1 else second_novelty
+        if number == 2:
+            response["candidates"][0].update(
+                prompt="根據教材，哪種資料結構採用 LIFO？", correct_answer="stack",
+                distractors=["queue", "array", "tree"],
+            )
         assessment = generate_assessment(
             learner, study.study_session_id, claim_id, f"assessment-{number}", settings,
             dsn=dsn, client=Client(), semantic_call=lambda *_args, **_kwargs: response,
         )
-        assert assessment.mastery_qualified is (number == 1 or second_novelty == "distinct")
+        assert assessment.mastery_qualified is True
         correct = assessment.private_answer_document["correct_option_id"]
         selected = correct if number == 1 or second_correct else next(
             option["option_id"] for option in assessment.public_document["options"] if option["option_id"] != correct
@@ -665,3 +688,39 @@ def test_successful_retry_clears_obsolete_no_safe_guidance(closed_loop):
     assert restored.concept_states[0].status == "not_started"
     with pytest.raises(LearnerProgressError, match="LEARNER_GUIDANCE_STALE"):
         apply_guidance(learner, study.study_session_id, unavailable.guidance_revision, dsn=dsn)
+
+
+def test_legacy_assessment_eligibility_is_not_upgraded_by_new_policy(closed_loop):
+    """Reading recorded v5 provenance must preserve its old ineligible flag."""
+    from copy import deepcopy
+    from types import SimpleNamespace
+    from sqlalchemy import select
+    from runtime.storage.tables import Assessment, database_session
+    from learning_adaptation.assessments import _stored
+
+    learner, source, settings, structure, dsn, _token = closed_loop
+    concept = structure["concepts"][0]
+    study = create_study_session(learner, source.material_id, structure["revision"], "study", dsn=dsn)
+    item = generate_assessment(
+        learner, study.study_session_id, concept["claims"][0]["claim_id"], "item", settings,
+        dsn=dsn, client=Client(), semantic_call=lambda *_a, **_k: _assessment_response(
+            "definition", "根據教材，Stack 使用哪種順序？", concept["evidence_refs"][0],
+        ),
+    )
+    with database_session(dsn) as session:
+        row = session.scalar(select(Assessment).where(Assessment.assessment_revision == item.assessment_revision))
+        legacy = SimpleNamespace(**{column.name: deepcopy(getattr(row, column.name)) for column in Assessment.__table__.columns})
+    provenance = legacy.generation_provenance
+    provenance.pop("verification")
+    provenance.update(schema="assessment-generation-provenance/v5", policy="source-span-single-choice/v4", novelty="uncertain", mastery_qualified=False)
+    legacy.mastery_qualified = False
+    core = lambda document: {key: value for key, value in document.items() if key != "assessment_revision"}
+    revision = "assessment:sha256:" + canonical_sha256({
+        "public": core(legacy.public_document),
+        "private_sha256": canonical_sha256(core(legacy.private_answer_document)),
+        "provenance_sha256": canonical_sha256(core(provenance)),
+    })
+    legacy.assessment_revision = revision
+    for document in [legacy.public_document, legacy.private_answer_document, provenance]:
+        document["assessment_revision"] = revision
+    assert _stored(legacy).mastery_qualified is False
