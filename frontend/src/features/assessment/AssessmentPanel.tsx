@@ -33,12 +33,12 @@ function assessmentError(error: unknown): AssessmentError {
   };
 }
 
-export function AssessmentPanel({ apiClient, concept, onNoSafeItem, onReloadSession, onSubmitted, sourceArtifactId, studySessionId, view }: {
+export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProgressChanged, onReloadSession, sourceArtifactId, studySessionId, view }: {
   apiClient: StudydyApiClient;
   concept: Concept;
-  onNoSafeItem: (isUnavailable: boolean) => void;
+  recommendedClaimId: string | null;
+  onProgressChanged: () => void;
   onReloadSession: () => void;
-  onSubmitted: (feedback: AnswerFeedbackView) => void;
   sourceArtifactId: string;
   studySessionId: string;
   view: KnowledgeStructureView;
@@ -62,10 +62,16 @@ export function AssessmentPanel({ apiClient, concept, onNoSafeItem, onReloadSess
     setFeedback(null);
     setRequestError(null);
     setSubmissionError(null);
-    onNoSafeItem(false);
     assessmentIntent.current = null;
     submissionIntent.current = null;
   }, [concept.concept_id]);
+
+  useEffect(() => {
+    if (recommendedClaimId && concept.claims.some((claim) => claim.claim_id === recommendedClaimId)) {
+      setSelectedClaimId(recommendedClaimId);
+      assessmentIntent.current = null;
+    }
+  }, [concept.concept_id, recommendedClaimId]);
 
   useEffect(() => {
     if (!isLoading) return;
@@ -80,7 +86,6 @@ export function AssessmentPanel({ apiClient, concept, onNoSafeItem, onReloadSess
   const requestAssessment = async (newIntent: boolean) => {
     if (isLoading) return;
     setIsLoading(true);
-    onNoSafeItem(false);
     setRequestError(null);
     setAssessment(null);
     setFeedback(null);
@@ -97,11 +102,12 @@ export function AssessmentPanel({ apiClient, concept, onNoSafeItem, onReloadSess
     try {
       const next = await createForClaim(selectedClaimId, newIntent);
       setAssessment(next);
+      onProgressChanged();
       submissionIntent.current = null;
     } catch (error) {
       const nextError = assessmentError(error);
       setRequestError(nextError);
-      onNoSafeItem(nextError.noSafeItem);
+      if (nextError.noSafeItem) onProgressChanged();
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +127,7 @@ export function AssessmentPanel({ apiClient, concept, onNoSafeItem, onReloadSess
         selected_option_id: selectedOptionId,
       }, submissionIntent.current.key);
       setFeedback(next);
-      onSubmitted(next);
+      onProgressChanged();
     } catch (error) {
       setSubmissionError(assessmentError(error));
     } finally {

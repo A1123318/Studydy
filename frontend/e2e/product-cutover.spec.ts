@@ -88,8 +88,8 @@ const progress = {
   knowledge_structure_revision: structureRevision, event_watermark: 0,
   current_concept_id: firstConcept, deferred_concept_ids: [],
   concept_states: [
-    { concept_id: firstConcept, label: "Stack", status: "not_started", attempts: 0, correct_answers: 0, qualified_correct_items: 0, covered_claim_ids: [], weak_claim_ids: [], latest_is_correct: null },
-    { concept_id: secondConcept, label: "Array", status: "not_started", attempts: 0, correct_answers: 0, qualified_correct_items: 0, covered_claim_ids: [], weak_claim_ids: [], latest_is_correct: null },
+    { concept_id: firstConcept, label: "Stack", status: "not_started", attempts: 0, correct_answers: 0, qualified_correct_items: 0, covered_claim_ids: [], mastered_claim_ids: [], weak_claim_ids: [], latest_is_correct: null },
+    { concept_id: secondConcept, label: "Array", status: "not_started", attempts: 0, correct_answers: 0, qualified_correct_items: 0, covered_claim_ids: [], mastered_claim_ids: [], weak_claim_ids: [], latest_is_correct: null },
   ],
   weaknesses: [], next_action: { action: "assess", target_concept_id: firstConcept, target_claim_id: firstClaim, prerequisite_concept_ids: [], reason: "current_concept" },
   guidance_revision: `learner-guidance:sha256:${"f".repeat(64)}`,
@@ -171,23 +171,34 @@ test("StudySession uses source-bound assessment and server feedback", async ({ p
     text: "Another learning point with the same source page.",
   });
   await routes(page, sharedEvidenceView);
+  let guidedClaim = firstClaim;
+  await page.route(`**/v1/study-sessions/${sessionId}/progress`, route => json(route, {
+    ...progress, next_action: { ...progress.next_action, target_claim_id: guidedClaim },
+  }));
+  const requestedClaims: string[] = [];
   const assessmentRevision = `assessment:sha256:${"3".repeat(64)}`;
   const questionId = `question:sha256:${"4".repeat(64)}`;
   const options = ["LIFO", "FIFO", "RANDOM", "PRIORITY"].map((text, index) => ({ option_id: `option:sha256:${String(index + 1).repeat(64)}`, text }));
-  await page.route(`**/v1/study-sessions/${sessionId}/assessments`, (route) => json(route, {
+  await page.route(`**/v1/study-sessions/${sessionId}/assessments`, (route) => {
+    requestedClaims.push(route.request().postDataJSON().target_claim_id);
+    return json(route, {
     schema: "single-choice-assessment/v2", assessment_revision: assessmentRevision,
     study_session_id: sessionId, knowledge_structure_revision: structureRevision,
     question_id: questionId, target_concept_id: firstConcept, target_claim_id: firstClaim,
     source_evidence_ids: [evidenceId], question_type: "single_choice",
     prompt: "根據教材，Stack 使用哪種順序？", options,
-  }, 201));
-  await page.route(`**/v1/study-sessions/${sessionId}/assessments/${encodeURIComponent(assessmentRevision)}/submissions`, (route) => json(route, {
+  }, 201);
+  });
+  await page.route(`**/v1/study-sessions/${sessionId}/assessments/${encodeURIComponent(assessmentRevision)}/submissions`, (route) => {
+    guidedClaim = sharedEvidenceView.concepts[0].claims[1].claim_id;
+    return json(route, {
     schema: "answer-feedback/v2", answer_event_id: "55555555-5555-4555-8555-555555555555",
     study_session_id: sessionId, assessment_revision: assessmentRevision,
     question_id: questionId, selected_option_id: options[0].option_id, is_correct: true,
     rationale: "A stack follows LIFO order.", source_evidence_ids: [evidenceId], event_number: 1,
     created_at: "2026-09-05T00:02:00Z",
-  }, 201));
+  }, 201);
+  });
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}/study-sessions/${sessionId}`);
   await page.getByRole("button", { name: "開始評量" }).click();
   await expect(page.getByRole("heading", { name: "根據教材，Stack 使用哪種順序？" })).toBeVisible();
@@ -196,6 +207,9 @@ test("StudySession uses source-bound assessment and server feedback", async ({ p
   await expect(page.getByRole("heading", { name: "答對了" })).toBeVisible();
   await expect(page.locator(".feedback-rationale")).toHaveText("A stack follows LIFO order.");
   await expect(page.locator(".feedback-evidence button")).toHaveCount(1);
+  await expect.poll(() => guidedClaim).toBe(sharedEvidenceView.concepts[0].claims[1].claim_id);
+  await page.getByRole("button", { name: "取得新題目" }).click();
+  await expect.poll(() => requestedClaims).toEqual([firstClaim, guidedClaim]);
 });
 
 test("mobile fallback keeps canonical Relations and Evidence reachable", async ({ page }) => {
@@ -207,4 +221,74 @@ test("mobile fallback keeps canonical Relations and Evidence reachable", async (
   await expect(page.getByLabel("概念關係").getByText("Stack must be learned before Array traversal.")).toBeVisible();
   await page.getByLabel("教材概念階層清單").getByRole("button", { name: /Stack/ }).click();
   await expect(page.getByText("原始教材第 1 頁")).toBeVisible();
+});
+
+test("assessment follows the guided Claim when reopening a multi-Claim concept", async ({ page }) => {
+  const view = structureView();
+  view.concepts[0].claims.push({ ...view.concepts[0].claims[0], claim_id: secondClaim, text: "Second learning point." });
+  await routes(page, view);
+  await page.route(`**/v1/study-sessions/${sessionId}/progress`, route => json(route, {
+    ...progress, next_action: { ...progress.next_action, target_claim_id: secondClaim },
+  }));
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}/study-sessions/${sessionId}`);
+  await expect(page.locator(`input[name="target-claim"][value="${secondClaim}"]`)).toBeChecked();
+  await page.reload();
+  await expect(page.locator(`input[name="target-claim"][value="${secondClaim}"]`)).toBeChecked();
+});
+
+test("a safe retry replaces old no-safe guidance before answering", async ({ page }) => {
+  await routes(page);
+  let unavailable = false;
+  let requests = 0;
+  await page.route(`**/v1/study-sessions/${sessionId}/progress`, route => json(route, {
+    ...progress, next_action: unavailable
+      ? { ...progress.next_action, action: "defer", target_concept_id: secondConcept, reason: "no_safe_assessment" }
+      : progress.next_action,
+  }));
+  await page.route(`**/v1/study-sessions/${sessionId}/assessments`, route => {
+    requests += 1;
+    unavailable = requests === 1;
+    if (unavailable) return json(route, {
+      schema: "api-error/v1", request_id: materialId, reason_code: "NO_SAFE_ASSESSMENT", retryable: false, message: "Request could not be completed.",
+    }, 422);
+    return json(route, {
+      schema: "single-choice-assessment/v2", assessment_revision: `assessment:sha256:${"3".repeat(64)}`,
+      study_session_id: sessionId, knowledge_structure_revision: structureRevision,
+      question_id: `question:sha256:${"4".repeat(64)}`, target_concept_id: firstConcept, target_claim_id: firstClaim,
+      source_evidence_ids: [evidenceId], question_type: "single_choice", prompt: "Safe retry question",
+      options: ["LIFO", "FIFO", "RANDOM", "PRIORITY"].map((text, i) => ({ option_id: `option:sha256:${String(i + 1).repeat(64)}`, text })),
+    }, 201);
+  });
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}/study-sessions/${sessionId}`);
+  await page.getByRole("button", { name: "開始評量" }).click();
+  await expect(page.getByRole("heading", { name: "改用教材回顧" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "暫緩並繼續" })).toBeVisible();
+  await page.getByRole("button", { name: "完成本次回顧" }).click();
+  await page.getByRole("button", { name: "開始評量" }).click();
+  await expect(page.getByRole("heading", { name: "Safe retry question" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "練習目前概念", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "暫緩並繼續" })).toHaveCount(0);
+});
+
+test("stale guidance can reload current progress without applying the old target", async ({ page }) => {
+  await routes(page);
+  let outdated = true;
+  await page.route(`**/v1/study-sessions/${sessionId}/progress`, route => json(route, {
+    ...progress, next_action: outdated
+      ? { ...progress.next_action, action: "advance", target_concept_id: secondConcept, target_claim_id: null }
+      : progress.next_action,
+  }));
+  await page.route(`**/v1/study-sessions/${sessionId}/guidance/apply`, route => {
+    outdated = false;
+    return json(route, {
+      schema: "api-error/v1", request_id: materialId, reason_code: "IDEMPOTENCY_CONFLICT", retryable: false, message: "Request could not be completed.",
+    }, 409);
+  });
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}/study-sessions/${sessionId}`);
+  await page.getByRole("button", { name: "繼續學習", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "無法開啟本次學習", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "重新讀取", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Stack", exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "練習目前概念", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "繼續學習", exact: true })).toHaveCount(0);
 });

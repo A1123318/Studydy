@@ -16,6 +16,7 @@ class ConceptLearningState(BaseModel):
     correct_answers: int
     qualified_correct_items: int
     covered_claim_ids: list[str]
+    mastered_claim_ids: list[str]
     weak_claim_ids: list[str]
     latest_is_correct: bool | None
 
@@ -58,6 +59,7 @@ def derive_learning_states(
             correct_answers=sum(event.is_correct for event in concept_events),
             qualified_correct_items=len({event.semantic_identity for event in concept_events if event.is_correct and event.mastery_qualified}),
             covered_claim_ids=covered,
+            mastered_claim_ids=[claim_id for claim_id in by_claim if claim_id in mastered_claims],
             weak_claim_ids=weak,
             latest_is_correct=latest,
         ))

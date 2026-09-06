@@ -27,6 +27,11 @@ line breaks and bounding boxes. A null meaning reuses the
 selected units. Code expands quotes and canonical references; technical-literal protection still
 applies, but partial quotations cannot replace a complete meaning.
 
+Page processing policy `native-first-page-evidence/v7` combines these native Evidence units with
+OCR for substantial image regions that have little native text coverage. Readable native text alone
+does not establish page completeness. Mixed pages retain their native units and add OCR text from
+the uncovered image regions; unrecovered image content retains a review status.
+
 Original Evidence remains available. Claim candidates omit explicit copyright text in page margins,
 repeated marginal running text, and page numbers consistent with page order across pages. Headings,
 code-like text and non-margin content are preserved; an arbitrary bottom crop is not used. Filtered

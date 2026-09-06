@@ -420,3 +420,78 @@ def test_wrong_page_identity_and_malformed_child_block_still_fail_hard(tmp_path)
             input_binding={},
             produced_at="x",
         )
+
+
+def test_native_title_does_not_hide_uncovered_image_and_ocr_keeps_native(tmp_path):
+    path = tmp_path / "mixed.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [20, 65, 130, 190]}]
+    assert route_page(page) == "OCR_needed"
+    artifact = build_page_evidence(
+        page,
+        [
+            {"type": "text", "text": "Public native text", "bbox": [100, 50, 950, 180]},
+            {"type": "code", "text": "if (left > right) swap(left, right);", "bbox": [150, 310, 900, 850]},
+        ],
+        input_binding={}, produced_at="x",
+    )
+    blocks = artifact["evidence_blocks"]
+    assert [(b["source"], b["text"]) for b in blocks] == [
+        ("native_text", "Public native text"),
+        ("unlimited_ocr", "if (left > right) swap(left, right);"),
+    ]
+    context = build_document_context([artifact], page_count=1)
+    assert len(context["evidence"]) == 2
+    assert all(b["locator"]["page"] == 1 for b in blocks)
+
+
+def test_small_logo_does_not_trigger_ocr(tmp_path):
+    path = tmp_path / "logo.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [130, 0, 140, 10]}]
+    assert route_page(page) == "native_sufficient"
+
+
+def test_wrapped_native_unit_and_image_ocr_both_reach_whole_evidence_claim(tmp_path):
+    path = tmp_path / "wrapped-with-image.pdf"
+    with pymupdf.open() as document:
+        pdf_page = document.new_page(width=300, height=300)
+        pdf_page.insert_text((20, 35), "The buffer holds", fontsize=10)
+        pdf_page.insert_text((20, 48), "four values.", fontsize=10)
+        document.save(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [20, 90, 250, 250]}]
+    assert route_page(page) == "OCR_needed"
+    artifact = build_page_evidence(
+        page,
+        [{"type": "code", "text": "int values[4];", "bbox": [100, 330, 800, 730]}],
+        input_binding={}, produced_at="x",
+    )
+    texts = ["The buffer holds\nfour values.", "int values[4];"]
+    assert [(block["source"], block["text"]) for block in artifact["evidence_blocks"]] == [
+        ("native_text", texts[0]), ("unlimited_ocr", texts[1]),
+    ]
+    context = build_document_context([artifact], page_count=1)
+    state = SemanticState()
+    apply_semantic_response(
+        {"concepts": [{"k": "buffer", "l": "Buffer", "a": [],
+                       "c": [{"m": None, "s": [0, 1]}]}], "relations": []},
+        context=context,
+        bundle={"sections": context["sections"], "evidence": context["evidence"]},
+        state=state,
+    )
+    claim = state.concepts["buffer"]["claims"][0]
+    assert [span["quote"] for span in claim["source_spans"]] == texts
+
+
+def test_unrecovered_image_retains_native_with_review_status(tmp_path):
+    path = tmp_path / "missing-image-text.pdf"
+    _pdf(path)
+    page = _extract(path)
+    page["images"] = [{"bbox": [20, 65, 130, 190]}]
+    artifact = build_page_evidence(page, [], input_binding={}, produced_at="x")
+    assert artifact["processing"] == "partial"
+    assert "IMAGE_TEXT_NOT_RECOVERED" in artifact["reason_codes"]
+    assert artifact["evidence_blocks"][0]["text"] == "Public native text"

@@ -516,6 +516,10 @@ def generate_assessment(
                     created_at=datetime.now(UTC),
                 ))
                 study.status = "active"
+                study.no_safe_claim_ids = [
+                    claim_id for claim_id in study.no_safe_claim_ids
+                    if claim_id != target_claim_id
+                ]
                 stored = session.scalar(select(Assessment).where(Assessment.assessment_revision == public["assessment_revision"]))
                 if stored is None:
                     raise AssessmentError("ASSESSMENT_STORE_FAILED")

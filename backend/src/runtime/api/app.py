@@ -201,7 +201,7 @@ def _fixed_exception(error: Exception) -> str:
     if "IDEMPOTENCY_CONFLICT" in reason or reason in {
         "MATERIAL_RUN_IDEMPOTENCY_CONFLICT",
         "ANSWER_ALREADY_SUBMITTED",
-        "ADAPTIVE_PLAN_STALE",
+        "LEARNER_GUIDANCE_STALE",
         "ANSWER_SUBMISSION_STALE",
     }:
         return "IDEMPOTENCY_CONFLICT"
