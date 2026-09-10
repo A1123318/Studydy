@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v7"
+PROCESSING_POLICY = "native-first-page-evidence/v8"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -388,10 +388,9 @@ def _native_text_readable(page: dict[str, Any]) -> bool:
         return False
     return True
 
-def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
-    """找出占實質版面、卻幾乎沒有原生文字覆蓋的圖片；小裝飾不觸發 OCR。"""
+def _content_image_regions(page: dict[str, Any]) -> list[list[float]]:
+    """Ignore small icons and isolated margin artwork before either decision."""
     boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
-    blocks = _native_text_blocks(page)
     regions = []
     for image in page["images"]:
         bbox = image.get("bbox") if isinstance(image, dict) else None
@@ -401,15 +400,102 @@ def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
         area = region.get_area()
         if area < boundary.get_area() * 0.01:
             continue
+        # A logo can exceed 1% on a small page. It is still margin artwork
+        # when wholly outside the teaching area, rather than a content image.
+        if (
+            region.y1 <= boundary.y0 + boundary.height * 0.08
+            or region.y0 >= boundary.y0 + boundary.height * 0.92
+            or region.x1 <= boundary.x0 + boundary.width * 0.06
+            or region.x0 >= boundary.x0 + boundary.width * 0.94
+        ):
+            continue
+        regions.append(_box(region))
+    return regions
+
+
+def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
+    """Substantive raster regions whose textual content is not verified natively."""
+    blocks = _native_text_blocks(page)
+    regions = []
+    for bbox in _content_image_regions(page):
+        region = pymupdf.Rect(bbox)
+        area = region.get_area()
         covered = sum((region & pymupdf.Rect(block["bbox"])).get_area() for block in blocks)
         if covered < area * 0.1:
             regions.append(_box(region))
     return regions
 
 
+_VISUAL_CUE = re.compile(
+    r"\b(?:diagram|figure|flowchart|arrows?|columns?|rows?|layout|containment)\b"
+    r"|示意圖|示意图|流程圖|流程图|結構圖|结构图|樹狀圖|树状图|箭頭|箭头|如圖|如图|下圖|下图|圖解|图解",
+    re.IGNORECASE,
+)
+
+
+def needs_visual_context(
+    page: dict[str, Any], evidence_blocks: list[dict[str, Any]] | None = None,
+    *, ocr_visual_regions: list[list[float]] | None = None,
+) -> bool:
+    """Select spatial content, independently of whether its text needed OCR.
+
+    Raster text alone is not a visual-semantic trigger. Use explicit spatial
+    cues alongside a content image, or multiple native diagram/table strokes
+    near textual labels. This is a conservative geometry rule, not a classifier.
+    """
+    blocks = _native_text_blocks(page)
+    text = "\n".join(block["text"] for block in (evidence_blocks if evidence_blocks is not None else blocks))
+    if _content_image_regions(page) and _VISUAL_CUE.search(text):
+        return True
+    boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
+    # Existing OCR layout output can identify an unrecovered figure/table even
+    # when it supplies no text for that region. It does not become text Evidence.
+    for bbox in ocr_visual_regions or []:
+        region = pymupdf.Rect(bbox)
+        if (
+            region.get_area() >= boundary.get_area() * 0.01
+            and region.y1 > boundary.y0 + boundary.height * 0.08
+            and region.y0 < boundary.y0 + boundary.height * 0.92
+        ):
+            return True
+    strokes = 0
+    for drawing in page.get("native_evidence", {}).get("drawings", []):
+        rect = drawing.get("rect")
+        if not isinstance(rect, list) or len(rect) != 4:
+            continue
+        region = pymupdf.Rect(rect)
+        if (
+            region.get_area() >= boundary.get_area() * 0.85
+            or max(region.width, region.height) < 12
+            or region.y1 <= boundary.y0 + boundary.height * 0.08
+            or region.y0 >= boundary.y0 + boundary.height * 0.92
+        ):
+            continue
+        items = drawing.get("items", [])
+        if len(items) == 1 and items[0][0] == "re":
+            if min(region.width, region.height) < 12:
+                continue
+            if drawing.get("type") == "f" and not any(
+                (region & pymupdf.Rect(block["bbox"])).get_area() > 0 for block in blocks
+            ):
+                continue
+        if any(_distance(rect, block["bbox"]) <= CAPTION_DISTANCE_POINTS for block in blocks):
+            strokes += len(items) if min(region.width, region.height) >= 6 else 1
+    return strokes >= 3
+
+
+def page_needs(page: dict[str, Any]) -> dict[str, bool]:
+    # Unknown substantive raster text still requires the OCR fallback. Native
+    # vector diagrams do not: their labels are already source-bound text.
+    return {
+        "needs_ocr": not _native_text_readable(page) or bool(_uncovered_image_regions(page)),
+        "needs_visual_context": needs_visual_context(page),
+    }
+
+
 def route_page(page: dict[str, Any]) -> str:
-    """可讀文字與缺漏圖片分開判斷，標題不能替程式碼截圖通過分流。"""
-    return "native_sufficient" if _native_text_readable(page) and not _uncovered_image_regions(page) else "OCR_needed"
+    """Legacy artifact route describes text extraction only, never visual need."""
+    return "OCR_needed" if page_needs(page)["needs_ocr"] else "native_sufficient"
 
 
 
@@ -530,6 +616,7 @@ def _build_page_evidence(
     ):
         raise ValueError("OCR_LOCATOR_INVALID")
     evidence_blocks: list[dict[str, Any]] = []
+    ocr_visual_regions: list[list[float]] = []
     has_rejected_block = False
     entries = [(block, source) for block in source_blocks]
     if native_blocks is not None:
@@ -548,11 +635,13 @@ def _build_page_evidence(
         if not isinstance(block["text"], str):
             raise ValueError("OCR_OUTPUT_INVALID")
         try:
-            text = _normalized_text(block["text"])
             if source == "native_text":
                 render_region, region = _native_region(block["bbox"], page)
             else:
                 render_region, region = _locator(block["bbox"], page)
+                if ocr_type.casefold().replace("-", "_") in {"image", "figure", "table", "image_text"}:
+                    ocr_visual_regions.append(region)
+            text = _normalized_text(block["text"])
         except ValueError:
             has_rejected_block = True
             continue
@@ -646,6 +735,8 @@ def _build_page_evidence(
         "coordinate_space": "unrotated_pdf_points",
         "native_evidence_ref": page["native_evidence_ref"],
         "route": route,
+        "needs_ocr": route == "OCR_needed",
+        "needs_visual_context": needs_visual_context(page, evidence_blocks, ocr_visual_regions=ocr_visual_regions),
         "render": page["render"],
         "evidence_blocks": evidence_blocks,
         "images": image_artifacts,

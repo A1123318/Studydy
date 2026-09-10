@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID
 
 from pdf_evidence.ocr_page_evidence import canonical_bytes, canonical_sha256
+from pdf_evidence.visual_context import MAX_VISUAL_PAGES, validate_visual_reference
 
 
 STRUCTURE_SCHEMA = "knowledge-structure/v2"
@@ -237,6 +238,15 @@ def build_document_context(
         "evidence": evidence,
         "excluded_pages": excluded,
         "non_content_evidence_ids": sorted(non_content_ids),
+        "visual_pages": [
+            {
+                "material_id": material_id,
+                "page": page["page_number"],
+                "page_ref": page["page_ref"],
+                "render_sha256": page["render"]["sha256"],
+            }
+            for page in ordered if page.get("needs_visual_context", False)
+        ],
     }
 
 
@@ -367,7 +377,7 @@ def semantic_request(
 ) -> dict[str, Any]:
     handles = {item["evidence_id"]: index for index, item in enumerate(context["evidence"])}
     evidence = {item["evidence_id"]: item for item in bundle["evidence"]}
-    return {
+    request = {
         "existing_concepts": state.catalog(handles),
         "sections": [
             {
@@ -380,6 +390,12 @@ def semantic_request(
             for section in bundle["sections"]
         ],
     }
+    pages = {item["page"] for item in bundle["evidence"]}
+    references = [reference for reference in context.get("visual_pages", []) if reference["page"] in pages]
+    if references:
+        request["material_id"] = context["material_id"]
+        request["visual_pages"] = deepcopy(references)
+    return request
 
 
 def _expand_claim(claim: Any, sources: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -652,6 +668,7 @@ def build_knowledge_structure(
     ocr_calls: int,
     evidence_duration_ms: int = 0,
     semantic_duration_ms: int = 0,
+    visual_requests: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     try:
         parsed_time = datetime.fromisoformat(produced_at)
@@ -812,6 +829,8 @@ def build_knowledge_structure(
         },
         "status": status,
     }
+    if visual_requests:
+        document["provenance"]["visual_requests"] = deepcopy(visual_requests)
     document["revision"] = _revision(document)
     if not validate_knowledge_structure(document):
         raise ValueError("KNOWLEDGE_STRUCTURE_INVALID")
@@ -846,9 +865,10 @@ def validate_knowledge_structure(document: Any) -> bool:
         if (
             produced_at.tzinfo is None
             or not isinstance(provenance, dict)
-            or set(provenance) != {
-                "runtime_lock_sha256", "model_id", "model_revision", "semantic_policy"
-            }
+            or set(provenance) not in (
+                {"runtime_lock_sha256", "model_id", "model_revision", "semantic_policy"},
+                {"runtime_lock_sha256", "model_id", "model_revision", "semantic_policy", "visual_requests"},
+            )
             or re.fullmatch(r"[0-9a-f]{64}", provenance["runtime_lock_sha256"]) is None
             or provenance["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or re.fullmatch(r"[0-9a-f]{40}", provenance["model_revision"]) is None
@@ -885,6 +905,26 @@ def validate_knowledge_structure(document: Any) -> bool:
         concept_ids = [item["concept_id"] for item in concepts]
         if len(evidence_ids) != len(set(evidence_ids)) or len(concept_ids) != len(set(concept_ids)):
             return False
+        if "visual_requests" in provenance:
+            visual_requests = provenance["visual_requests"]
+            if not isinstance(visual_requests, list) or not visual_requests or len(visual_requests) > metrics["semantic_calls"]:
+                return False
+            evidence_pages = {item["evidence_id"]: item["page"] for item in evidence}
+            for visual_request in visual_requests:
+                if not isinstance(visual_request, dict) or set(visual_request) != {"evidence_refs", "pages"}:
+                    return False
+                refs, pages = visual_request["evidence_refs"], visual_request["pages"]
+                if (
+                    not isinstance(refs, list) or not refs or any(not isinstance(ref, str) for ref in refs)
+                    or len(refs) != len(set(refs)) or not set(refs) <= evidence_pages.keys()
+                    or not isinstance(pages, list) or not 1 <= len(pages) <= MAX_VISUAL_PAGES
+                    or any(not validate_visual_reference(
+                        page, material_id=document["material_id"],
+                        evidence_pages={evidence_pages[ref] for ref in refs},
+                    ) for page in pages)
+                    or len({page["page"] for page in pages}) != len(pages)
+                ):
+                    return False
         evidence_positions = [(item["page"], item["block_order"]) for item in evidence]
         if evidence_positions != sorted(evidence_positions) or len(evidence_positions) != len(set(evidence_positions)):
             return False

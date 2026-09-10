@@ -41,6 +41,7 @@ from .ocr_page_evidence import (
     route_page,
 )
 from .source_pdf import snapshot_whole_document_request
+from .visual_context import MAX_VISUAL_PAGES, VisualPage
 
 
 Progress = Callable[[str, int, int], None]
@@ -105,17 +106,28 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or set(material) != {
                 "request_schema", "response_schema", "bundle_policy",
                 "max_tokens", "prompt", "retry_attempts", "generation", "max_new_input_tokens",
+                "max_visual_pages", "context_margin_tokens",
             }
             or material["request_schema"] != "material-semantics-request/v2"
             or material["response_schema"] != "material-semantics-response/v4"
             or material["bundle_policy"] != "tokenized-contiguous-evidence/v3"
-            or material["max_new_input_tokens"] != 1536
-            or material["max_tokens"] != 4096
+            or type(material["max_tokens"]) is not int
+            or not 1 <= material["max_tokens"] < semantic["max_model_len"]
+            or type(material["max_new_input_tokens"]) is not int
+            or not 1 <= material["max_new_input_tokens"] <= semantic["max_model_len"] - material["max_tokens"]
+            or type(material["context_margin_tokens"]) is not int
+            or not 0 <= material["context_margin_tokens"] < semantic["max_model_len"] - material["max_tokens"]
+            or type(material["max_visual_pages"]) is not int
+            or not 0 <= material["max_visual_pages"] <= MAX_VISUAL_PAGES
             or material["generation"] != {
                 "temperature": 1.0, "top_p": 0.95, "top_k": 20,
                 "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0,
-                "chat_template_kwargs": {"enable_thinking": True, "reasoning_effort": "xhigh"},
+                "chat_template_kwargs": {
+                    "enable_thinking": True,
+                    "reasoning_effort": material["generation"]["chat_template_kwargs"]["reasoning_effort"],
+                },
             }
+            or material["generation"]["chat_template_kwargs"]["reasoning_effort"] not in {"xhigh", "low"}
             or not isinstance(material["prompt"], str)
             or not material["prompt"]
             or set(assessment) != {
@@ -141,7 +153,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or not assessment["check_prompt"]
             or ocr["page_schema"] != "page-evidence/v4"
             or ocr["native_schema"] != "page-native/v3"
-            or ocr["processing_policy"] != "native-first-page-evidence/v7"
+            or ocr["processing_policy"] != "native-first-page-evidence/v8"
             or ocr["normalizer_policy"] != "ocr-text-nfc-line-preserving/v1"
             or material["retry_attempts"] != 2
         ):
@@ -186,6 +198,7 @@ def _reason(error: Exception) -> str:
         "PROTOCOL_LIMIT_EXCEEDED", "SEMANTIC_SERVICE_TIMEOUT",
         "SEMANTIC_SERVICE_UNAVAILABLE", "SEMANTIC_RESPONSE_INVALID",
         "SEMANTIC_OUTPUT_INVALID", "SEMANTIC_OUTPUT_TRUNCATED",
+        "SEMANTIC_VISUAL_REFERENCE_INVALID", "SEMANTIC_INPUT_TOO_LARGE",
     }
     return reason if reason in allowed else "MATERIAL_ANALYSIS_FAILED"
 
@@ -206,6 +219,7 @@ def _page_evidence(
     settings: dict[str, Any],
     produced_at: str,
     report: Progress,
+    visual_root: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     pages: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
@@ -247,8 +261,14 @@ def _page_evidence(
                         raise LocalAIError("CHILD_RESPONSE_INVALID")
                     artifact = build_page_evidence(page, response["blocks"], input_binding=binding, produced_at=produced_at)
                 pages.append(artifact)
+                if artifact["needs_visual_context"] and settings["runtime_lock"]["material_semantics"]["max_visual_pages"]:
+                    (visual_root / f"{page_number}.png").write_bytes(page["png_bytes"])
             except (LocalAIError, ValueError) as error:
                 excluded.append(_excluded(page, _reason(error)))
+                if isinstance(error, LocalAIError) and ocr is not None:
+                    # A failed sidecar must not poison every subsequent scan.
+                    ocr.abort()
+                    ocr = None
             finally:
                 page.pop("png_bytes", None)
                 page.pop("native_evidence", None)
@@ -284,35 +304,53 @@ def analyze_material(
     resolved_time = produced_at or datetime.now(UTC).isoformat()
     report = progress_callback or (lambda _stage, _completed, _total: None)
     runtime_root = Path(settings["private_runtime_root"])
-    with material_analysis_lock(runtime_root):
+    with material_analysis_lock(runtime_root), tempfile.TemporaryDirectory(prefix="studydy-source-") as directory:
         evidence_started = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix="studydy-source-") as directory:
-            snapshot = Path(directory) / "source.pdf"
-            checked = snapshot_whole_document_request(request, snapshot)
-            page_numbers = checked["page_numbers"]
-            pages, excluded, ocr_calls = _page_evidence(
-                snapshot,
-                checked["expected_source_sha256"],
-                page_numbers,
-                settings,
-                resolved_time,
-                report,
-            )
+        snapshot = Path(directory) / "source.pdf"
+        visual_root = Path(directory) / "visual"
+        visual_root.mkdir(mode=0o700)
+        checked = snapshot_whole_document_request(request, snapshot)
+        page_numbers = checked["page_numbers"]
+        pages, excluded, ocr_calls = _page_evidence(
+            snapshot,
+            checked["expected_source_sha256"],
+            page_numbers,
+            settings,
+            resolved_time,
+            report,
+            visual_root,
+        )
         evidence_duration_ms = round((time.monotonic() - evidence_started) * 1000)
         context = build_document_context(
             pages, page_count=len(page_numbers), excluded_pages=excluded
         )
+        if not lock["material_semantics"]["max_visual_pages"]:
+            context["visual_pages"] = []
         state = SemanticState()
         semantic_calls = 0
+        visual_requests = []
         semantic_started = time.monotonic()
         owned_client = client is None
         http = semantic_client() if client is None else client
+
+        def visuals(request_document: dict[str, Any]) -> tuple[VisualPage, ...]:
+            return tuple(
+                VisualPage(reference, (visual_root / f"{reference['page']}.png").read_bytes())
+                for reference in request_document.get("visual_pages", [])
+            )
+
+        def fits(request_document: dict[str, Any]) -> bool:
+            if len(request_document.get("visual_pages", [])) > lock["material_semantics"]["max_visual_pages"]:
+                return False
+            return material_request_fits(http, lock, request_document, visual_pages=visuals(request_document))
+
         try:
             for bundle in build_semantic_bundles(
                 context, state=state,
-                fits=lambda request: material_request_fits(http, lock, request),
+                fits=fits,
             ):
                 request_document = semantic_request(context, bundle, state)
+                selected_visuals = visuals(request_document)
                 last_error: Exception | None = None
                 for _attempt in range(lock["material_semantics"]["retry_attempts"]):
                     candidate_state = deepcopy(state)
@@ -326,6 +364,7 @@ def analyze_material(
                             response_schema=semantic_response_schema([
                                 row[0] for section in request_document["sections"] for row in section["evidence"]
                             ]),
+                            **({"visual_pages": selected_visuals} if selected_visuals else {}),
                         )
                         apply_semantic_response(
                             response,
@@ -346,6 +385,11 @@ def analyze_material(
                         last_error = error
                 if last_error is not None:
                     raise MaterialAnalysisError(_reason(last_error)) from None
+                if selected_visuals:
+                    visual_requests.append({
+                        "evidence_refs": [item["evidence_id"] for item in bundle["evidence"]],
+                        "pages": request_document["visual_pages"],
+                    })
                 report("semantics", bundle["evidence"][-1]["page"], len(page_numbers))
         finally:
             if owned_client:
@@ -365,4 +409,5 @@ def analyze_material(
         ocr_calls=ocr_calls,
         evidence_duration_ms=evidence_duration_ms,
         semantic_duration_ms=semantic_duration_ms,
+        visual_requests=visual_requests,
     )

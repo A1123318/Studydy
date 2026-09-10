@@ -59,7 +59,7 @@ def test_assessment_tokenizer_and_generation_both_disable_thinking():
     ]
 
 
-@pytest.mark.parametrize("count, fits", [(28672, True), (28673, False)])
+@pytest.mark.parametrize("count, fits", [(27648, True), (27649, False)])
 def test_material_packing_and_generation_share_exact_token_budget(count, fits):
     requests = []
     def respond(request):

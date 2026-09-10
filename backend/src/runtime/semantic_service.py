@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from copy import deepcopy
 import json
@@ -10,6 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from pdf_evidence.ocr_page_evidence import canonical_bytes
+from pdf_evidence.visual_context import MAX_VISUAL_PAGES, VisualPage, validate_visual_reference
 
 
 API_KEY_ENV = "VLLM_API_KEY"
@@ -165,19 +167,48 @@ def _reject_constant(_: str) -> None:
     raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
 
 
-def _messages(prompt: str, request: dict[str, Any]) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "user",
-            "content": f"{prompt}\nINPUT:\n{canonical_bytes(request).decode('utf-8')}",
-        }
-    ]
+def _messages(
+    prompt: str, request: dict[str, Any], visual_pages: tuple[VisualPage, ...] = ()
+) -> list[dict[str, Any]]:
+    references = request.get("visual_pages", [])
+    if not isinstance(references, list) or len(references) > MAX_VISUAL_PAGES:
+        raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
+    if len(references) != len(visual_pages):
+        raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
+    text = f"{prompt}\nINPUT:\n{canonical_bytes(request).decode('utf-8')}"
+    if not references:
+        return [{"role": "user", "content": text}]
+    evidence_pages = {
+        row[1] for section in request.get("sections", [])
+        for row in section["evidence"]
+    }
+    seen = set()
+    content = [{"type": "text", "text": text}]
+    for reference, visual in zip(references, visual_pages, strict=True):
+        if (
+            not validate_visual_reference(
+                reference, material_id=request.get("material_id"), evidence_pages=evidence_pages
+            )
+            or reference["page"] in seen
+            or not isinstance(visual, VisualPage)
+            or visual.reference != reference
+            or not visual.matches_render()
+        ):
+            raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
+        seen.add(reference["page"])
+        content.extend([
+            {"type": "text", "text": f"Visual context: {canonical_bytes(reference).decode('utf-8')}"},
+            {"type": "image_url", "image_url": {
+                "url": "data:image/png;base64," + base64.b64encode(visual.png_bytes).decode("ascii")
+            }},
+        ])
+    return [{"role": "user", "content": content}]
 
 
 def _token_count(
     client: httpx.Client,
     service: dict[str, Any],
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     chat_template_kwargs: dict[str, Any] | None = None,
 ) -> int:
     response = client.post(
@@ -209,6 +240,7 @@ def request_semantics(
     task: str,
     request: dict[str, Any],
     response_schema: dict[str, Any],
+    visual_pages: tuple[VisualPage, ...] = (),
 ) -> dict[str, Any]:
     """所有產品語意共用同一 resident service 與同一 transport boundary。"""
 
@@ -228,9 +260,14 @@ def request_semantics(
             or not isinstance(response_schema, dict)
         ):
             raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
-        messages = _messages(prompt, request)
+        if (visual_pages or request.get("visual_pages")) and task != "material_semantics":
+            raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
+        if len(visual_pages) > task_lock.get("max_visual_pages", 0):
+            raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
+        messages = _messages(prompt, request, visual_pages)
         generation = deepcopy(task_lock[prefix + "generation"])
-        if _token_count(client, service, messages, generation.get("chat_template_kwargs")) + max_tokens > service["max_model_len"]:
+        margin = task_lock["context_margin_tokens"] if task == "material_semantics" else 0
+        if _token_count(client, service, messages, generation.get("chat_template_kwargs")) + max_tokens + margin > service["max_model_len"]:
             raise SemanticServiceError("SEMANTIC_INPUT_TOO_LARGE")
         response = client.post(
             f"{service['base_url']}{CHAT_PATH}",
@@ -283,22 +320,28 @@ def request_semantics(
 
 
 def material_request_fits(
-    client: httpx.Client, runtime_lock: dict[str, Any], request: dict[str, Any]
+    client: httpx.Client, runtime_lock: dict[str, Any], request: dict[str, Any],
+    *, visual_pages: tuple[VisualPage, ...] = (),
 ) -> bool:
     """使用 resident tokenizer 與正式推論相同的 prompt 和輸出預算。"""
 
     service = _service(runtime_lock)
     task = runtime_lock["material_semantics"]
+    if len(request.get("visual_pages", [])) > task["max_visual_pages"]:
+        return False
     try:
-        count = _token_count(client, service, _messages(task["prompt"], request), task["generation"]["chat_template_kwargs"])
-        if count + task["max_tokens"] > service["max_model_len"]:
+        count = _token_count(client, service, _messages(task["prompt"], request, visual_pages), task["generation"]["chat_template_kwargs"])
+        if count + task["max_tokens"] + task["context_margin_tokens"] > service["max_model_len"]:
             return False
         # 原始 block 不截斷；多個 block 分批，避免新教材擠爆固定輸出預算。
         if sum(len(section["evidence"]) for section in request["sections"]) == 1:
             return True
         new_count = count
-        if request.get("existing_concepts"):
-            fresh_request = {**request, "existing_concepts": []}
+        if request.get("existing_concepts") or visual_pages:
+            # Fresh Evidence has a textual budget; images still consume the full
+            # request context above. Never count base64 characters as text tokens.
+            fresh_request = {key: value for key, value in request.items() if key not in {"visual_pages", "material_id"}}
+            fresh_request["existing_concepts"] = []
             new_count = _token_count(client, service, _messages(task["prompt"], fresh_request), task["generation"]["chat_template_kwargs"])
     except httpx.TimeoutException as error:
         raise SemanticServiceError("SEMANTIC_SERVICE_TIMEOUT") from error

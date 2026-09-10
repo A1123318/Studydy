@@ -126,3 +126,28 @@ def test_ocr_failure_excludes_only_scan_and_semantics_still_runs(tmp_path, monke
         "reason_code": "CHILD_EXITED",
     }]
     assert {item[1] for section in calls[0]["sections"] for item in section["evidence"]} == {2}
+
+
+def test_failed_ocr_sidecar_does_not_exclude_the_next_scan(tmp_path, monkeypatch):
+    source = tmp_path / "two-scans.pdf"
+    with pymupdf.open() as document:
+        document.new_page(width=400, height=400)
+        document.new_page(width=400, height=400)
+        document.save(source)
+    failed = FailedOcr()
+    class SuccessfulOcr(FailedOcr):
+        def request(self, request, _timeout):
+            return {"schema": "local-ocr-response/v1", "request_id": request["request_id"],
+                    "blocks": [{"type": "text", "text": "A public scanned teaching statement.",
+                                "bbox": [100, 100, 800, 300]}]}
+    starts = []
+    def start(_settings):
+        starts.append(True)
+        return failed if len(starts) == 1 else SuccessfulOcr()
+    monkeypatch.setattr(pipeline, "start_ocr_process", start)
+    calls = []
+    result = pipeline.analyze_material(_request(source), _settings(tmp_path), client=Client(), semantic_call=_semantic(calls))
+    assert len(starts) == 2
+    assert result["metrics"]["ocr_calls"] == 2
+    assert [page["page"] for page in result["excluded_pages"]] == [1]
+    assert {item[1] for section in calls[0]["sections"] for item in section["evidence"]} == {2}
