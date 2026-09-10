@@ -314,26 +314,44 @@ def request_semantics(
         messages = _messages(prompt, request, visual_pages)
         generation = deepcopy(task_lock[prefix + "generation"])
         margin = task_lock["context_margin_tokens"] if task == "material_semantics" else 0
-        if _token_count(client, service, messages, generation.get("chat_template_kwargs")) + max_tokens + margin > service["max_model_len"]:
-            raise SemanticServiceError("SEMANTIC_INPUT_TOO_LARGE")
-        response = client.post(
-            f"{service['base_url']}{CHAT_PATH}",
-            json={
-                **generation,
-                "model": service["model_id"],
-                "messages": messages,
-                "max_tokens": max_tokens,
-                **({"skip_special_tokens": False} if task == "material_semantics" else {}),
-                "response_format": _material_response_format(response_schema) if task == "material_semantics" else {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": task,
-                        "strict": True,
-                        "schema": deepcopy(response_schema),
-                    },
+        body = {
+            **generation,
+            "model": service["model_id"],
+            "messages": messages,
+            "max_tokens": max_tokens,
+            **({"skip_special_tokens": False} if task == "material_semantics" else {}),
+            "response_format": _material_response_format(response_schema) if task == "material_semantics" else {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": task,
+                    "strict": True,
+                    "schema": deepcopy(response_schema),
                 },
             },
-        )
+        }
+    except SemanticServiceError:
+        raise
+    except httpx.TimeoutException as error:
+        raise SemanticServiceError("SEMANTIC_SERVICE_TIMEOUT") from error
+    except (httpx.HTTPError, UnicodeError, ValueError) as error:
+        raise SemanticServiceError("SEMANTIC_SERVICE_UNAVAILABLE") from error
+    return _execute_semantic_request(client, service, task=task, body=body, margin=margin)
+
+
+def _execute_semantic_request(
+    client: httpx.Client,
+    service: dict[str, Any],
+    *,
+    task: str,
+    body: dict[str, Any],
+    margin: int,
+) -> dict[str, Any]:
+    """Execute the assembled production request without changing its messages or schema."""
+    try:
+        count = _token_count(client, service, body["messages"], body.get("chat_template_kwargs"))
+        if count + body["max_tokens"] + margin > service["max_model_len"]:
+            raise SemanticServiceError("SEMANTIC_INPUT_TOO_LARGE")
+        response = client.post(f"{service['base_url']}{CHAT_PATH}", json=body)
         response.raise_for_status()
     except SemanticServiceError:
         raise
