@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v8"
+PROCESSING_POLICY = "native-first-page-evidence/v9"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -433,11 +433,11 @@ _VISUAL_CUE = re.compile(
 )
 
 
-def needs_visual_context(
+def visual_context_area(
     page: dict[str, Any], evidence_blocks: list[dict[str, Any]] | None = None,
     *, ocr_visual_regions: list[list[float]] | None = None,
-) -> bool:
-    """Select spatial content, independently of whether its text needed OCR.
+) -> float:
+    """Measure graphical teaching area for bounded page selection.
 
     Raster text alone is not a visual-semantic trigger. Use explicit spatial
     cues alongside a content image, or multiple native diagram/table strokes
@@ -445,11 +445,12 @@ def needs_visual_context(
     """
     blocks = _native_text_blocks(page)
     text = "\n".join(block["text"] for block in (evidence_blocks if evidence_blocks is not None else blocks))
-    if _content_image_regions(page) and _VISUAL_CUE.search(text):
-        return True
     boundary = pymupdf.Rect(page["geometry"]["unrotated_points"])
+    image_regions = [pymupdf.Rect(box) for box in _content_image_regions(page)]
+    area = sum(region.get_area() for region in image_regions) if _VISUAL_CUE.search(text) else 0.0
     # Existing OCR layout output can identify an unrecovered figure/table even
     # when it supplies no text for that region. It does not become text Evidence.
+    ocr_area = 0.0
     for bbox in ocr_visual_regions or []:
         region = pymupdf.Rect(bbox)
         if (
@@ -457,8 +458,10 @@ def needs_visual_context(
             and region.y1 > boundary.y0 + boundary.height * 0.08
             and region.y0 < boundary.y0 + boundary.height * 0.92
         ):
-            return True
+            ocr_area += region.get_area()
+    area = max(area, ocr_area)
     strokes = 0
+    native_bounds = None
     for drawing in page.get("native_evidence", {}).get("drawings", []):
         rect = drawing.get("rect")
         if not isinstance(rect, list) or len(rect) != 4:
@@ -479,9 +482,23 @@ def needs_visual_context(
                 (region & pymupdf.Rect(block["bbox"])).get_area() > 0 for block in blocks
             ):
                 continue
+            # A raster image's border is not a separate native diagram.
+            if any(
+                (region & image).get_area() >= max(region.get_area(), image.get_area()) * 0.9
+                for image in image_regions
+            ):
+                continue
         if any(_distance(rect, block["bbox"]) <= CAPTION_DISTANCE_POINTS for block in blocks):
             strokes += len(items) if min(region.width, region.height) >= 6 else 1
-    return strokes >= 3
+            extent = pymupdf.Rect(region.x0 - 0.5, region.y0 - 0.5, region.x1 + 0.5, region.y1 + 0.5) & boundary
+            native_bounds = extent if native_bounds is None else native_bounds | extent
+    if strokes >= 3 and native_bounds is not None:
+        area = max(area, native_bounds.get_area())
+    return min(1.0, area / boundary.get_area())
+
+
+def needs_visual_context(page: dict[str, Any]) -> bool:
+    return visual_context_area(page) > 0
 
 
 def page_needs(page: dict[str, Any]) -> dict[str, bool]:
@@ -725,6 +742,7 @@ def _build_page_evidence(
         reasons.append("IMAGE_TEXT_NOT_RECOVERED")
     if has_rejected_block or has_rejected_image:
         reasons.append("OCR_OUTPUT_INVALID")
+    visual_area = visual_context_area(page, evidence_blocks, ocr_visual_regions=ocr_visual_regions)
     artifact = {
         "schema": PAGE_SCHEMA,
         "material_id": page["material_id"],
@@ -736,7 +754,8 @@ def _build_page_evidence(
         "native_evidence_ref": page["native_evidence_ref"],
         "route": route,
         "needs_ocr": route == "OCR_needed",
-        "needs_visual_context": needs_visual_context(page, evidence_blocks, ocr_visual_regions=ocr_visual_regions),
+        "needs_visual_context": visual_area > 0,
+        "visual_context_area": visual_area,
         "render": page["render"],
         "evidence_blocks": evidence_blocks,
         "images": image_artifacts,

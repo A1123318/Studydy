@@ -14,9 +14,9 @@ from runtime.semantic_service import SemanticServiceError, material_request_fits
 from test_material_pipeline_v1 import _request, _semantic, _settings
 
 
-def _diagram_pdf(path, count=1):
+def _diagram_pdf(path, count=1, *, large_last=False):
     with pymupdf.open() as document:
-        for _ in range(count):
+        for index in range(count):
             page = document.new_page(width=400, height=400)
             page.insert_text((30, 45), "Components of a controller", fontsize=18)
             page.insert_text((45, 140), "Input")
@@ -24,6 +24,8 @@ def _diagram_pdf(path, count=1):
             page.draw_rect((30, 100, 140, 160))
             page.draw_rect((220, 100, 350, 160))
             page.draw_line((140, 130), (220, 130))
+            if large_last and index == count - 1:
+                page.draw_rect((20, 70, 380, 250))
         document.save(path)
 
 
@@ -207,9 +209,9 @@ def test_low_candidate_reserves_output_and_margin_within_32k(tmp_path, count, fi
     assert calls.count("/v1/chat/completions") == int(fits)
 
 
-def test_pipeline_splits_visual_bundles_and_persists_only_bound_provenance(tmp_path, monkeypatch):
+def test_pipeline_keeps_text_context_and_selects_bounded_visual_pages(tmp_path, monkeypatch):
     path = tmp_path / "four-diagrams.pdf"
-    _diagram_pdf(path, 4)
+    _diagram_pdf(path, 4, large_last=True)
     monkeypatch.setattr(pipeline, "start_ocr_process", lambda _: pytest.fail("native labels must not load OCR"))
     observed = []
     locations = []
@@ -222,16 +224,26 @@ def test_pipeline_splits_visual_bundles_and_persists_only_bound_provenance(tmp_p
     def call(client, **arguments):
         assert 1 <= len(arguments["visual_pages"]) <= 3
         assert all(visual.matches_render() for visual in arguments["visual_pages"])
-        return semantic(client, **arguments)
+        response = semantic(client, **arguments)
+        rows = [row for section in arguments["request"]["sections"] for row in section["evidence"]]
+        # Both sides of a cross-page unit remain available even when only one
+        # of their page images is selected.
+        response["concepts"][0]["c"] = [{"m": None, "s": [
+            next(row[0] for row in rows if row[1] == page and row[2] != "heading")
+            for page in (3, 4)
+        ]}]
+        return response
     def respond(message):
         assert message.url.path == "/tokenize"
         return httpx.Response(200, json={"count": 100, "max_model_len": 32768})
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         result = pipeline.analyze_material(_request(path), _settings(tmp_path), client=client, semantic_call=call)
     assert result["metrics"]["ocr_calls"] == 0
-    assert result["metrics"]["semantic_calls"] == 2
-    assert [len(request["visual_pages"]) for request in observed] == [3, 1]
-    assert {reference["page"] for request in observed for reference in request["visual_pages"]} == {1, 2, 3, 4}
+    assert result["metrics"]["semantic_calls"] == 1
+    assert [len(request["visual_pages"]) for request in observed] == [3]
+    assert {reference["page"] for reference in observed[0]["visual_pages"]} == {1, 2, 4}
+    assert {row[1] for section in observed[0]["sections"] for row in section["evidence"]} == {1, 2, 3, 4}
+    assert result["concepts"][0]["source_pages"] == [3, 4]
     assert validate_knowledge_structure(result)
     assert "data:image" not in json.dumps(result) and "png_bytes" not in json.dumps(result)
     assert all(not location.exists() for location in locations)

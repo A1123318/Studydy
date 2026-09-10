@@ -247,6 +247,7 @@ def build_document_context(
             }
             for page in ordered if page.get("needs_visual_context", False)
         ],
+        "visual_page_areas": {page["page_number"]: page.get("visual_context_area", 0.0) for page in ordered},
     }
 
 
@@ -392,6 +393,13 @@ def semantic_request(
     }
     pages = {item["page"] for item in bundle["evidence"]}
     references = [reference for reference in context.get("visual_pages", []) if reference["page"] in pages]
+    # Keep textual teaching units together. Image availability must not itself
+    # split a program/derivation across calls; select within the current bundle.
+    areas = context.get("visual_page_areas", {})
+    references = sorted(references, key=lambda ref: (-areas.get(ref["page"], 0.0), ref["page"]))[
+        :context.get("max_visual_pages", MAX_VISUAL_PAGES)
+    ]
+    references.sort(key=lambda ref: ref["page"])
     if references:
         request["material_id"] = context["material_id"]
         request["visual_pages"] = deepcopy(references)
