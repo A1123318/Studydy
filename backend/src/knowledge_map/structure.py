@@ -323,13 +323,13 @@ def semantic_response_schema(evidence_handles: list[int]) -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "required": [
-            "s", "t", "k", "r", "e", "c",
+            "k", "r", "s", "t", "e", "c",
         ],
         "properties": {
-            "s": {"type": "string"},
-            "t": {"type": "string"},
             "k": {"type": "string", "enum": sorted(RELATION_TYPES)},
             "r": {"type": "string", "minLength": 1},
+            "s": {"type": "string"},
+            "t": {"type": "string"},
             "e": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
             "c": {"type": "number", "minimum": 0, "maximum": 1},
         },

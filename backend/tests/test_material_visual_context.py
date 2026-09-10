@@ -241,3 +241,26 @@ def test_pipeline_splits_visual_bundles_and_persists_only_bound_provenance(tmp_p
     from knowledge_map.structure import _revision
     altered["revision"] = _revision(altered)
     assert not validate_knowledge_structure(altered)
+
+
+def test_truncated_semantics_does_not_leave_private_page_renders(tmp_path, monkeypatch):
+    path = tmp_path / "public-diagram.pdf"
+    _diagram_pdf(path)
+    locations = []
+    original = pipeline._page_evidence
+    def capture(*args):
+        locations.append(args[-1])
+        return original(*args)
+    monkeypatch.setattr(pipeline, "_page_evidence", capture)
+    attempts = []
+    def truncated(_client, **arguments):
+        attempts.append(True)
+        assert arguments["visual_pages"][0].matches_render()
+        raise SemanticServiceError("SEMANTIC_OUTPUT_TRUNCATED")
+    def respond(_request):
+        return httpx.Response(200, json={"count": 100, "max_model_len": 32768})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        with pytest.raises(pipeline.MaterialAnalysisError, match="SEMANTIC_OUTPUT_TRUNCATED"):
+            pipeline.analyze_material(_request(path), _settings(tmp_path), client=client, semantic_call=truncated)
+    assert len(attempts) == 2
+    assert all(not location.exists() for location in locations)
