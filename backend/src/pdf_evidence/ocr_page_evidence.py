@@ -12,7 +12,7 @@ import pymupdf
 
 PAGE_SCHEMA = "page-evidence/v4"
 NATIVE_SCHEMA = "page-native/v3"
-PROCESSING_POLICY = "native-first-page-evidence/v9"
+PROCESSING_POLICY = "native-first-page-evidence/v10"
 NORMALIZER_POLICY = "ocr-text-nfc-line-preserving/v1"
 RENDER_DPI = 200
 PDF_POINTS_PER_INCH = 72
@@ -427,7 +427,7 @@ def _uncovered_image_regions(page: dict[str, Any]) -> list[list[float]]:
 
 
 _VISUAL_CUE = re.compile(
-    r"\b(?:diagram|figure|flowchart|arrows?|columns?|rows?|layout|containment)\b"
+    r"\b(?:diagram|figure|flowchart|arrows?|layout|containment)\b"
     r"|示意圖|示意图|流程圖|流程图|結構圖|结构图|樹狀圖|树状图|箭頭|箭头|如圖|如图|下圖|下图|圖解|图解",
     re.IGNORECASE,
 )

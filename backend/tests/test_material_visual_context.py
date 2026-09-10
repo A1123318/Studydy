@@ -100,6 +100,7 @@ def test_unrecovered_ocr_figure_selects_visual_context_without_becoming_text(tmp
     ("logo", (False, False)),
     ("margin_art", (False, False)),
     ("raster_text", (True, False)),
+    ("raster_code_variables", (True, False)),
     ("raster_diagram", (True, True)),
     ("scan", (True, False)),
 ])
@@ -109,6 +110,8 @@ def test_ocr_and_visual_questions_are_independent(tmp_path, kind, expected):
         pdf_page = document.new_page(width=400, height=400)
         if kind != "scan":
             text = "The diagram shows the connections." if kind == "raster_diagram" else "A public teaching statement."
+            if kind == "raster_code_variables":
+                text = "int row = 0; int column = 1;"
             pdf_page.insert_text((30, 55), text)
         document.save(path)
     with pymupdf.open(path) as document:
