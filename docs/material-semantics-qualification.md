@@ -1,5 +1,7 @@
 # Material semantic input qualification
 
+**Follow-up source coverage audit:** the 48-core-relationship reference yields 10 recovered, 38 missing, recall **20.8%** and F1 **33.3%**. The prior 83.3% figure is precision only and does not establish full-graph completeness or overall qualification. See [the source coverage audit](material-semantics-source-coverage-review.md).
+
 Status: **qualification resumed under explicit user instruction**. The original successful fixed-pair request has now been reproduced through the production HTTP execution function with an identical complete final answer. The staged full-material candidate completed and improved reviewed Relation precision, with mixed Concept coverage; historical failures remain reported below. See [the protocol audit and reproduction](material-semantics-protocol-audit.md).
 
 ## Scope and reproducibility
