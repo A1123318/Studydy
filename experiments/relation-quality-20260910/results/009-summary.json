@@ -1,0 +1,37 @@
+{
+  "calls": 2,
+  "text": {
+    "valid_graph": false,
+    "failure": "Output exhausted12288 tokens; truncated JSON and one unescaped NUL. Semantic precision undefined.",
+    "elapsed_seconds": 925.847,
+    "prompt_tokens": 14249,
+    "completion_tokens": 12288
+  },
+  "image_only": {
+    "valid_graph": true,
+    "concepts": 29,
+    "claims": 83,
+    "relations": 20,
+    "source_supported_including_endpoint_context": 13,
+    "fully_supported_by_relation_own_citations": 11,
+    "unsupported": 5,
+    "needs_review": 2,
+    "reference_positive_direct_alignment": {
+      "matched": 4,
+      "total": 33,
+      "endpoint_granularity_or_missing_instance": 26,
+      "missing_edge": 2,
+      "alternative_endpoint_needs_review": 1
+    },
+    "confirmed_new_claim_defects_at_least": 6,
+    "elapsed_seconds": 660.688,
+    "prompt_tokens": 93343,
+    "completion_tokens": 7168
+  },
+  "limitations": [
+    "One output per modality, not a stability estimate",
+    "Source review performed by the assistant, not independently certified gold",
+    "Reference coverage is not exhaustive graph recall",
+    "Claims were not all independently verified; no claim accuracy estimate"
+  ]
+}

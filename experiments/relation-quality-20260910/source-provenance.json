@@ -1,0 +1,126 @@
+[
+  {
+    "file": "source_snapshots/20260909-008-text-image-ab/prepare.py",
+    "original_sha256": "53cd4884868eef74a98527ee4d7d0ad17f5be4f94fd8e1927682a8437d4686d8",
+    "archived_sha256": "c71b6f1e87f9eb7465f898e400bc9b17a98360f9da9d2a6ddcc86073ee30c67c",
+    "edits": [
+      "Private source filename replaced with RELATION_TEST_SOURCE_PDF environment lookup."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-008-text-image-ab/run.py",
+    "original_sha256": "15190293c9926d5b3820beb6c16d5e38c7a5d6f4f2e5c033cba019c4f43f277e",
+    "archived_sha256": "15190293c9926d5b3820beb6c16d5e38c7a5d6f4f2e5c033cba019c4f43f277e",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-008-text-image-ab/score.py",
+    "original_sha256": "36c895d40e4e08a3c3287205691de10dce15e5a9788088ec7a78cb4a33469280",
+    "archived_sha256": "dfa1c621d192e4875bb22e34b550554d1f7ff96e3eb9943b6aa755e83f573d68",
+    "edits": [
+      "Private reference filename replaced with a neutral filename."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-009-image-only-graph/preflight.py",
+    "original_sha256": "286d80f0bdee70b54a3a712a49bbd604a20503679769ec5dfeb80052a1e105f1",
+    "archived_sha256": "286d80f0bdee70b54a3a712a49bbd604a20503679769ec5dfeb80052a1e105f1",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-009-image-only-graph/prepare.py",
+    "original_sha256": "a85e561be0af5f64f39a8376736c10be72aed085d7ee561bf97380c94f4c0c90",
+    "archived_sha256": "d222b920f941ebd770127f643458f91af0bacc07dd0a9761c7148f15a3ab01ff",
+    "edits": [
+      "Private source filename replaced with RELATION_TEST_SOURCE_PDF environment lookup."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-009-image-only-graph/render.py",
+    "original_sha256": "461dd009b5c86e3a829fe0df5d8828a81480429c7557a1d87943b5b3f5019b76",
+    "archived_sha256": "461dd009b5c86e3a829fe0df5d8828a81480429c7557a1d87943b5b3f5019b76",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-009-image-only-graph/review_input.py",
+    "original_sha256": "7434832de8a8e1c074f4d3f9e7a3a9464baf7bb7a41eeb8e7faddb6a1b175e4a",
+    "archived_sha256": "6c7f6b6c2dde148f37c16ec89919d2a89c7890081dd88d393f75875c9247e390",
+    "edits": [
+      "Remote resource identifier replaced with a neutral directory name."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-009-image-only-graph/run_whole.py",
+    "original_sha256": "d247cd164a76a0306a0811e70a4a0b46ccea89a3f7f22a58271a67a96fe0b611",
+    "archived_sha256": "d247cd164a76a0306a0811e70a4a0b46ccea89a3f7f22a58271a67a96fe0b611",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-010-factor-tests/prepare.py",
+    "original_sha256": "5b58483e1616d9773bb69f012d1f8de35492dd15a872cccb493415032c63561d",
+    "archived_sha256": "5b58483e1616d9773bb69f012d1f8de35492dd15a872cccb493415032c63561d",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-010-factor-tests/run.py",
+    "original_sha256": "cc89cfed5f9ffb57a23e62d362c9867b530346f1555ffd82616b9c393479dec7",
+    "archived_sha256": "cc89cfed5f9ffb57a23e62d362c9867b530346f1555ffd82616b9c393479dec7",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-010-factor-tests/score.py",
+    "original_sha256": "a078656a0bb0872bba0adbc3698622343c9e67ea554c33d0430af5b7fff9e22d",
+    "archived_sha256": "95ca3f90d5bd59114da06193b8b4db84a18a88cb002e6518540ed3767bb75d86",
+    "edits": [
+      "Private reference filename replaced with a neutral filename."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-011-free-reasoning/prepare.py",
+    "original_sha256": "a008f3eb732a87d3dabbd8ba24059567a40709fb653ed0ae7d641e374f0721dd",
+    "archived_sha256": "a008f3eb732a87d3dabbd8ba24059567a40709fb653ed0ae7d641e374f0721dd",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-011-free-reasoning/run.py",
+    "original_sha256": "49a1141df120f481d75a3de492bd477e8186bb15806450628285f6e1bd3931a4",
+    "archived_sha256": "49a1141df120f481d75a3de492bd477e8186bb15806450628285f6e1bd3931a4",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-011-free-reasoning/score.py",
+    "original_sha256": "5df3e10d54226714fd675ad0c7f57e6657a09db29cc25a6700ac6d39bad8e74d",
+    "archived_sha256": "94637d32c40953946a38882a77f0ae4f3c20d9d02c974b29d7dc1d6ed89edf80",
+    "edits": [
+      "Private reference filename replaced with a neutral filename."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-012-reasoning-boundary/prepare.py",
+    "original_sha256": "5e3bdf0ba0110a15438f7e45ef96e945f5403fb4d0956b6c80a88d6734ccd204",
+    "archived_sha256": "5e3bdf0ba0110a15438f7e45ef96e945f5403fb4d0956b6c80a88d6734ccd204",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-012-reasoning-boundary/run.py",
+    "original_sha256": "4993406e18d897707d247013ef4b8329a145bff9ebd47ac4cfd06d118dbc9075",
+    "archived_sha256": "4993406e18d897707d247013ef4b8329a145bff9ebd47ac4cfd06d118dbc9075",
+    "edits": []
+  },
+  {
+    "file": "source_snapshots/20260909-012-reasoning-boundary/score-original-two-rounds.py",
+    "original_sha256": "5df3e10d54226714fd675ad0c7f57e6657a09db29cc25a6700ac6d39bad8e74d",
+    "archived_sha256": "94637d32c40953946a38882a77f0ae4f3c20d9d02c974b29d7dc1d6ed89edf80",
+    "edits": [
+      "Private reference filename replaced with a neutral filename."
+    ]
+  },
+  {
+    "file": "source_snapshots/20260909-012-reasoning-boundary/score.py",
+    "original_sha256": "5c3e80c3d2a0867db751c885cbdda31c29cbe8ff6e2853f1dbfc9ac397a28c6f",
+    "archived_sha256": "5154796050ac70e23d6b2809c65e1185e9d7100124dfb90b5addcc0cacd5378b",
+    "edits": [
+      "Private reference filename replaced with a neutral filename."
+    ]
+  }
+]

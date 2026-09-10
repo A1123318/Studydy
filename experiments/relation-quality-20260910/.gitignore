@@ -1,0 +1,24 @@
+# 私人重跑資料不屬於遠端研究封存。
+.env
+.env.*
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tar
+*.tar.gz
+*.zip
+*.private.json
+__pycache__/
+source_snapshots/**/outputs/
+source_snapshots/**/graph-outputs/
+source_snapshots/**/requests/
+source_snapshots/**/package/
+source_snapshots/**/images/
+source_snapshots/**/reference/
+source_snapshots/**/manifest.json
+source_snapshots/**/summary.json
+source_snapshots/**/config.json
+source_snapshots/**/prepared-inputs.json
+source_snapshots/**/endpoint-catalog.json

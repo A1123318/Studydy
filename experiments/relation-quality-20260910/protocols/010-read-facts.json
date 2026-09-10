@@ -1,0 +1,66 @@
+{
+  "note": "Instruction and output constraint only. Private input sections, pairs and images omitted.",
+  "repeats": 1,
+  "settings": {
+    "model": "Qwen/Qwen3.8-27B-FP8",
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 20,
+    "min_p": 0,
+    "presence_penalty": 0,
+    "repetition_penalty": 1,
+    "chat_template_kwargs": {
+      "enable_thinking": true,
+      "reasoning_effort": "xhigh"
+    },
+    "max_tokens": 4096,
+    "seed": 27001
+  },
+  "instruction": "Read the three supplied PDF page images and record only facts directly visible on each page. Preserve names, array dimensions, table rows/columns, numbers, code literals and arrow endpoints/order. Use concise Traditional Chinese statements. Describe visible composition or process steps without inventing hidden facts. Do not create a knowledge graph, classify prerequisite/application/example relations, or infer learning order. If something cannot be read, state that it is unreadable instead of guessing. Return {pages:[{page,facts:[...]}]} JSON, one entry for each supplied page. No expected answers are supplied.",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "visible_facts",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pages"
+        ],
+        "properties": {
+          "pages": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "page",
+                "facts"
+              ],
+              "properties": {
+                "page": {
+                  "type": "integer",
+                  "enum": [
+                    16,
+                    19,
+                    29
+                  ]
+                },
+                "facts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

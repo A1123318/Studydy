@@ -1,0 +1,323 @@
+{
+  "summaries": [
+    {
+      "condition": "text",
+      "repeat": 1,
+      "calls": 4,
+      "complete": true,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "total": 33,
+          "answered": 33,
+          "exact": 28,
+          "supported_type_match": 30,
+          "type_match_wrong_direction": 2,
+          "false_supported": null
+        },
+        "N": {
+          "total": 9,
+          "answered": 9,
+          "exact": 8,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 10,
+          "answered": 10,
+          "exact": 2,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 8,
+          "answered": 8,
+          "exact": 0,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 36,
+      "main_total": 42,
+      "main_percent": 85.71,
+      "elapsed_total_seconds": 421.314,
+      "elapsed_median_seconds": 91.438,
+      "prompt_tokens": 58308,
+      "completion_tokens": 5250,
+      "unavailable_image_citations": 0
+    },
+    {
+      "condition": "text",
+      "repeat": 2,
+      "calls": 4,
+      "complete": true,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "total": 33,
+          "answered": 33,
+          "exact": 16,
+          "supported_type_match": 27,
+          "type_match_wrong_direction": 11,
+          "false_supported": null
+        },
+        "N": {
+          "total": 9,
+          "answered": 9,
+          "exact": 7,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 10,
+          "answered": 10,
+          "exact": 2,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 8,
+          "answered": 8,
+          "exact": 1,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 23,
+      "main_total": 42,
+      "main_percent": 54.76,
+      "elapsed_total_seconds": 328.782,
+      "elapsed_median_seconds": 81.942,
+      "prompt_tokens": 58308,
+      "completion_tokens": 4044,
+      "unavailable_image_citations": 0
+    },
+    {
+      "condition": "text",
+      "repeat": "pooled",
+      "calls": 8,
+      "complete": true,
+      "statuses": {
+        "completed": 8
+      },
+      "groups": {
+        "P": {
+          "total": 66,
+          "answered": 66,
+          "exact": 44,
+          "supported_type_match": 57,
+          "type_match_wrong_direction": 13,
+          "false_supported": null
+        },
+        "N": {
+          "total": 18,
+          "answered": 18,
+          "exact": 15,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 20,
+          "answered": 20,
+          "exact": 4,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 16,
+          "answered": 16,
+          "exact": 1,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 59,
+      "main_total": 84,
+      "main_percent": 70.24,
+      "elapsed_total_seconds": 750.096,
+      "elapsed_median_seconds": 84.745,
+      "prompt_tokens": 116616,
+      "completion_tokens": 9294,
+      "unavailable_image_citations": 0
+    },
+    {
+      "condition": "text_image",
+      "repeat": 1,
+      "calls": 4,
+      "complete": true,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "total": 33,
+          "answered": 33,
+          "exact": 18,
+          "supported_type_match": 27,
+          "type_match_wrong_direction": 9,
+          "false_supported": null
+        },
+        "N": {
+          "total": 9,
+          "answered": 9,
+          "exact": 9,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 10,
+          "answered": 10,
+          "exact": 1,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 8,
+          "answered": 8,
+          "exact": 0,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 27,
+      "main_total": 42,
+      "main_percent": 64.29,
+      "elapsed_total_seconds": 452.763,
+      "elapsed_median_seconds": 112.742,
+      "prompt_tokens": 83016,
+      "completion_tokens": 5392,
+      "unavailable_image_citations": 0
+    },
+    {
+      "condition": "text_image",
+      "repeat": 2,
+      "calls": 4,
+      "complete": true,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "total": 33,
+          "answered": 33,
+          "exact": 25,
+          "supported_type_match": 26,
+          "type_match_wrong_direction": 1,
+          "false_supported": null
+        },
+        "N": {
+          "total": 9,
+          "answered": 9,
+          "exact": 9,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 10,
+          "answered": 10,
+          "exact": 0,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 8,
+          "answered": 8,
+          "exact": 0,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 34,
+      "main_total": 42,
+      "main_percent": 80.95,
+      "elapsed_total_seconds": 358.74,
+      "elapsed_median_seconds": 91.75,
+      "prompt_tokens": 83016,
+      "completion_tokens": 4104,
+      "unavailable_image_citations": 0
+    },
+    {
+      "condition": "text_image",
+      "repeat": "pooled",
+      "calls": 8,
+      "complete": true,
+      "statuses": {
+        "completed": 8
+      },
+      "groups": {
+        "P": {
+          "total": 66,
+          "answered": 66,
+          "exact": 43,
+          "supported_type_match": 53,
+          "type_match_wrong_direction": 10,
+          "false_supported": null
+        },
+        "N": {
+          "total": 18,
+          "answered": 18,
+          "exact": 18,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "total": 20,
+          "answered": 20,
+          "exact": 1,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "total": 16,
+          "answered": 16,
+          "exact": 0,
+          "supported_type_match": null,
+          "type_match_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "main_exact": 61,
+      "main_total": 84,
+      "main_percent": 72.62,
+      "elapsed_total_seconds": 811.503,
+      "elapsed_median_seconds": 102.3,
+      "prompt_tokens": 166032,
+      "completion_tokens": 9496,
+      "unavailable_image_citations": 0
+    }
+  ],
+  "paired_counts": {
+    "improved": 17,
+    "regressed": 15,
+    "both_correct": 44,
+    "both_wrong": 8
+  },
+  "limitations": [
+    "Selected known visual failures; not random page sample",
+    "42 P/N cases + 10 insufficient + 8 review; repeated cases are not new independent examples",
+    "Pair classification, not production free extraction or whole-PDF multimodal quality",
+    "Candidate reference answers, not independently signed gold",
+    "Two repeats quantify limited run variance, not statistical generalization"
+  ]
+}

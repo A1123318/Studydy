@@ -1,0 +1,51 @@
+{
+  "date": "2026-09-10",
+  "product_base_commit": "4e44a010e8947b1211312ba3cd0d1f52c9a7de5b",
+  "formal_calls": 87,
+  "formal_elapsed_seconds": 15435.189,
+  "reference_groups": {
+    "P": 33,
+    "N": 9,
+    "I": 10,
+    "R": 8
+  },
+  "environment": {
+    "model": "Qwen/Qwen3.8-27B-FP8",
+    "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+    "gpu": "A40",
+    "vllm": "0.28.0",
+    "transformers": "5.15.1",
+    "later_context_limit": 131072,
+    "later_gpu_memory_utilization": 0.9,
+    "enforce_eager": true
+  },
+  "scope": {
+    "008": {
+      "calls": 16,
+      "repeats": 2,
+      "output_budget": 4096,
+      "context_limit": 32768
+    },
+    "009": {
+      "calls": 2,
+      "repeats": 1,
+      "output_budget": 12288
+    },
+    "010": {
+      "calls": 57,
+      "repeats": 2,
+      "output_budget": 4096,
+      "fact_reads": 1
+    },
+    "011": {
+      "status": "invalid protocol pilot, excluded from formal scores"
+    },
+    "012": {
+      "calls": 12,
+      "repeats": 1,
+      "output_budget": 8192,
+      "second_round_calls": 0
+    }
+  },
+  "private_data": "PDFs, filenames, OCR, image bytes, endpoint labels, gold annotations, raw requests/responses, per-case reasons and reasoning contents are not included."
+}

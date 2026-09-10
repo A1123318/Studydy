@@ -1,0 +1,212 @@
+{
+  "summaries": [
+    {
+      "mode": "xhigh",
+      "repeat": 1,
+      "complete": true,
+      "calls": 4,
+      "planned_calls": 4,
+      "completed_calls": 0,
+      "completion_percent": 0.0,
+      "statuses": {
+        "invalid": 4
+      },
+      "groups": {
+        "P": {
+          "count": 33,
+          "answered": 0,
+          "correct": 0,
+          "type_correct": 0,
+          "type_correct_wrong_direction": 0,
+          "false_supported": null
+        },
+        "N": {
+          "count": 9,
+          "answered": 0,
+          "correct": 0,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "count": 10,
+          "answered": 0,
+          "correct": 0,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "count": 8,
+          "answered": 0,
+          "correct": 0,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "PN": {
+        "correct": 0,
+        "total": 42,
+        "percent": 0.0,
+        "answered": 0,
+        "answered_only_percent": null
+      },
+      "PNI": {
+        "correct": 0,
+        "total": 52,
+        "percent": 0.0,
+        "answered": 0,
+        "answered_only_percent": null
+      },
+      "elapsed_total_seconds": 2632.866,
+      "elapsed_median_seconds": 658.821,
+      "prompt_tokens": 84524,
+      "completion_tokens": 32768,
+      "prefix_non_marker_characters_median": 26393.0,
+      "think_end_marker_before_final_calls": 1,
+      "unavailable_citation_decisions": 0
+    },
+    {
+      "mode": "low",
+      "repeat": 1,
+      "complete": true,
+      "calls": 4,
+      "planned_calls": 4,
+      "completed_calls": 4,
+      "completion_percent": 100.0,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "count": 33,
+          "answered": 33,
+          "correct": 29,
+          "type_correct": 30,
+          "type_correct_wrong_direction": 1,
+          "false_supported": null
+        },
+        "N": {
+          "count": 9,
+          "answered": 9,
+          "correct": 9,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "count": 10,
+          "answered": 10,
+          "correct": 1,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "count": 8,
+          "answered": 8,
+          "correct": 2,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "PN": {
+        "correct": 38,
+        "total": 42,
+        "percent": 90.48,
+        "answered": 42,
+        "answered_only_percent": 90.48
+      },
+      "PNI": {
+        "correct": 39,
+        "total": 52,
+        "percent": 75.0,
+        "answered": 52,
+        "answered_only_percent": 75.0
+      },
+      "elapsed_total_seconds": 1883.154,
+      "elapsed_median_seconds": 448.674,
+      "prompt_tokens": 84476,
+      "completion_tokens": 23018,
+      "prefix_non_marker_characters_median": 14734.5,
+      "think_end_marker_before_final_calls": 4,
+      "unavailable_citation_decisions": 0
+    },
+    {
+      "mode": "off",
+      "repeat": 1,
+      "complete": true,
+      "calls": 4,
+      "planned_calls": 4,
+      "completed_calls": 4,
+      "completion_percent": 100.0,
+      "statuses": {
+        "completed": 4
+      },
+      "groups": {
+        "P": {
+          "count": 33,
+          "answered": 33,
+          "correct": 19,
+          "type_correct": 23,
+          "type_correct_wrong_direction": 4,
+          "false_supported": null
+        },
+        "N": {
+          "count": 9,
+          "answered": 9,
+          "correct": 9,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "I": {
+          "count": 10,
+          "answered": 10,
+          "correct": 1,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": 0
+        },
+        "R": {
+          "count": 8,
+          "answered": 8,
+          "correct": 0,
+          "type_correct": null,
+          "type_correct_wrong_direction": null,
+          "false_supported": null
+        }
+      },
+      "PN": {
+        "correct": 28,
+        "total": 42,
+        "percent": 66.67,
+        "answered": 42,
+        "answered_only_percent": 66.67
+      },
+      "PNI": {
+        "correct": 29,
+        "total": 52,
+        "percent": 55.77,
+        "answered": 52,
+        "answered_only_percent": 55.77
+      },
+      "elapsed_total_seconds": 406.215,
+      "elapsed_median_seconds": 102.128,
+      "prompt_tokens": 84364,
+      "completion_tokens": 4261,
+      "prefix_non_marker_characters_median": 0.0,
+      "think_end_marker_before_final_calls": 0,
+      "unavailable_citation_decisions": 1
+    }
+  ],
+  "limits": [
+    "Only one round of60 cases per mode by user request; no evidence of stable advantage across repeats",
+    "Prefix characters are not exact reasoning-token counts",
+    "This8192-token structural-tag protocol is independent from run0104096-token classic JSON grammar",
+    "Only final answer regions were retained; no reasoning text is stored",
+    "These are supplied-endpoint classification scores, not end-to-end graph precision"
+  ]
+}

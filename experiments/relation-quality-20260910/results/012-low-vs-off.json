@@ -1,0 +1,9 @@
+{
+  "comparison": "low vs off",
+  "counts": {
+    "both_correct": 27,
+    "regressed": 1,
+    "improved": 11,
+    "both_wrong": 3
+  }
+}
