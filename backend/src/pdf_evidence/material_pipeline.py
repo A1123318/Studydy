@@ -342,17 +342,30 @@ def analyze_material(
                 for reference in request_document.get("visual_pages", [])
             )
 
-        def fits(request_document: dict[str, Any]) -> bool:
-            if len(request_document.get("visual_pages", [])) > lock["material_semantics"]["max_visual_pages"]:
-                return False
-            return material_request_fits(http, lock, request_document, visual_pages=visuals(request_document))
+        def prepare_request(request_document: dict[str, Any]) -> dict[str, Any] | None:
+            references = request_document.get("visual_pages", [])
+            if not references:
+                return request_document if material_request_fits(http, lock, request_document) else None
+            areas = context["visual_page_areas"]
+            ranked = sorted(references, key=lambda ref: (-areas.get(ref["page"], 0.0), ref["page"]))
+            # Prefer the complete text context over additional images. Keep at
+            # least one relevant image when visual context is needed, and use
+            # the resident tokenizer to determine which bounded set fits.
+            for count in range(len(ranked), 0, -1):
+                selected = sorted(ranked[:count], key=lambda ref: ref["page"])
+                candidate = {**request_document, "visual_pages": selected}
+                if material_request_fits(http, lock, candidate, visual_pages=visuals(candidate)):
+                    return candidate
+            return None
 
         try:
             for bundle in build_semantic_bundles(
                 context, state=state,
-                fits=fits,
+                fits=lambda request: prepare_request(request) is not None,
             ):
-                request_document = semantic_request(context, bundle, state)
+                request_document = prepare_request(semantic_request(context, bundle, state))
+                if request_document is None:
+                    raise MaterialAnalysisError("SEMANTIC_INPUT_TOO_LARGE")
                 selected_visuals = visuals(request_document)
                 last_error: Exception | None = None
                 for _attempt in range(lock["material_semantics"]["retry_attempts"]):

@@ -279,3 +279,27 @@ def test_truncated_semantics_does_not_leave_private_page_renders(tmp_path, monke
             pipeline.analyze_material(_request(path), _settings(tmp_path), client=client, semantic_call=truncated)
     assert len(attempts) == 2
     assert all(not location.exists() for location in locations)
+
+
+def test_context_budget_reduces_optional_images_before_splitting_text(tmp_path):
+    path = tmp_path / "public-diagrams.pdf"
+    _diagram_pdf(path, 4, large_last=True)
+    settings = _settings(tmp_path)
+    settings["runtime_lock"]["material_semantics"]["max_tokens"] = 12288
+    def respond(request):
+        body = json.loads(request.content)
+        content = body["messages"][0]["content"]
+        count = 1000
+        if isinstance(content, list):
+            images = sum(part["type"] == "image_url" for part in content)
+            count = {1: 18000, 2: 20000, 3: 22000}[images]
+        return httpx.Response(200, json={"count": count, "max_model_len": 32768})
+    calls = []
+    semantic = _semantic(calls)
+    def call(client, **arguments):
+        assert [page.reference["page"] for page in arguments["visual_pages"]] == [4]
+        return semantic(client, **arguments)
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        result = pipeline.analyze_material(_request(path), settings, client=client, semantic_call=call)
+    assert result["metrics"]["semantic_calls"] == 1
+    assert {row[1] for section in calls[0]["sections"] for row in section["evidence"]} == {1, 2, 3, 4}
