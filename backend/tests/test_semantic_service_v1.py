@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from runtime.semantic_service import SemanticServiceError, material_request_fits, preflight_semantic_service, request_semantics
+from runtime.semantic_service import SemanticServiceError, material_request_fits, parse_material_final, preflight_semantic_service, request_semantics
 
 
 def _lock() -> dict:
@@ -21,16 +21,20 @@ def test_preflight_and_both_tasks_use_the_same_resident_service():
         if request.url.path == "/version": return httpx.Response(200, json={"version": "0.28.0"})
         if request.url.path == "/v1/models": return httpx.Response(200, json={"data": [{"id": "Qwen/Qwen3.8-27B-FP8", "max_model_len": 32768}]})
         if request.url.path == "/tokenize": return httpx.Response(200, json={"count": 50, "max_model_len": 32768})
-        task = json.loads(request.content)["response_format"]["json_schema"]["name"]
         body = json.loads(request.content)
+        task = "material_semantics" if body["response_format"]["type"] == "structural_tag" else body["response_format"]["json_schema"]["name"]
         generation = _lock()["material_semantics"]["generation"]
         if task == "material_semantics":
             assert {key: body[key] for key in generation} == generation
+            assert body["skip_special_tokens"] is False
         else:
             assert body["chat_template_kwargs"] == {"enable_thinking": False}
             assert (set(generation) - {"chat_template_kwargs"}).isdisjoint(body)
         content = {"material_semantics": {"concepts": [], "relations": []}, "assessment": {"schema": "assessment-semantics-response/v2", "candidates": []}}[task]
-        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(content)}}]})
+        encoded = json.dumps(content)
+        if task == "material_semantics":
+            encoded = "</think><final_json>" + encoded + "</final_json>"
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": encoded}}]})
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         preflight_semantic_service(_lock(), client=client)
@@ -135,3 +139,21 @@ def test_material_bundle_budget_excludes_existing_catalog(fresh_count, fits):
     assert calls[0] == material
     assert calls[1]["existing_concepts"] == []
     assert calls[1]["sections"] == material["sections"]
+
+
+def test_material_reasoning_prefix_is_discarded_and_quoted_delimiters_are_preserved():
+    assert parse_material_final('private preparatory text</think>\n<final_json>{"literal":"</final_json>"}</final_json>') == {"literal": "</final_json>"}
+    assert parse_material_final('</think><final_json>{"concepts":[],"relations":[]}</final_json>') == {"concepts": [], "relations": []}
+
+
+@pytest.mark.parametrize("content", [
+    '{"concepts":[],"relations":[]}',
+    '<final_json>{"concepts":[],"relations":[]}</final_json>',
+    'private text</think><final_json>{"concepts":[],"relations":[]}',
+    'private text</think><final_json>{"concepts":[],"relations":[]}</final_json>extra',
+    'private text</think><final_json>{"x":1,"x":2}</final_json>',
+])
+def test_material_final_boundary_fails_closed_without_exposing_prefix(content):
+    with pytest.raises(SemanticServiceError) as error:
+        parse_material_final(content)
+    assert str(error.value) == "SEMANTIC_RESPONSE_INVALID"

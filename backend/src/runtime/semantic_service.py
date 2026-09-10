@@ -20,6 +20,15 @@ TOKENIZE_PATH = "/tokenize"
 PREFLIGHT_TIMEOUT_SECONDS = 5
 MAX_RESPONSE_BYTES = 1024 * 1024
 INFERENCE_TIMEOUT = httpx.Timeout(None, connect=PREFLIGHT_TIMEOUT_SECONDS)
+MATERIAL_OUTPUT_PROTOCOL = "think-then-json/v1"
+FINAL_BEGIN = "<final_json>"
+FINAL_END = "</final_json>"
+MATERIAL_FINAL_INSTRUCTION = (
+    "\nFinish the thinking region with </think>, then enclose the final JSON in "
+    "<final_json> and </final_json>. Use these final delimiters only once, for the answer. "
+    "Keep preparatory reasoning outside the final JSON; inside it include only the requested "
+    "Concepts, Claims, Relations and concise learner-facing reasons. Emit nothing after </final_json>."
+)
 
 
 class SemanticServiceError(RuntimeError):
@@ -167,6 +176,44 @@ def _reject_constant(_: str) -> None:
     raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
 
 
+def _material_prompt(task_lock: dict[str, Any]) -> str:
+    if task_lock.get("output_protocol") != MATERIAL_OUTPUT_PROTOCOL:
+        raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
+    return task_lock["prompt"] + MATERIAL_FINAL_INSTRUCTION
+
+
+def _material_response_format(schema: dict[str, Any]) -> dict[str, Any]:
+    # The resident service has no reasoning parser. Keep its native thinking
+    # boundary, then apply the same strict schema to the final answer region.
+    return {"type": "structural_tag", "format": {"type": "sequence", "elements": [
+        {"type": "tag", "begin": "", "content": {"type": "any_text", "excludes": [FINAL_BEGIN]}, "end": "</think>"},
+        {"type": "regex", "pattern": "[ \\t\\r\\n]*"},
+        {"type": "tag", "begin": FINAL_BEGIN,
+         "content": {"type": "json_schema", "json_schema": deepcopy(schema)}, "end": FINAL_END},
+    ]}}
+
+
+def parse_material_final(content: Any) -> dict[str, Any]:
+    """Return only final JSON; never return or retain the reasoning prefix."""
+    if not isinstance(content, str):
+        raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
+    prefix, marker, final = content.partition(FINAL_BEGIN)
+    if not marker or not prefix.rstrip().endswith("</think>"):
+        raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
+    final = final.lstrip()
+    try:
+        # Decode JSON before checking the delimiter, so a literal delimiter
+        # inside a quoted technical string cannot terminate the answer early.
+        result, end = json.JSONDecoder(
+            object_pairs_hook=_unique_object, parse_constant=_reject_constant,
+        ).raw_decode(final)
+    except (UnicodeError, ValueError):
+        raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID") from None
+    if not isinstance(result, dict) or final[end:].strip() != FINAL_END:
+        raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
+    return result
+
+
 def _messages(
     prompt: str, request: dict[str, Any], visual_pages: tuple[VisualPage, ...] = ()
 ) -> list[dict[str, Any]]:
@@ -248,7 +295,7 @@ def request_semantics(
     try:
         task_lock = runtime_lock["assessment" if task == "assessment_check" else task]
         prefix = "check_" if task == "assessment_check" else ""
-        prompt = task_lock[prefix + "prompt"]
+        prompt = _material_prompt(task_lock) if task == "material_semantics" else task_lock[prefix + "prompt"]
         max_tokens = task_lock[prefix + "max_tokens"]
         if (
             task not in {"material_semantics", "assessment", "assessment_check"}
@@ -276,7 +323,8 @@ def request_semantics(
                 "model": service["model_id"],
                 "messages": messages,
                 "max_tokens": max_tokens,
-                "response_format": {
+                **({"skip_special_tokens": False} if task == "material_semantics" else {}),
+                "response_format": _material_response_format(response_schema) if task == "material_semantics" else {
                     "type": "json_schema",
                     "json_schema": {
                         "name": task,
@@ -305,10 +353,8 @@ def request_semantics(
         if choice.get("finish_reason") != "stop":
             raise SemanticServiceError("SEMANTIC_OUTPUT_TRUNCATED")
         content = choice["message"]["content"]
-        result = json.loads(
-            content,
-            object_pairs_hook=_unique_object,
-            parse_constant=_reject_constant,
+        result = parse_material_final(content) if task == "material_semantics" else json.loads(
+            content, object_pairs_hook=_unique_object, parse_constant=_reject_constant,
         )
     except SemanticServiceError:
         raise
@@ -327,10 +373,11 @@ def material_request_fits(
 
     service = _service(runtime_lock)
     task = runtime_lock["material_semantics"]
+    prompt = _material_prompt(task)
     if len(request.get("visual_pages", [])) > task["max_visual_pages"]:
         return False
     try:
-        count = _token_count(client, service, _messages(task["prompt"], request, visual_pages), task["generation"]["chat_template_kwargs"])
+        count = _token_count(client, service, _messages(prompt, request, visual_pages), task["generation"]["chat_template_kwargs"])
         if count + task["max_tokens"] + task["context_margin_tokens"] > service["max_model_len"]:
             return False
         # 原始 block 不截斷；多個 block 分批，避免新教材擠爆固定輸出預算。
@@ -342,7 +389,7 @@ def material_request_fits(
             # request context above. Never count base64 characters as text tokens.
             fresh_request = {key: value for key, value in request.items() if key not in {"visual_pages", "material_id"}}
             fresh_request["existing_concepts"] = []
-            new_count = _token_count(client, service, _messages(task["prompt"], fresh_request), task["generation"]["chat_template_kwargs"])
+            new_count = _token_count(client, service, _messages(prompt, fresh_request), task["generation"]["chat_template_kwargs"])
     except httpx.TimeoutException as error:
         raise SemanticServiceError("SEMANTIC_SERVICE_TIMEOUT") from error
     except (httpx.HTTPError, UnicodeError, ValueError) as error:

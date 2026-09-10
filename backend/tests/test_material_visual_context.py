@@ -132,7 +132,7 @@ def test_same_multimodal_messages_reach_tokenizer_and_resident_qwen(tmp_path, co
         observed.append((message.url.path, body))
         if message.url.path == "/tokenize":
             return httpx.Response(200, json={"count": 100, "max_model_len": 32768})
-        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": '{"concepts":[],"relations":[]}'}}]})
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": '</think><final_json>{"concepts":[],"relations":[]}</final_json>'}}]})
     lock = _settings(tmp_path)["runtime_lock"]
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         assert material_request_fits(client, lock, request, visual_pages=visuals)

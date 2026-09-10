@@ -26,6 +26,7 @@ from knowledge_map.structure import (
     semantic_response_schema,
 )
 from runtime.semantic_service import (
+    MATERIAL_OUTPUT_PROTOCOL,
     SemanticServiceError,
     material_request_fits,
     request_semantics,
@@ -106,10 +107,11 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or set(material) != {
                 "request_schema", "response_schema", "bundle_policy",
                 "max_tokens", "prompt", "retry_attempts", "generation", "max_new_input_tokens",
-                "max_visual_pages", "context_margin_tokens",
+                "max_visual_pages", "context_margin_tokens", "output_protocol",
             }
             or material["request_schema"] != "material-semantics-request/v2"
             or material["response_schema"] != "material-semantics-response/v4"
+            or material["output_protocol"] != MATERIAL_OUTPUT_PROTOCOL
             or material["bundle_policy"] != "tokenized-contiguous-evidence/v3"
             or type(material["max_tokens"]) is not int
             or not 1 <= material["max_tokens"] < semantic["max_model_len"]
