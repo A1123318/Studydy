@@ -1,0 +1,792 @@
+{
+  "full-baseline": {
+    "summary": {
+      "distinct_complete": 30,
+      "distinct_partial": 2,
+      "claim_only": 4,
+      "absent": 0
+    },
+    "units": [
+      {
+        "ordinal": 1,
+        "status": "distinct_complete",
+        "pages": [
+          3
+        ],
+        "concept_ordinals": [
+          2
+        ]
+      },
+      {
+        "ordinal": 2,
+        "status": "distinct_complete",
+        "pages": [
+          4
+        ],
+        "concept_ordinals": [
+          5,
+          6
+        ]
+      },
+      {
+        "ordinal": 3,
+        "status": "distinct_complete",
+        "pages": [
+          5
+        ],
+        "concept_ordinals": [
+          7
+        ]
+      },
+      {
+        "ordinal": 4,
+        "status": "distinct_complete",
+        "pages": [
+          6
+        ],
+        "concept_ordinals": [
+          8
+        ]
+      },
+      {
+        "ordinal": 5,
+        "status": "claim_only",
+        "pages": [
+          7
+        ],
+        "concept_ordinals": [
+          9
+        ]
+      },
+      {
+        "ordinal": 6,
+        "status": "distinct_complete",
+        "pages": [
+          8
+        ],
+        "concept_ordinals": [
+          10
+        ]
+      },
+      {
+        "ordinal": 7,
+        "status": "distinct_complete",
+        "pages": [
+          9
+        ],
+        "concept_ordinals": [
+          11
+        ]
+      },
+      {
+        "ordinal": 8,
+        "status": "distinct_complete",
+        "pages": [
+          10
+        ],
+        "concept_ordinals": [
+          12
+        ]
+      },
+      {
+        "ordinal": 9,
+        "status": "distinct_complete",
+        "pages": [
+          11
+        ],
+        "concept_ordinals": [
+          13
+        ]
+      },
+      {
+        "ordinal": 10,
+        "status": "distinct_complete",
+        "pages": [
+          12
+        ],
+        "concept_ordinals": [
+          14
+        ]
+      },
+      {
+        "ordinal": 11,
+        "status": "distinct_complete",
+        "pages": [
+          13
+        ],
+        "concept_ordinals": [
+          16
+        ]
+      },
+      {
+        "ordinal": 12,
+        "status": "distinct_complete",
+        "pages": [
+          14
+        ],
+        "concept_ordinals": [
+          17
+        ]
+      },
+      {
+        "ordinal": 13,
+        "status": "distinct_complete",
+        "pages": [
+          15
+        ],
+        "concept_ordinals": [
+          19,
+          20,
+          21
+        ]
+      },
+      {
+        "ordinal": 14,
+        "status": "distinct_partial",
+        "pages": [
+          16
+        ],
+        "concept_ordinals": [
+          22
+        ]
+      },
+      {
+        "ordinal": 15,
+        "status": "distinct_complete",
+        "pages": [
+          17
+        ],
+        "concept_ordinals": [
+          23,
+          24
+        ]
+      },
+      {
+        "ordinal": 16,
+        "status": "distinct_complete",
+        "pages": [
+          18
+        ],
+        "concept_ordinals": [
+          25
+        ]
+      },
+      {
+        "ordinal": 17,
+        "status": "distinct_complete",
+        "pages": [
+          19
+        ],
+        "concept_ordinals": [
+          26
+        ]
+      },
+      {
+        "ordinal": 18,
+        "status": "distinct_complete",
+        "pages": [
+          20,
+          21
+        ],
+        "concept_ordinals": [
+          27
+        ]
+      },
+      {
+        "ordinal": 19,
+        "status": "distinct_complete",
+        "pages": [
+          22,
+          23
+        ],
+        "concept_ordinals": [
+          28,
+          29,
+          30
+        ]
+      },
+      {
+        "ordinal": 20,
+        "status": "distinct_complete",
+        "pages": [
+          24
+        ],
+        "concept_ordinals": [
+          31
+        ]
+      },
+      {
+        "ordinal": 21,
+        "status": "distinct_complete",
+        "pages": [
+          24,
+          25,
+          26
+        ],
+        "concept_ordinals": [
+          32
+        ]
+      },
+      {
+        "ordinal": 22,
+        "status": "distinct_complete",
+        "pages": [
+          25,
+          26
+        ],
+        "concept_ordinals": [
+          35
+        ]
+      },
+      {
+        "ordinal": 23,
+        "status": "claim_only",
+        "pages": [
+          26,
+          27
+        ],
+        "concept_ordinals": [
+          36
+        ]
+      },
+      {
+        "ordinal": 24,
+        "status": "distinct_partial",
+        "pages": [
+          28
+        ],
+        "concept_ordinals": [
+          37
+        ]
+      },
+      {
+        "ordinal": 25,
+        "status": "distinct_complete",
+        "pages": [
+          29,
+          30,
+          31
+        ],
+        "concept_ordinals": [
+          39
+        ]
+      },
+      {
+        "ordinal": 26,
+        "status": "distinct_complete",
+        "pages": [
+          32,
+          33
+        ],
+        "concept_ordinals": [
+          40,
+          41
+        ]
+      },
+      {
+        "ordinal": 27,
+        "status": "distinct_complete",
+        "pages": [
+          34,
+          35,
+          36
+        ],
+        "concept_ordinals": [
+          42,
+          43,
+          44
+        ]
+      },
+      {
+        "ordinal": 28,
+        "status": "distinct_complete",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          45,
+          46,
+          49
+        ]
+      },
+      {
+        "ordinal": 29,
+        "status": "distinct_complete",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          47
+        ]
+      },
+      {
+        "ordinal": 30,
+        "status": "distinct_complete",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          48
+        ]
+      },
+      {
+        "ordinal": 31,
+        "status": "claim_only",
+        "pages": [
+          39,
+          40
+        ],
+        "concept_ordinals": [
+          50,
+          51
+        ]
+      },
+      {
+        "ordinal": 32,
+        "status": "claim_only",
+        "pages": [
+          39,
+          40
+        ],
+        "concept_ordinals": [
+          50,
+          51
+        ]
+      },
+      {
+        "ordinal": 33,
+        "status": "distinct_complete",
+        "pages": [
+          41
+        ],
+        "concept_ordinals": [
+          52
+        ]
+      },
+      {
+        "ordinal": 34,
+        "status": "distinct_complete",
+        "pages": [
+          42
+        ],
+        "concept_ordinals": [
+          54,
+          55
+        ]
+      },
+      {
+        "ordinal": 35,
+        "status": "distinct_complete",
+        "pages": [
+          43
+        ],
+        "concept_ordinals": [
+          56,
+          57
+        ]
+      },
+      {
+        "ordinal": 36,
+        "status": "distinct_complete",
+        "pages": [
+          44
+        ],
+        "concept_ordinals": [
+          59,
+          60
+        ]
+      }
+    ]
+  },
+  "full-production-staged-four": {
+    "summary": {
+      "distinct_complete": 29,
+      "distinct_partial": 1,
+      "claim_only": 6,
+      "absent": 0
+    },
+    "units": [
+      {
+        "ordinal": 1,
+        "status": "distinct_complete",
+        "pages": [
+          3
+        ],
+        "concept_ordinals": [
+          1
+        ]
+      },
+      {
+        "ordinal": 2,
+        "status": "distinct_complete",
+        "pages": [
+          4
+        ],
+        "concept_ordinals": [
+          2
+        ]
+      },
+      {
+        "ordinal": 3,
+        "status": "distinct_complete",
+        "pages": [
+          5
+        ],
+        "concept_ordinals": [
+          3
+        ]
+      },
+      {
+        "ordinal": 4,
+        "status": "distinct_complete",
+        "pages": [
+          6
+        ],
+        "concept_ordinals": [
+          4,
+          2
+        ]
+      },
+      {
+        "ordinal": 5,
+        "status": "claim_only",
+        "pages": [
+          7
+        ],
+        "concept_ordinals": [
+          5
+        ]
+      },
+      {
+        "ordinal": 6,
+        "status": "distinct_complete",
+        "pages": [
+          8
+        ],
+        "concept_ordinals": [
+          6
+        ]
+      },
+      {
+        "ordinal": 7,
+        "status": "distinct_complete",
+        "pages": [
+          9
+        ],
+        "concept_ordinals": [
+          7
+        ]
+      },
+      {
+        "ordinal": 8,
+        "status": "distinct_complete",
+        "pages": [
+          10
+        ],
+        "concept_ordinals": [
+          8
+        ]
+      },
+      {
+        "ordinal": 9,
+        "status": "distinct_complete",
+        "pages": [
+          11
+        ],
+        "concept_ordinals": [
+          9
+        ]
+      },
+      {
+        "ordinal": 10,
+        "status": "distinct_complete",
+        "pages": [
+          12
+        ],
+        "concept_ordinals": [
+          10
+        ]
+      },
+      {
+        "ordinal": 11,
+        "status": "distinct_complete",
+        "pages": [
+          13
+        ],
+        "concept_ordinals": [
+          11
+        ]
+      },
+      {
+        "ordinal": 12,
+        "status": "distinct_complete",
+        "pages": [
+          14
+        ],
+        "concept_ordinals": [
+          12
+        ]
+      },
+      {
+        "ordinal": 13,
+        "status": "distinct_complete",
+        "pages": [
+          15
+        ],
+        "concept_ordinals": [
+          13
+        ]
+      },
+      {
+        "ordinal": 14,
+        "status": "distinct_partial",
+        "pages": [
+          16
+        ],
+        "concept_ordinals": [
+          14
+        ]
+      },
+      {
+        "ordinal": 15,
+        "status": "distinct_complete",
+        "pages": [
+          17
+        ],
+        "concept_ordinals": [
+          15
+        ]
+      },
+      {
+        "ordinal": 16,
+        "status": "claim_only",
+        "pages": [
+          18
+        ],
+        "concept_ordinals": [
+          15
+        ]
+      },
+      {
+        "ordinal": 17,
+        "status": "distinct_complete",
+        "pages": [
+          19
+        ],
+        "concept_ordinals": [
+          16
+        ]
+      },
+      {
+        "ordinal": 18,
+        "status": "distinct_complete",
+        "pages": [
+          20,
+          21
+        ],
+        "concept_ordinals": [
+          17
+        ]
+      },
+      {
+        "ordinal": 19,
+        "status": "distinct_complete",
+        "pages": [
+          22,
+          23
+        ],
+        "concept_ordinals": [
+          18
+        ]
+      },
+      {
+        "ordinal": 20,
+        "status": "distinct_complete",
+        "pages": [
+          24
+        ],
+        "concept_ordinals": [
+          19
+        ]
+      },
+      {
+        "ordinal": 21,
+        "status": "distinct_complete",
+        "pages": [
+          24,
+          25,
+          26
+        ],
+        "concept_ordinals": [
+          21
+        ]
+      },
+      {
+        "ordinal": 22,
+        "status": "distinct_complete",
+        "pages": [
+          25,
+          26
+        ],
+        "concept_ordinals": [
+          22
+        ]
+      },
+      {
+        "ordinal": 23,
+        "status": "distinct_complete",
+        "pages": [
+          26,
+          27
+        ],
+        "concept_ordinals": [
+          23
+        ]
+      },
+      {
+        "ordinal": 24,
+        "status": "distinct_complete",
+        "pages": [
+          28
+        ],
+        "concept_ordinals": [
+          24
+        ]
+      },
+      {
+        "ordinal": 25,
+        "status": "distinct_complete",
+        "pages": [
+          29,
+          30,
+          31
+        ],
+        "concept_ordinals": [
+          26
+        ]
+      },
+      {
+        "ordinal": 26,
+        "status": "distinct_complete",
+        "pages": [
+          32,
+          33
+        ],
+        "concept_ordinals": [
+          27
+        ]
+      },
+      {
+        "ordinal": 27,
+        "status": "distinct_complete",
+        "pages": [
+          34,
+          35,
+          36
+        ],
+        "concept_ordinals": [
+          28
+        ]
+      },
+      {
+        "ordinal": 28,
+        "status": "distinct_complete",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          29
+        ]
+      },
+      {
+        "ordinal": 29,
+        "status": "distinct_complete",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          30,
+          29
+        ]
+      },
+      {
+        "ordinal": 30,
+        "status": "claim_only",
+        "pages": [
+          37,
+          38
+        ],
+        "concept_ordinals": [
+          29
+        ]
+      },
+      {
+        "ordinal": 31,
+        "status": "claim_only",
+        "pages": [
+          39,
+          40
+        ],
+        "concept_ordinals": [
+          31
+        ]
+      },
+      {
+        "ordinal": 32,
+        "status": "claim_only",
+        "pages": [
+          39,
+          40
+        ],
+        "concept_ordinals": [
+          31
+        ]
+      },
+      {
+        "ordinal": 33,
+        "status": "distinct_complete",
+        "pages": [
+          41
+        ],
+        "concept_ordinals": [
+          32
+        ]
+      },
+      {
+        "ordinal": 34,
+        "status": "distinct_complete",
+        "pages": [
+          42
+        ],
+        "concept_ordinals": [
+          33
+        ]
+      },
+      {
+        "ordinal": 35,
+        "status": "claim_only",
+        "pages": [
+          43
+        ],
+        "concept_ordinals": [
+          34
+        ]
+      },
+      {
+        "ordinal": 36,
+        "status": "distinct_complete",
+        "pages": [
+          44
+        ],
+        "concept_ordinals": [
+          35
+        ]
+      }
+    ]
+  }
+}

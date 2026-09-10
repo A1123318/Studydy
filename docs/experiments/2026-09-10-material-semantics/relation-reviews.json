@@ -1,0 +1,2470 @@
+{
+  "method": "Assistant source review, not independent teacher ground truth. Private endpoint labels, reasons and quotes are omitted; ordinal/hash/page and all verdict flags are retained.",
+  "reviews": {
+    "full-baseline": {
+      "revision": "knowledge-structure:sha256:8f6ede350d852ec2a993dc4832f635f04da36b1612f0d2133f28340c16ed872f",
+      "summary": {
+        "supported": 34,
+        "unsupported": 35,
+        "uncertain": 3,
+        "reviewed": 72,
+        "reviewed_precision": 0.4722222222222222,
+        "own_textual_citations_complete": 31,
+        "wrong_type": 29,
+        "wrong_direction": 11,
+        "composition_prerequisite_confusion": 1,
+        "technical_literal_errors": 1
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:497934eff017e2ec174eb84e59e376d413b0b8a86d75eab01b65cdbf019d47fb",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            26
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:fd99008df40bbdc954cdea3d0711d4a128b6c897a116e4110a65067aea728f40",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            24,
+            25
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:09ad4f05587b9f136adf6bb1ed17dc0b67828fe9a1639c713719d031ef27cba5",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            43
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:5887402eb7bfcbde81f10dab445ca06cfa34c5c216d74a1af7e172599b9c941c",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            22,
+            35
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:fac0b2ec38ad4e1afd504071a4e5595b723ee5103884327bdc4d618dc4a0d3ad",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            30,
+            31
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:6d787602a4136786eecfdd7511f12de7f47ddc86ce2f4e7f1facbe7275bc1244",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            25,
+            26
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:acde462b7e36ec4010a96332c66e87fea1d48fe8930126c21d6a80a09db4cbf2",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            44
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:9fe9e2870aef2bd4824ae4018c8979a40fd7f57240644c8db70d7df422404108",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            19
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": true,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:030954affe53f17e660be87d7dc6aa0cec961149ffe8f7b6bcb699c2cd9ac660",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            3,
+            37
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 10,
+          "relation_id": "relation:sha256:e0af971ac063441c7f8b04a7c742197daef80de1e58a96e8f8f58c5a042ab930",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            3,
+            4
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 11,
+          "relation_id": "relation:sha256:b31f4499f8476de0ea1cb2735db0d32c9414d040e1a2af980a3a9310a208f1c8",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            37
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 12,
+          "relation_id": "relation:sha256:c8e99aa9d43982c6c78c4b418c8c1b71fe693ef8a63baf0912b6e3cefce314d4",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 13,
+          "relation_id": "relation:sha256:57175b51de5808cc830924556ea43ee68e1298887e4da3f87e3d96594914dd5a",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            8
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 14,
+          "relation_id": "relation:sha256:73dc58459e1e293c38cb68fa15d41d8b2819a4ce1380308f7ebb572c863d97b0",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            7
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 15,
+          "relation_id": "relation:sha256:aad006f748a86253e3755c96ad9b9564f3f8eb252769adf6a22c597cd3f03951",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            4,
+            6
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 16,
+          "relation_id": "relation:sha256:5e80f026ec23cbf5d7985ab89ebefed5fad474ce28e17a43e5484d6eb714fc2a",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            9
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 17,
+          "relation_id": "relation:sha256:77566b3672276fff8fd04d53d015b8f0c46fd67a90e88a8147edf66861787c91",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            4,
+            5
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 18,
+          "relation_id": "relation:sha256:2c9d10840f3c0d230c7d61c03c679982dae94c1b48575c333cddbc6cb272dd9f",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            9
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 19,
+          "relation_id": "relation:sha256:784afbc477675bf374624b9a9ef17788160b20c8a542cb0fca22438cae654b8e",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            37,
+            41
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": true
+        },
+        {
+          "ordinal": 20,
+          "relation_id": "relation:sha256:f284ff57b378cbdfc83c275d489cf53114b6aba12c903300a948fd8b3c365354",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            37,
+            38
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 21,
+          "relation_id": "relation:sha256:d82a36c9ed2cac7b4f8a44bc7a88c5cf569d5eb5dcef95ebb47ae9f04d3de8e3",
+          "status": "uncertain",
+          "type": "prerequisite",
+          "source_pages": [
+            12,
+            13
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 22,
+          "relation_id": "relation:sha256:b755aa130c0e8ac72f4f0b18d9665526effb4488a49db4d5a82d90ec5294c620",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            35,
+            36
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 23,
+          "relation_id": "relation:sha256:6674849d9a66fd4dfb8d7ed93e6c265f81640451c3d236094167a86e74882936",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            19,
+            20,
+            21
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 24,
+          "relation_id": "relation:sha256:6167e899b28e0b597e0d5ea25b57ca556d49739c806141903bb51ffe80bddcc8",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            5,
+            6
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 25,
+          "relation_id": "relation:sha256:3fa25acde9fcab5f06ebef068deb4704ef0c5a48a9ddb5311e0c2fd33878c6a7",
+          "status": "uncertain",
+          "type": "prerequisite",
+          "source_pages": [
+            14
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 26,
+          "relation_id": "relation:sha256:3f35c78e40a81b887301d2a9036e354c159eac65b82dfc314714de96d5808018",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            23
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 27,
+          "relation_id": "relation:sha256:b031677373fd2cb078486fdeb45eaabcee2d3593ed785b52cceb8f1fc3b4dad0",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            30,
+            31
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 28,
+          "relation_id": "relation:sha256:4c284b94a3eee2beeb7e208c7f173796222a25412aa46c6f3ca788bf236fa6ea",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            11,
+            36
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 29,
+          "relation_id": "relation:sha256:4cdd7ed7decf85fc8a3cd829a33e36b407327a4ebbcfefa076c266b6472ec4b9",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            37,
+            39
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 30,
+          "relation_id": "relation:sha256:5731686ecc375b849714d257dc30acb33c7d65cc28542b538b32a884d4c1b5a7",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            22,
+            25
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 31,
+          "relation_id": "relation:sha256:10f642f371391685411216bdd01b9d72308d8236335f63e9787675d84fd5771b",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            43
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 32,
+          "relation_id": "relation:sha256:2fef848a6429d87615fcba2ebce378ea28658d2fee3f710ea07c397ac9e0b1a9",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 33,
+          "relation_id": "relation:sha256:363803315fcc3ecdb2d4d0da2f7bc26001dc2539665d7730874c008dfbeb9d49",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            44
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 34,
+          "relation_id": "relation:sha256:04d4c735621da8615348cec634110d82dea0bec1e24a045e76f02766aada08dc",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            32
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 35,
+          "relation_id": "relation:sha256:107cb79e55fa1d555a2bba52c545a0f3da479ce70f06b549d83b4be194e072cf",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            30,
+            31
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 36,
+          "relation_id": "relation:sha256:c353b74672c6a54409ca51d0d0791192c4fcf36106a5cb3bb5fea77fbfb0bbbc",
+          "status": "supported",
+          "type": "part_of",
+          "source_pages": [
+            22
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 37,
+          "relation_id": "relation:sha256:420402523b5a5c91c18a303d3d5418c9d06e4bcc4668c37a3c65266a5d3992d7",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            42
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 38,
+          "relation_id": "relation:sha256:78c3332317fdc15414fbd064ddab8f34b7c5c64f65318881dc05ac5de96244be",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            43
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 39,
+          "relation_id": "relation:sha256:96d9211b8cc7e013742a0f4181ba7d63b6ad4fde4010b961a8bf2c98a047a4c4",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            13
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 40,
+          "relation_id": "relation:sha256:d67d1115953ec56fda0000d9956371a13436c217b4531f107454c6026db8ef77",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            4
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 41,
+          "relation_id": "relation:sha256:88fc09ac68cfccdadcc40503337cc9e217ede684e07880b48d256cb14dad1e1a",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            35
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 42,
+          "relation_id": "relation:sha256:ed9cc2667f08c3f506d1c2f53566b766f10a838a03bb1dd6c3bd2f53bd541a9b",
+          "status": "supported",
+          "type": "part_of",
+          "source_pages": [
+            22
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 43,
+          "relation_id": "relation:sha256:4063456c276b969878a3d8130df3ce824add8429d62fc4b1f556634a1c7f8bca",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            23
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 44,
+          "relation_id": "relation:sha256:a45ad6f902859e87a8bde7d986ca00c52e8f2665cf859ccd36f0a4d825f3983b",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            25
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 45,
+          "relation_id": "relation:sha256:ba730932f40fb1d7a934d753445bb1ca3eaaf6cc31747860e60f19196c83c532",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            18
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 46,
+          "relation_id": "relation:sha256:42af148156a99f092faee37dc33ddf132230e0b753fda79a7569133f4dfd43e9",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            13
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 47,
+          "relation_id": "relation:sha256:3c470c44fc6dbfbd8deea75e49d1f56ba7c1a23c8f86f032bc020b9464734381",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            20,
+            21
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 48,
+          "relation_id": "relation:sha256:9176bcfd15cc5d8210cb9a6f840d2c03d4e93cfbc083e53df717505b54ca7168",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            39,
+            40
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 49,
+          "relation_id": "relation:sha256:8e9e13d664c19d03b018c1161c7a3eadf5fba0504e07e410fbefce423a20d263",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            16,
+            17
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 50,
+          "relation_id": "relation:sha256:bef7e507db7097c20ec16ed4ea0249049f0890fbf2107db700b540646c2c194f",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            7
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 51,
+          "relation_id": "relation:sha256:132b8ca442917c0333f21bf9d331efe831feb20ab3c588822025586162493f16",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            6,
+            10
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 52,
+          "relation_id": "relation:sha256:5a5f81a814092d6c84d60d8f6629056ec4ba7879088043dfbd8cce3d000c7be6",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            6,
+            11
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 53,
+          "relation_id": "relation:sha256:40efaaaa3154093111403cc8ab739db1ca346c376e83b6422e2f970f857f4900",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            37,
+            38
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 54,
+          "relation_id": "relation:sha256:ee054a0b9e3459892830fe66c5f37675622f71c7824361a9126da1c75f5a691f",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            12
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 55,
+          "relation_id": "relation:sha256:6d247c368cdb0b62581c6b58be2da72039ee0be9208a0c8e3b90849e8f31c3f5",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            44
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 56,
+          "relation_id": "relation:sha256:cf1c18b3218d02ed45bbb0684b9d5246193ea7f59e1e6d92af85cf8c7bfbcfe2",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            44
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 57,
+          "relation_id": "relation:sha256:ec8a7308aa7350f3cee6b66fcff4351467edd9c886c97ca4db5a7db94733cbe0",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            43
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 58,
+          "relation_id": "relation:sha256:bbe878abc291b367681740624e5d1932ab39965a94174449f884ed26048fccc4",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            23,
+            26
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 59,
+          "relation_id": "relation:sha256:0957d2b901b990527fc2ea069c4b9bbbf7746ed57e16c938d4dde3faae529405",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            30,
+            31,
+            32
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 60,
+          "relation_id": "relation:sha256:70455dcbc84954d10ce047c57d72e3174f0bcc753c444326954664d56584bbb3",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            35,
+            36
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 61,
+          "relation_id": "relation:sha256:e2d29bba6bc2332b6978106f1680f45f93042bfe3030fa3a3400001a1de86c57",
+          "status": "unsupported",
+          "type": "example",
+          "source_pages": [
+            3
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 62,
+          "relation_id": "relation:sha256:e633ea49facc37baa12e7a0b8d94b8b95e89bd72e59abc5319ad6d68d4d4b99d",
+          "status": "unsupported",
+          "type": "example",
+          "source_pages": [
+            3,
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 63,
+          "relation_id": "relation:sha256:d1d4a94d5dc867d05a7b809226f27361836d83114745b1e5145b17d434733e31",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            42
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 64,
+          "relation_id": "relation:sha256:f0aa5a6b296945c3b94fbb4a948fa0ba4b645daaf67466a44df2952b91f9e6bb",
+          "status": "uncertain",
+          "type": "example",
+          "source_pages": [
+            16
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 65,
+          "relation_id": "relation:sha256:fdd31bf1da5466dae1ee5b47e1d955967529023e4763504b2812476d7eac7240",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            15
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 66,
+          "relation_id": "relation:sha256:335beffdd0e36ee0f3da7b807d77b41e5c1ca5ea8b8fc0409210ec9412c56d73",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            4
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 67,
+          "relation_id": "relation:sha256:edb0f0d670290d828fa8819c6931e8d7e3250905c993c787d1a5d1c71570354b",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            17
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 68,
+          "relation_id": "relation:sha256:f019357fc1aa19d148b6daea487056ea20fbdd723d1b5e54e71ccbf88b045d5d",
+          "status": "unsupported",
+          "type": "example",
+          "source_pages": [
+            28
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 69,
+          "relation_id": "relation:sha256:c72b9f7b0236ffdce9ddcab4a32b9b07f2b2bbf84e8fd817eb8125ff056d4861",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            32,
+            33
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 70,
+          "relation_id": "relation:sha256:3c185201dd0a3c970e368e943dc05f192421c759bf9ce45e9d1e702e1255d0de",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            8
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 71,
+          "relation_id": "relation:sha256:2bec12081f6629f00cc375609264b411b246f603e633b4f000047187d8c49ce1",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            23,
+            24
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 72,
+          "relation_id": "relation:sha256:5d6c7c1404ed69dc7649b1f8ea82298674c1ccb9e8ca881f12f032e895fee289",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            31,
+            32
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    },
+    "full-low-text": {
+      "revision": "knowledge-structure:sha256:42c182e0aafd3f29527748f933d9419f50f3213acebbf944d13234e6a03f549d",
+      "summary": {
+        "supported": 9,
+        "unsupported": 16,
+        "uncertain": 1,
+        "reviewed": 26,
+        "reviewed_precision": 0.34615384615384615,
+        "own_textual_citations_complete": 8,
+        "wrong_type": 12,
+        "wrong_direction": 4,
+        "composition_prerequisite_confusion": 2,
+        "technical_literal_errors": 0
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:92db17828bfbe9da5d6bf28488b5aa270fad4b668a4b0b195070515ab6f56d63",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            25,
+            26
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:6cbfd9783ba2ec7fc4d3e1e72cd9dcad808132d03f2ff6873e9709d5eb8a5069",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            22,
+            23
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:3fa563ddc98dd8a9740fa1efe7fd489f59e9777f67a809aa0d101507b5f877d8",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": true,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:4feb940d1626380e777eb78f8c56c5db05711f9d0bcf672908eba09eeceb92f9",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            5
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:2ccaf013efacc36590144a72e13b075c1e10dcd7788a92261e87c9796d3730b1",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            19
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": true,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:5c843adbeb272a4e3321774e7bf393c7a10a8f12e8f3155ef380b4f24403492e",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            15,
+            34
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:572f853debbcd26098cbfcb670fe71a6abcc8e5ba7313fd119532c40c8d0ed27",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            31,
+            32
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:4f5969fd1a6a7568947bf9629514969de8568866cbbe220ec1642a5d5812476c",
+          "status": "uncertain",
+          "type": "prerequisite",
+          "source_pages": [
+            13
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:8452ef12d1b67d4227da74eac16cb27abc280e7e42cdd5bf2a6dcb98b4105a06",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            28
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 10,
+          "relation_id": "relation:sha256:443faca3521b3f3b58d0f98f0ecebdfb0d109052985a183499baff0ab75f15e2",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            25,
+            26
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 11,
+          "relation_id": "relation:sha256:9a9876c3e76213289ae9afef2ab88d5cd91bbb2f91491eb309cf9ca4585eb403",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            3,
+            4
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 12,
+          "relation_id": "relation:sha256:4e76467e45e9faef3dabef5808b7b7116aa5f2c3e56f53cdaadd972d96cee970",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            8
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 13,
+          "relation_id": "relation:sha256:f6c2624a2298cef7cdb49121605fdbd37496b85c1f4e5a8c839494b7ef678151",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            17
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 14,
+          "relation_id": "relation:sha256:f09a455c9bf6a109ceceea398137bc94926f14112d4bc281592790b9a7c7e68f",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            42,
+            43
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 15,
+          "relation_id": "relation:sha256:f9c4a141cca0cdfac8edce3ad199c75b3dade613b8ce0cf0c889ba9094763dc9",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            7
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 16,
+          "relation_id": "relation:sha256:65c52a3b3e3c39b4ee627545a3c0087543cb20128771916f73b3141a3a19159c",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            37,
+            39
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 17,
+          "relation_id": "relation:sha256:62b0e6c90dce7babbab24f26a29e547b741d2254872a7f79a0929817a9663bfb",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            37,
+            41
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 18,
+          "relation_id": "relation:sha256:ed7355b9df00a0ae11095a793cec972d410c6b86c0ae57d3380dcdb74e69e48f",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            11
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 19,
+          "relation_id": "relation:sha256:a7b3c343da46c95a4bfc2f98318c8c9ae3f57b3f09ca4cb213c89219fb416e6b",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            9
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 20,
+          "relation_id": "relation:sha256:45c232d074ca6b09658e1002b9658a2e32654757d432e9ba45c230692a1bca1c",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            14
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 21,
+          "relation_id": "relation:sha256:a21d614b100b4f8561676b624f769e4c11971dcb11644023ee8fda91aceabe2e",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            12
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 22,
+          "relation_id": "relation:sha256:ec1115ed1a673f75b7abb6d5c54842871f74275184841aba4b3cb82b87f14778",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            11,
+            35,
+            36
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 23,
+          "relation_id": "relation:sha256:6576106d18b49aa5e2ae7e558980bd5659895e05dd558f765df19750bed758a2",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            18
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 24,
+          "relation_id": "relation:sha256:b68fd9da6a43afaf7475a245915f572f4bf5181a1db71386a167d47c41190754",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            42,
+            44
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 25,
+          "relation_id": "relation:sha256:08984f9966a20d171f1854122a5f85db5257cc56efd8a9ff1aab12dda34da030",
+          "status": "unsupported",
+          "type": "example",
+          "source_pages": [
+            16
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 26,
+          "relation_id": "relation:sha256:9288e585b84391874a9ad10b981ea1a5cb443504b62dc729ef2d13d1fa2d64aa",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            22,
+            24
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    },
+    "full-low-visual-v2": {
+      "revision": "knowledge-structure:sha256:2e40598276b4728457b45d1dd1b1623c61a580c7fa9db8e9b87ad64fa3e8efb9",
+      "summary": {
+        "supported": 5,
+        "unsupported": 15,
+        "uncertain": 1,
+        "reviewed": 21,
+        "reviewed_precision": 0.23809523809523808,
+        "own_textual_citations_complete": 4,
+        "wrong_type": 10,
+        "wrong_direction": 4,
+        "composition_prerequisite_confusion": 1,
+        "technical_literal_errors": 0
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:64a296dd435996800c053f2a6d8397f6f494dfb1e38b87b97b884b0fd635059c",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            15,
+            19
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": true,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:3acf0505474dc1838fc011bc8a9893cb4633f12a98647c02f2beaa52e93fe008",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            42
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:42fcb68cee8eff9d9973bf0c9f6a782c6ebffd3b49f7e5e37b9e1ed11e88457e",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            5,
+            6
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:c61f3bd4348149f16c99c0cf841d7206ace0419ffa77adb94beb96a55ca076ac",
+          "status": "uncertain",
+          "type": "prerequisite",
+          "source_pages": [
+            5,
+            7
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:8ef94d5e5aa74582774d1629ec348b09862ffaab5e40b029df586c89ed787482",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            4,
+            22,
+            23
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:9d4384a255139108a77a4db2ed1c323764fb5e88978762bf84c2dabe5509bfbf",
+          "status": "unsupported",
+          "type": "prerequisite",
+          "source_pages": [
+            37
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:1ac5dec6acd2aa7c6a0f09286331b145136dfb12fc6ab625cf01ea723dc7fd3d",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            3,
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:ff58e6ffdabd0d0fac73ef8b37fb69044dd29287154dca644f303beb7c82f40c",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            41
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:fceea1b5eaa36802d4c5e9a0ff5993c3287cadc2e4b3304981a42d73d92ac4ff",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            37
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 10,
+          "relation_id": "relation:sha256:876fdcab6365cc6b21c12627d548f4a2648cc72bca381379bab5fe3d5622f43a",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            28
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 11,
+          "relation_id": "relation:sha256:6043228f4b98f2227321144832dc1d16be5df4671e4b69773f1cdb41be95dafb",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            32
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 12,
+          "relation_id": "relation:sha256:e703b3567e60f0d321761f5e9c937b2fb807d32d9e980acb2ccdd44a8bc64b99",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            39
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 13,
+          "relation_id": "relation:sha256:f5f7d5b677236a861c15708ad9b274219af0d7dff26404e79e9703f65e5331e7",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            3,
+            19
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 14,
+          "relation_id": "relation:sha256:9fc5ac13d9523e931e8a5239198f362e7e5df1e1e7dc53a77240552bdb2c205e",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            30,
+            31
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 15,
+          "relation_id": "relation:sha256:db54df15fadcba062f9d27dc2b5c9d61cd1f3cf0573fd3f6d3cc2b6ec4487dcf",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            43,
+            44
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 16,
+          "relation_id": "relation:sha256:0ea4ba447874e1852cb9ffb3b7e434a52af31eb41f6989d2f1fe9268e4056d0b",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            9
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 17,
+          "relation_id": "relation:sha256:0446a6d97bb5047ca3da9256d48253697be65081720d87a6d4e4513cf680acb5",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            18
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 18,
+          "relation_id": "relation:sha256:e7f9f7e5b486850562f49e4c371e2c5f890df15b0be9b133647c1bab4aa8f04d",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            39
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": true,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 19,
+          "relation_id": "relation:sha256:cf6b20d0a44c1457c6ecb6a9593a565f25a5c56e5175e132a7b3c3246ebfc6a8",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            11,
+            20,
+            21
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 20,
+          "relation_id": "relation:sha256:2e3362bd1b799084e27c47ef9cc6618639d2d619465674e09c9d41ba03b6a7e7",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            35,
+            36
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 21,
+          "relation_id": "relation:sha256:e0509c01778e8e7104ebe5fc3e6c01442cb93d84464109dd6119e526640a6366",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            24,
+            25
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    },
+    "full-production-staged-four": {
+      "revision": "knowledge-structure:sha256:da18f85a6c75ba37d6056de74f789d55d9b524f9df028089c710aacd59138767",
+      "summary": {
+        "supported": 10,
+        "unsupported": 1,
+        "uncertain": 1,
+        "reviewed": 12,
+        "reviewed_precision": 0.8333333333333334,
+        "own_textual_citations_complete": 10,
+        "wrong_type": 1,
+        "wrong_direction": 0,
+        "composition_prerequisite_confusion": 0,
+        "technical_literal_errors": 0
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:b611a841c85c43f293fb51fa75b5576057bc33d724650e681cf7f18899884b99",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            30,
+            31,
+            32,
+            33
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:2f6d55c83782c94cca9bb2663aacbceec10441c90c78f4bc2386317ea49bf774",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            4,
+            7
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:462704877b74b03808078b606b12328ee9e3bfe5993cbca8631e7fdea5cb4560",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            19,
+            20,
+            21
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:fad25259b0bdf74aae104a2d93d79cc340f638358969feaefe8501302ceb1028",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            42,
+            43
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:b1f123a43732dea5d20fa45dae9c65fef954ee437426fca8123ab94642e0c644",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            5,
+            6
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:75e4e9140a71cd37c6dbb534a7f0a9a68e62f5dc98eedbc1678b34ab9adf3bab",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            37,
+            41
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:b91ec0b8c811ed1e7b2fd8a02aa087a8e0db93624474fcb8f36305f3e15a0849",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            11,
+            35,
+            36
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:a23f019a3e616c29cb2dfe837a723cd69a717c70b54fae51895cd8e5255e5d35",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            6,
+            11
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:9c4ee90532dd14a7c355b80c10cdc0bdfc95c705afe70f03c87a41b5e885373e",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            6,
+            27
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 10,
+          "relation_id": "relation:sha256:1c235534526d8b15de33750030bbe90da42b76047257a7b47683d095516f1ae6",
+          "status": "uncertain",
+          "type": "example",
+          "source_pages": [
+            15,
+            16
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 11,
+          "relation_id": "relation:sha256:732567876b49badaa042faf930fe4034b2e9a0ffafaa71a83f94b9f97eba1c6f",
+          "status": "unsupported",
+          "type": "example",
+          "source_pages": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 12,
+          "relation_id": "relation:sha256:4b8691b997d4a1ca877822e8a8ce3a07d5f829c5a8936c1fcc9cd93d944fba0d",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            24,
+            25
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    },
+    "two-extra-materials/performance-appraisal": {
+      "revision": "knowledge-structure:sha256:2240d7d115ef210c73b87cd6b87dad718a618592b570858db149573e1723e098",
+      "summary": {
+        "supported": 10,
+        "unsupported": 11,
+        "uncertain": 0,
+        "reviewed": 21,
+        "reviewed_precision": 0.47619047619047616,
+        "own_textual_citations_complete": 8,
+        "wrong_type": 11,
+        "wrong_direction": 0,
+        "composition_prerequisite_confusion": 0,
+        "technical_literal_errors": 0
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:c6f7d7bda397d560470806d1e376e5f9a3b51f0c235135717d807e065d1275eb",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            18,
+            24
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:5662a543913a20d28ca50dbfc5009069a86190f432b7c30ed96c6795b3c945a0",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            12,
+            13
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:7b508adb3dbb78ba1e7abc14717dd5db9e4e88a40da31830700ff9a27a715096",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            12,
+            17
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:96205a69033f56124073ad83311cecd5b0f64ab2aeef8fb9610bb1ff5363d01f",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            12,
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:ec691b7ec58205786f84563a42de051c44103705d9b3815493ed0dac28c91027",
+          "status": "supported",
+          "type": "part_of",
+          "source_pages": [
+            8,
+            9,
+            10
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:e8d89c8194a048aae1362fd6db3538d1aa473a149c1e1d97ef50d58b3044f591",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            18,
+            19
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:ade78a298bc057c585ca6901e1867443b3b8235bc0d0a87f5f7f57f6845b2f89",
+          "status": "supported",
+          "type": "part_of",
+          "source_pages": [
+            24
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:eee3e229f9e914cfda4d57bb03e2ba8e8879ce028393a25b743a644873ad6f3f",
+          "status": "unsupported",
+          "type": "part_of",
+          "source_pages": [
+            18,
+            22
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:9dc3f88b0086780a70bc9a50b322774d4361316813867bf91a32a32a5e97cfc3",
+          "status": "supported",
+          "type": "part_of",
+          "source_pages": [
+            24
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 10,
+          "relation_id": "relation:sha256:cb9f2875b1796b73191107ab3c4738f905cc841bd6de29b6fe5e2ed142fcce69",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            24,
+            33
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 11,
+          "relation_id": "relation:sha256:d8f52fb932f65a9fe502b7baed6c7bd91b17251e9f5d1da5e22ea8751a82252e",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            24,
+            25
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 12,
+          "relation_id": "relation:sha256:6fece555d036d086c8692e1d7288121135d7cd0b83425b9f3c17d6c913d1dc6b",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            32
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 13,
+          "relation_id": "relation:sha256:9f3b1de95aec6d097f6a6e5da6c29f992437da0d80ca2102ce5f4b402c54dfbf",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            30
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 14,
+          "relation_id": "relation:sha256:9af851aa3c2f5dcabf2ab93d2b041ad74574d686bba5420fbb0ca95598492dc3",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            13,
+            33
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 15,
+          "relation_id": "relation:sha256:53695852bea7d29a705d2e21047e6935c72530e6dad859e137ccace66ab40f5f",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            13,
+            32
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 16,
+          "relation_id": "relation:sha256:028deb30e0e961c214ed6fe748102500162974b4b35117a7135619d699d69548",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            13,
+            14
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 17,
+          "relation_id": "relation:sha256:a5138e6da81cf80f4110da4b775d42b0ea6cce80134231486a83ee87a50e307b",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            17,
+            33
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 18,
+          "relation_id": "relation:sha256:86c3efe86ac198b431392923723bf568568be07aaa8bae2f25c0bfe57f0283ab",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            19,
+            20
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 19,
+          "relation_id": "relation:sha256:90e04ecf2e99af76c561f9da35c5688382e744de86930646aa155e4135918efc",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            19,
+            21
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 20,
+          "relation_id": "relation:sha256:7c21e2aa72c9f4e2f94d3031d4c9729820aaa2aa46c3ee03efcfea9922560813",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            22,
+            23
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": true,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 21,
+          "relation_id": "relation:sha256:66be8904be5ea5e03a9230876595754d242e56fcdce88ea11ffe795dbd137bfb",
+          "status": "supported",
+          "type": "example",
+          "source_pages": [
+            24,
+            26
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    },
+    "two-extra-materials/stacks-queues": {
+      "revision": "knowledge-structure:sha256:6c5ee2caa2621ff55b82d37792095a4855e4da3b15f1a0e7cc640a98ed061cef",
+      "summary": {
+        "supported": 7,
+        "unsupported": 1,
+        "uncertain": 1,
+        "reviewed": 9,
+        "reviewed_precision": 0.7777777777777778,
+        "own_textual_citations_complete": 6,
+        "wrong_type": 0,
+        "wrong_direction": 0,
+        "composition_prerequisite_confusion": 0,
+        "technical_literal_errors": 1
+      },
+      "relations": [
+        {
+          "ordinal": 1,
+          "relation_id": "relation:sha256:006abad98d0a913ee0d1b0b66aeba532eb99a4f533594d09dd4dc8b3b4be3ffb",
+          "status": "supported",
+          "type": "prerequisite",
+          "source_pages": [
+            19,
+            21,
+            24
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 2,
+          "relation_id": "relation:sha256:415e895d197f2623b46639e41099ad51d7543bdd4ab574b68367c32622f54eea",
+          "status": "unsupported",
+          "type": "application",
+          "source_pages": [
+            12,
+            13,
+            15
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": true
+        },
+        {
+          "ordinal": 3,
+          "relation_id": "relation:sha256:a02f7c1294225569bf79a2613c5d636f971c62147fab748d70805c9745c69dec",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            2,
+            5,
+            8
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 4,
+          "relation_id": "relation:sha256:286c6625432de628bb6107ec70d0fc24d405e3e42cd0925cc990d7e70c331796",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            2,
+            10,
+            11
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 5,
+          "relation_id": "relation:sha256:82d49fdd291fb295d7c1242c68b76ffe1c90ef2aa4a3bf329546ae8c8c756ca4",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            2,
+            26
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 6,
+          "relation_id": "relation:sha256:59126ec7abd7fae280f4eb50b183df188f6c2465a6deab5caf4634a2048130ca",
+          "status": "supported",
+          "type": "application",
+          "source_pages": [
+            19,
+            25
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 7,
+          "relation_id": "relation:sha256:d857bdd3b17392425961b682b0fb242fd601690f178b11ee67a22a376db8cf43",
+          "status": "uncertain",
+          "type": "example",
+          "source_pages": [
+            2,
+            3
+          ],
+          "own_textual_citations_complete": false,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 8,
+          "relation_id": "relation:sha256:df788f635cdf22f0d44087ab77ae0c8c0514513e3a34bcabd7c947d6991a143e",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            5,
+            10
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        },
+        {
+          "ordinal": 9,
+          "relation_id": "relation:sha256:77c3ab4bd731cd847f969e6b169193a67f215614f34e0c699f9adea3f3c96ece",
+          "status": "supported",
+          "type": "contrast",
+          "source_pages": [
+            18,
+            19
+          ],
+          "own_textual_citations_complete": true,
+          "wrong_type": false,
+          "wrong_direction": false,
+          "composition_prerequisite_confusion": false,
+          "technical_literal_error": false
+        }
+      ]
+    }
+  }
+}

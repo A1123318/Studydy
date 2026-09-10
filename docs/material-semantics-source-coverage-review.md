@@ -1,5 +1,7 @@
 # Source-grounded relationship coverage audit
 
+**封存決策：此分支保留作研究紀錄，不合併 `dev`／`main`；未證明整體產品收益。** 今日成功、失敗及後續兩份簡報測試已整合至[完整證據索引](experiments/2026-09-10-material-semantics/README.md)。較早的 qualified／待批准文字僅反映當時狀態。
+
 This follow-up supersedes any interpretation of 83.3% Relation precision as overall graph quality or readiness. It does not modify production code, prompts, model answers, historical labels or the graph.
 
 ## Method and scope

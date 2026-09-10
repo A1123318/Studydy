@@ -1,0 +1,6 @@
+{
+  "public_json_files_regenerated_from_worktree_external_private_archive": 12,
+  "all_regenerated_files_byte_identical": true,
+  "model_calls_during_preservation": 0,
+  "verification_scope": "Archive consistency and reproducible sanitization, not independent semantic grading."
+}

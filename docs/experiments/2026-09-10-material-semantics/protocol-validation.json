@@ -1,0 +1,247 @@
+{
+  "historical_012": {
+    "status": "offline_audit_complete_no_inference",
+    "original_inputs_modified": false,
+    "summary": [
+      {
+        "mode": "xhigh",
+        "PN": [
+          0,
+          42
+        ],
+        "PNI": [
+          0,
+          52
+        ],
+        "positive_exact": [
+          0,
+          33
+        ],
+        "insufficient_exact": [
+          0,
+          10
+        ],
+        "type_correct_wrong_direction": 0,
+        "completed_batches": 0,
+        "input_tokens": 84524,
+        "output_tokens": 32768,
+        "wall_seconds": 2632.866,
+        "groups": {
+          "P": {
+            "correct": 0,
+            "total": 33
+          },
+          "N": {
+            "correct": 0,
+            "total": 9
+          },
+          "I": {
+            "correct": 0,
+            "total": 10
+          },
+          "R": {
+            "correct": 0,
+            "total": 8
+          }
+        }
+      },
+      {
+        "mode": "low",
+        "PN": [
+          38,
+          42
+        ],
+        "PNI": [
+          39,
+          52
+        ],
+        "positive_exact": [
+          29,
+          33
+        ],
+        "insufficient_exact": [
+          1,
+          10
+        ],
+        "type_correct_wrong_direction": 1,
+        "completed_batches": 4,
+        "input_tokens": 84476,
+        "output_tokens": 23018,
+        "wall_seconds": 1883.154,
+        "groups": {
+          "P": {
+            "correct": 29,
+            "total": 33
+          },
+          "N": {
+            "correct": 9,
+            "total": 9
+          },
+          "I": {
+            "correct": 1,
+            "total": 10
+          },
+          "R": {
+            "correct": 2,
+            "total": 8
+          }
+        }
+      },
+      {
+        "mode": "off",
+        "PN": [
+          28,
+          42
+        ],
+        "PNI": [
+          29,
+          52
+        ],
+        "positive_exact": [
+          19,
+          33
+        ],
+        "insufficient_exact": [
+          1,
+          10
+        ],
+        "type_correct_wrong_direction": 4,
+        "completed_batches": 4,
+        "input_tokens": 84364,
+        "output_tokens": 4261,
+        "wall_seconds": 406.215,
+        "groups": {
+          "P": {
+            "correct": 19,
+            "total": 33
+          },
+          "N": {
+            "correct": 9,
+            "total": 9
+          },
+          "I": {
+            "correct": 1,
+            "total": 10
+          },
+          "R": {
+            "correct": 0,
+            "total": 8
+          }
+        }
+      }
+    ],
+    "original_request_manifest_matches": 12,
+    "original_download_manifest_matches": 20,
+    "all_hashes_match": true,
+    "original_score_sha256": "5c3e80c3d2a0867db751c885cbdda31c29cbe8ff6e2853f1dbfc9ac397a28c6f",
+    "reference_sha256": "8d35e7712335c3eb7c045cfd2f778769facfd3e444867a3ed5dd04d2e11c3102",
+    "current_grammar_equal_given_original_schema": true
+  },
+  "live_15_pair_reproduction": {
+    "status": "completed",
+    "model_calls": 1,
+    "tokenizer_calls": 1,
+    "retries": 0,
+    "original_files_modified": false,
+    "original_body_sha256": "002ca83c4e4f74d53c468de28fc692957df6cc6535d9c2959fba15db9c3a603d",
+    "messages_sha256": "2caae44e60a765566caaf1bb56621f2685cfd4b094847f84aef635f04f4c5f9e",
+    "original_input_tokens": 21136,
+    "actual_input_tokens": 21136,
+    "output_budget": 8192,
+    "seed": 17001,
+    "source_module_sha256": "e9ac91d5018a04915635c2ec39c223c6d46deac768ae7fe1b7857c7277c6c53a",
+    "finish_reason": "stop",
+    "final_region_present": true,
+    "reasoning_text_retained": false,
+    "completed_pairs": 15,
+    "semantic_decisions_matching_original": 15,
+    "pn": [
+      11,
+      12
+    ],
+    "pni": [
+      11,
+      14
+    ],
+    "wall_seconds": 420.63048957200954,
+    "estimated_window_cost_usd": 0.05725248330285685,
+    "entire_final_json_matches_original": true
+  },
+  "offline_production_replays": [
+    {
+      "batch": 1,
+      "original_body_sha256": "002ca83c4e4f74d53c468de28fc692957df6cc6535d9c2959fba15db9c3a603d",
+      "answer_matches_saved": true,
+      "production_executor_used": true,
+      "live_requests": 0
+    },
+    {
+      "batch": 2,
+      "original_body_sha256": "f21547a3bd6f18545c8f0d2a5d9b7211d74a48d836c69eb447490d378c721304",
+      "answer_matches_saved": true,
+      "production_executor_used": true,
+      "live_requests": 0
+    },
+    {
+      "batch": 3,
+      "original_body_sha256": "1c62767aeb53e7c7e1d144ef4ece228d5863cf1d908fd8845966923aca7d55de",
+      "answer_matches_saved": true,
+      "production_executor_used": true,
+      "live_requests": 0
+    },
+    {
+      "batch": 4,
+      "original_body_sha256": "c77422c9eb173ee457e9de8ac11771c9916a8f802b91df2db179544defb16101",
+      "answer_matches_saved": true,
+      "production_executor_used": true,
+      "live_requests": 0
+    }
+  ],
+  "schema_validation": {
+    "xgrammar_version": "0.2.3",
+    "grammar_compiled": true,
+    "model_calls": 0,
+    "accepted": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true
+    ],
+    "original_decisions_shape_valid": 59,
+    "original_decisions_checked": 60,
+    "original_grader_changed": false
+  },
+  "schema_cpu_validation": {
+    "xgrammar_version": "0.2.3",
+    "grammar_compiled": true,
+    "model_calls": 0,
+    "accepted": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "cached_stage_verification": {
+    "status": "verified_cached_stages_only",
+    "draft_request_hashes_matched": 2,
+    "ocr_render_bindings_matched": 33,
+    "new_model_calls": 0,
+    "new_ocr_calls": 0,
+    "stopped_before_new_relation_request": true
+  },
+  "original_file_integrity": {
+    "protected_files": 50,
+    "all_content_hashes_unchanged": true,
+    "changed": []
+  },
+  "two_extra_tests_file_integrity": {
+    "tracked_files_checked": 118,
+    "changed": [],
+    "all_unchanged": true
+  }
+}

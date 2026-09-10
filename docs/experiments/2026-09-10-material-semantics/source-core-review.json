@@ -1,0 +1,551 @@
+{
+  "candidate_revision": "knowledge-structure:sha256:da18f85a6c75ba37d6056de74f789d55d9b524f9df028089c710aacd59138767",
+  "candidate_file_sha256": "984b700ea4ed501248a67684992a7412abd0e3b736a2e42639af474ecc0b9691",
+  "counts": {
+    "reference_core_relations": 48,
+    "candidate_relations": 12,
+    "true_positive": 10,
+    "unsupported": 1,
+    "uncertain_not_credited": 1,
+    "false_positive_conservative": 2,
+    "false_negative": 38
+  },
+  "metrics": {
+    "precision": 0.8333333333333334,
+    "recall_on_reference": 0.20833333333333334,
+    "f1": 0.3333333333333333,
+    "edge_set_jaccard": 0.2
+  },
+  "reference_relations": [
+    {
+      "id": "R01",
+      "type": "prerequisite",
+      "pages": [
+        4,
+        6
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R02",
+      "type": "prerequisite",
+      "pages": [
+        5,
+        6
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R03",
+      "type": "prerequisite",
+      "pages": [
+        4,
+        7
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R04",
+      "type": "prerequisite",
+      "pages": [
+        5,
+        7
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R05",
+      "type": "prerequisite",
+      "pages": [
+        4,
+        8
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R06",
+      "type": "prerequisite",
+      "pages": [
+        4,
+        9
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R07",
+      "type": "application",
+      "pages": [
+        6,
+        10
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R08",
+      "type": "application",
+      "pages": [
+        6,
+        11
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R09",
+      "type": "application",
+      "pages": [
+        6,
+        12
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R10",
+      "type": "prerequisite",
+      "pages": [
+        5,
+        13
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R11",
+      "type": "application",
+      "pages": [
+        6,
+        14
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R12",
+      "type": "contrast",
+      "pages": [
+        7
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R13",
+      "type": "part_of",
+      "pages": [
+        16
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R14",
+      "type": "part_of",
+      "pages": [
+        19,
+        20
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R15",
+      "type": "prerequisite",
+      "pages": [
+        15,
+        17
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R16",
+      "type": "application",
+      "pages": [
+        17,
+        18
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R17",
+      "type": "prerequisite",
+      "pages": [
+        19,
+        20,
+        21
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R18",
+      "type": "application",
+      "pages": [
+        11,
+        20,
+        21
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R19",
+      "type": "application",
+      "pages": [
+        22,
+        23
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R20",
+      "type": "prerequisite",
+      "pages": [
+        24,
+        25,
+        26
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R21",
+      "type": "contrast",
+      "pages": [
+        24,
+        25,
+        26
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R22",
+      "type": "application",
+      "pages": [
+        25,
+        26,
+        27
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R23",
+      "type": "application",
+      "pages": [
+        6,
+        27
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R24",
+      "type": "application",
+      "pages": [
+        22,
+        27
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R25",
+      "type": "prerequisite",
+      "pages": [
+        15,
+        34,
+        35,
+        36
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R26",
+      "type": "application",
+      "pages": [
+        35,
+        36
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R27",
+      "type": "application",
+      "pages": [
+        17,
+        36
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R28",
+      "type": "contrast",
+      "pages": [
+        22,
+        34
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R29",
+      "type": "application",
+      "pages": [
+        6,
+        29,
+        31
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R30",
+      "type": "prerequisite",
+      "pages": [
+        22,
+        30,
+        31
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R31",
+      "type": "prerequisite",
+      "pages": [
+        31,
+        32,
+        33
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R32",
+      "type": "application",
+      "pages": [
+        28,
+        29,
+        31
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R33",
+      "type": "prerequisite",
+      "pages": [
+        37
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R34",
+      "type": "prerequisite",
+      "pages": [
+        37,
+        38
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R35",
+      "type": "contrast",
+      "pages": [
+        37,
+        38
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R36",
+      "type": "application",
+      "pages": [
+        37,
+        39,
+        40
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R37",
+      "type": "application",
+      "pages": [
+        37,
+        39,
+        40
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R38",
+      "type": "contrast",
+      "pages": [
+        39,
+        40
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R39",
+      "type": "application",
+      "pages": [
+        37,
+        41
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R40",
+      "type": "application",
+      "pages": [
+        25,
+        26,
+        41
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R41",
+      "type": "application",
+      "pages": [
+        6,
+        41
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R42",
+      "type": "part_of",
+      "pages": [
+        42,
+        43
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R43",
+      "type": "prerequisite",
+      "pages": [
+        42,
+        43
+      ],
+      "candidate_status": "matched"
+    },
+    {
+      "id": "R44",
+      "type": "prerequisite",
+      "pages": [
+        43,
+        44
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R45",
+      "type": "application",
+      "pages": [
+        43,
+        44
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R46",
+      "type": "prerequisite",
+      "pages": [
+        37,
+        44
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R47",
+      "type": "prerequisite",
+      "pages": [
+        37,
+        42
+      ],
+      "candidate_status": "missing"
+    },
+    {
+      "id": "R48",
+      "type": "prerequisite",
+      "pages": [
+        24,
+        43
+      ],
+      "candidate_status": "missing"
+    }
+  ],
+  "candidate_adjudication": [
+    {
+      "ordinal": 1,
+      "relation_id": "relation:sha256:b611a841c85c43f293fb51fa75b5576057bc33d724650e681cf7f18899884b99",
+      "type": "prerequisite",
+      "status": "supported",
+      "reference_id": "R31"
+    },
+    {
+      "ordinal": 2,
+      "relation_id": "relation:sha256:2f6d55c83782c94cca9bb2663aacbceec10441c90c78f4bc2386317ea49bf774",
+      "type": "prerequisite",
+      "status": "supported",
+      "reference_id": "R03"
+    },
+    {
+      "ordinal": 3,
+      "relation_id": "relation:sha256:462704877b74b03808078b606b12328ee9e3bfe5993cbca8631e7fdea5cb4560",
+      "type": "prerequisite",
+      "status": "supported",
+      "reference_id": "R17"
+    },
+    {
+      "ordinal": 4,
+      "relation_id": "relation:sha256:fad25259b0bdf74aae104a2d93d79cc340f638358969feaefe8501302ceb1028",
+      "type": "prerequisite",
+      "status": "supported",
+      "reference_id": "R43"
+    },
+    {
+      "ordinal": 5,
+      "relation_id": "relation:sha256:b1f123a43732dea5d20fa45dae9c65fef954ee437426fca8123ab94642e0c644",
+      "type": "prerequisite",
+      "status": "supported",
+      "reference_id": "R02"
+    },
+    {
+      "ordinal": 6,
+      "relation_id": "relation:sha256:75e4e9140a71cd37c6dbb534a7f0a9a68e62f5dc98eedbc1678b34ab9adf3bab",
+      "type": "application",
+      "status": "supported",
+      "reference_id": "R39"
+    },
+    {
+      "ordinal": 7,
+      "relation_id": "relation:sha256:b91ec0b8c811ed1e7b2fd8a02aa087a8e0db93624474fcb8f36305f3e15a0849",
+      "type": "application",
+      "status": "supported",
+      "reference_id": "R26"
+    },
+    {
+      "ordinal": 8,
+      "relation_id": "relation:sha256:a23f019a3e616c29cb2dfe837a723cd69a717c70b54fae51895cd8e5255e5d35",
+      "type": "application",
+      "status": "supported",
+      "reference_id": "R08"
+    },
+    {
+      "ordinal": 9,
+      "relation_id": "relation:sha256:9c4ee90532dd14a7c355b80c10cdc0bdfc95c705afe70f03c87a41b5e885373e",
+      "type": "application",
+      "status": "supported",
+      "reference_id": "R23"
+    },
+    {
+      "ordinal": 10,
+      "relation_id": "relation:sha256:1c235534526d8b15de33750030bbe90da42b76047257a7b47683d095516f1ae6",
+      "type": "example",
+      "status": "uncertain",
+      "reference_id": null
+    },
+    {
+      "ordinal": 11,
+      "relation_id": "relation:sha256:732567876b49badaa042faf930fe4034b2e9a0ffafaa71a83f94b9f97eba1c6f",
+      "type": "example",
+      "status": "unsupported",
+      "reference_id": null
+    },
+    {
+      "ordinal": 12,
+      "relation_id": "relation:sha256:4b8691b997d4a1ca877822e8a8ce3a07d5f829c5a8936c1fcc9cd93d944fba0d",
+      "type": "contrast",
+      "status": "supported",
+      "reference_id": "R21"
+    }
+  ],
+  "limit": "48 manually selected core positive relationships; same unblinded assistant, not an exhaustive or unique true graph. No true-negative accuracy or baseline F1 was established."
+}

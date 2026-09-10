@@ -1,0 +1,10 @@
+{
+  "tested_implementation_commit": "ab667a95320dfab060ae6878220f93008126ee72",
+  "command": "PYTHONPATH=backend/src:backend/tests:local_ai/src python -m pytest backend/tests local_ai/tests -q",
+  "passed": 181,
+  "warnings": 1,
+  "wall_seconds": 8.97,
+  "warning": "Existing Starlette/httpx deprecation warning",
+  "evidence_kind": "Contemporaneously recorded tool result summarized in committed qualification report; raw console transcript was not retained. Not rerun during archiving.",
+  "limitation": "Regression success does not establish semantic accuracy."
+}

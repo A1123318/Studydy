@@ -1,0 +1,20 @@
+[
+  {
+    "id": "A",
+    "pages": 45,
+    "topic": "Programming: arrays and strings",
+    "source_sha256": "07b1c1c1352934f75cc5182aa15db8a702138861f7557f470f9200ac33b06d13"
+  },
+  {
+    "id": "B",
+    "pages": 26,
+    "topic": "Data structures",
+    "source_sha256": "7b8aa34d7ffe51d7ed5965da46972afa77dcff64bd8dd6e5108fa5c70ae1d939"
+  },
+  {
+    "id": "C",
+    "pages": 37,
+    "topic": "Performance appraisal",
+    "source_sha256": "378c265fa66f41213337a48a03532fede64ef92b19ed9a28d6769d18d55139a4"
+  }
+]

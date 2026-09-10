@@ -1,0 +1,80 @@
+{
+  "schema": "material-semantics-evidence-manifest/v1",
+  "archive_status": "research-record-only-do-not-merge-dev-main",
+  "tested_implementation_commit": "ab667a95320dfab060ae6878220f93008126ee72",
+  "pre-archive_branch_commit": "ce20b341d72d8e62fdfeb612a3a767e5de9a569a",
+  "files": {
+    "README.md": {
+      "bytes": 7750,
+      "sha256": "66b0f1ecb5ae0a0e669b41722ea71109fb654d2ab0791fabde33049a7a507ab2"
+    },
+    "archive-verification.json": {
+      "bytes": 281,
+      "sha256": "03d617076b860eecce74a5e63142edd4846296f050d526f839b6aed75b92e143"
+    },
+    "concept-coverage.json": {
+      "bytes": 13538,
+      "sha256": "7302ff775e5b3267dfddf5d4d4b785878178dca9c6ab2a191461c0e2f4570481"
+    },
+    "datasets.json": {
+      "bytes": 508,
+      "sha256": "c2971fb0fe53f43e3bcbdf602a3fc6c96dbe381696320264f2d9714d2fa09d88"
+    },
+    "export_evidence.py": {
+      "bytes": 9994,
+      "sha256": "f3e091a2ee3bf68a7ff21a5328c891a5a012b4922338e8e7acf0cea52868ceb2"
+    },
+    "full-run-results.json": {
+      "bytes": 9240,
+      "sha256": "1e6179547944d8dd68eb45b67c08977072ef70f4622add4ca73ea3c95812a946"
+    },
+    "generation-calls.json": {
+      "bytes": 54707,
+      "sha256": "bba60618fee378e5df769fb6e94d51f7a675cdb82e4012817ffdeb74b33d2c4b"
+    },
+    "private-archive-receipt.json": {
+      "bytes": 694,
+      "sha256": "ac66a341014c262e6cd237247c179b81f7e2bbb279fda923b08a2bd2c433b45b"
+    },
+    "protocol-validation.json": {
+      "bytes": 5889,
+      "sha256": "c549ece88822579c38420ca889b698e65cc89abe32849c54fbf0d727a6187c0d"
+    },
+    "regression-tests.json": {
+      "bytes": 567,
+      "sha256": "481c0dd6be040644f44dbca276fa790be92e45fe47603b7daa188c2f69d486ad"
+    },
+    "relation-reviews.json": {
+      "bytes": 84333,
+      "sha256": "f3609b7430557198a81dcf211063527cfc27e2a3dca44041aa561097bfbdd5f9"
+    },
+    "runs.json": {
+      "bytes": 5971,
+      "sha256": "6f498f563c91b73be1e164bcfab3a8cd46ea462f5dd9851bd72e77b8dc366fd3"
+    },
+    "runtime-settings.json": {
+      "bytes": 101499,
+      "sha256": "03778a8138551c087427cc48d51b5939cdc4ce23fbedabdd731493caae1ae67d"
+    },
+    "runtime-validation.json": {
+      "bytes": 12046,
+      "sha256": "18a55d3af24b5391f11e0254af910a5d28fdf3ac8c58d838bba779da7998fd91"
+    },
+    "source-core-review.json": {
+      "bytes": 10659,
+      "sha256": "3fe0d6ec4cb7373b7d90dcba01758326149014047343e5228a093ab02fe52378"
+    },
+    "source-record-hashes.json": {
+      "bytes": 7834,
+      "sha256": "b21a45ea45c8a79ebc95b6faa30335021ee69ef6817fd13dcba70e0f7ba06284"
+    },
+    "tokenizer-events.json": {
+      "bytes": 461448,
+      "sha256": "15a7b4b32aec338c35eb235426eade4fba024bd05a147436e152c6a9931137d8"
+    },
+    "verify_evidence.py": {
+      "bytes": 3793,
+      "sha256": "2f77f99d10b023f70d5d67841d0e105982b5f0e54db04194c879363d9a175816"
+    }
+  }
+}

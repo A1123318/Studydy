@@ -1,5 +1,7 @@
 # Material semantics：協定審計與 production 復現
 
+**封存決策：此分支保留作研究紀錄，不合併 `dev`／`main`；未證明整體產品收益。** 今日成功、失敗及後續兩份簡報測試已整合至[完整證據索引](experiments/2026-09-10-material-semantics/README.md)。較早的 qualified／待批准文字僅反映當時狀態。
+
 
 使用者已明確要求在 production 復現並完成必要測試。原 `012 low-01` 已透過 production `request_semantics` 共用的 `_execute_semantic_request`，向同一 resident Qwen 實際發出原樣 request；**15 題完整 final JSON 與原結果完全一致**，包含 status、type、direction、evidence 與 reason。
 

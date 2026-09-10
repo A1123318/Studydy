@@ -1,0 +1,14 @@
+{
+  "archive_name": "2026-09-10-material-semantics.tar.gz",
+  "archive_sha256": "3d69e935e70ddafe546510c2ba0d8273a4c97ecf049d6d5b399c824f9daa7794",
+  "archive_bytes": 58882992,
+  "payload_file_count": 1037,
+  "copied_source_files_hash_verified": 1031,
+  "private_manifest_sha256": "fca30d8dde9cdc1f3391e2944b552c6c55ef13c178e12139b8fffe6ba09b9cd8",
+  "archive_round_trip_all_payload_hashes_verified": true,
+  "credentials_included": false,
+  "python_caches_included": false,
+  "uploaded_to_git": false,
+  "storage_scope": "Private local copy outside the worktree; directory and compressed archive both retained.",
+  "tested_branch_snapshot_commit": "ce20b341d72d8e62fdfeb612a3a767e5de9a569a"
+}
