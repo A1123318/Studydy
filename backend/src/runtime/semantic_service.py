@@ -24,8 +24,9 @@ MATERIAL_OUTPUT_PROTOCOL = "think-then-json/v1"
 FINAL_BEGIN = "<final_json>"
 FINAL_END = "</final_json>"
 MATERIAL_FINAL_INSTRUCTION = (
-    "\nFinish the thinking region with </think>, then enclose the final JSON in "
-    "<final_json> and </final_json>. Use these final delimiters only once, for the answer. "
+    "\nWhen thinking is enabled, finish that region with </think>. Then enclose the final JSON in "
+    "<final_json> and </final_json>. When thinking is disabled, start the final JSON region directly. "
+    "Use these final delimiters only once, for the answer. "
     "Keep preparatory reasoning outside the final JSON; inside it include only the requested "
     "Concepts, Claims, Relations and concise learner-facing reasons. Emit nothing after </final_json>."
 )
@@ -176,29 +177,35 @@ def _reject_constant(_: str) -> None:
     raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
 
 
-def _material_prompt(task_lock: dict[str, Any]) -> str:
+def _material_prompt(task_lock: dict[str, Any], *, relation_judgment: bool = False) -> str:
     if task_lock.get("output_protocol") != MATERIAL_OUTPUT_PROTOCOL:
         raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
-    return task_lock["prompt"] + MATERIAL_FINAL_INSTRUCTION
+    instruction = MATERIAL_FINAL_INSTRUCTION
+    if relation_judgment:
+        instruction = instruction.replace("Concepts, Claims, Relations and concise learner-facing reasons", "decisions and concise reasons")
+    return task_lock["prompt"] + instruction
 
 
-def _material_response_format(schema: dict[str, Any]) -> dict[str, Any]:
+def _material_response_format(schema: dict[str, Any], *, thinking: bool = True) -> dict[str, Any]:
     # The resident service has no reasoning parser. Keep its native thinking
     # boundary, then apply the same strict schema to the final answer region.
+    final = {"type": "tag", "begin": FINAL_BEGIN,
+             "content": {"type": "json_schema", "json_schema": deepcopy(schema)}, "end": FINAL_END}
+    if not thinking:
+        return {"type": "structural_tag", "format": final}
     return {"type": "structural_tag", "format": {"type": "sequence", "elements": [
         {"type": "tag", "begin": "", "content": {"type": "any_text", "excludes": [FINAL_BEGIN]}, "end": "</think>"},
         {"type": "regex", "pattern": "[ \\t\\r\\n]*"},
-        {"type": "tag", "begin": FINAL_BEGIN,
-         "content": {"type": "json_schema", "json_schema": deepcopy(schema)}, "end": FINAL_END},
+        final,
     ]}}
 
 
-def parse_material_final(content: Any) -> dict[str, Any]:
+def parse_material_final(content: Any, *, thinking: bool = True) -> dict[str, Any]:
     """Return only final JSON; never return or retain the reasoning prefix."""
     if not isinstance(content, str):
         raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
     prefix, marker, final = content.partition(FINAL_BEGIN)
-    if not marker or not prefix.rstrip().endswith("</think>"):
+    if not marker or (thinking and not prefix.rstrip().endswith("</think>")) or (not thinking and prefix.strip()):
         raise SemanticServiceError("SEMANTIC_RESPONSE_INVALID")
     final = final.lstrip()
     try:
@@ -293,12 +300,14 @@ def request_semantics(
 
     service = _service(runtime_lock)
     try:
-        task_lock = runtime_lock["assessment" if task == "assessment_check" else task]
+        material_task = task in {"material_semantics", "material_relations"}
+        task_lock = ({**runtime_lock["material_semantics"], **runtime_lock["material_semantics"]["relation_judgment"]}
+                     if task == "material_relations" else runtime_lock["assessment" if task == "assessment_check" else task])
         prefix = "check_" if task == "assessment_check" else ""
-        prompt = _material_prompt(task_lock) if task == "material_semantics" else task_lock[prefix + "prompt"]
+        prompt = _material_prompt(task_lock, relation_judgment=task == "material_relations") if material_task else task_lock[prefix + "prompt"]
         max_tokens = task_lock[prefix + "max_tokens"]
         if (
-            task not in {"material_semantics", "assessment", "assessment_check"}
+            task not in {"material_semantics", "material_relations", "assessment", "assessment_check"}
             or not isinstance(prompt, str)
             or not prompt
             or type(max_tokens) is not int
@@ -307,20 +316,20 @@ def request_semantics(
             or not isinstance(response_schema, dict)
         ):
             raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
-        if (visual_pages or request.get("visual_pages")) and task != "material_semantics":
+        if (visual_pages or request.get("visual_pages")) and not material_task:
             raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
         if len(visual_pages) > task_lock.get("max_visual_pages", 0):
             raise SemanticServiceError("SEMANTIC_VISUAL_REFERENCE_INVALID")
         messages = _messages(prompt, request, visual_pages)
         generation = deepcopy(task_lock[prefix + "generation"])
-        margin = task_lock["context_margin_tokens"] if task == "material_semantics" else 0
+        margin = task_lock["context_margin_tokens"] if material_task else 0
         body = {
             **generation,
             "model": service["model_id"],
             "messages": messages,
             "max_tokens": max_tokens,
-            **({"skip_special_tokens": False} if task == "material_semantics" else {}),
-            "response_format": _material_response_format(response_schema) if task == "material_semantics" else {
+            **({"skip_special_tokens": False} if material_task else {}),
+            "response_format": _material_response_format(response_schema, thinking=generation["chat_template_kwargs"]["enable_thinking"]) if material_task else {
                 "type": "json_schema",
                 "json_schema": {
                     "name": task,
@@ -371,7 +380,7 @@ def _execute_semantic_request(
         if choice.get("finish_reason") != "stop":
             raise SemanticServiceError("SEMANTIC_OUTPUT_TRUNCATED")
         content = choice["message"]["content"]
-        result = parse_material_final(content) if task == "material_semantics" else json.loads(
+        result = parse_material_final(content, thinking=body["chat_template_kwargs"]["enable_thinking"]) if task in {"material_semantics", "material_relations"} else json.loads(
             content, object_pairs_hook=_unique_object, parse_constant=_reject_constant,
         )
     except SemanticServiceError:
@@ -385,19 +394,23 @@ def _execute_semantic_request(
 
 def material_request_fits(
     client: httpx.Client, runtime_lock: dict[str, Any], request: dict[str, Any],
-    *, visual_pages: tuple[VisualPage, ...] = (),
+    *, visual_pages: tuple[VisualPage, ...] = (), relation_judgment: bool = False,
 ) -> bool:
     """使用 resident tokenizer 與正式推論相同的 prompt 和輸出預算。"""
 
     service = _service(runtime_lock)
     task = runtime_lock["material_semantics"]
-    prompt = _material_prompt(task)
+    if relation_judgment:
+        task = {**task, **task["relation_judgment"]}
+    prompt = _material_prompt(task, relation_judgment=relation_judgment)
     if len(request.get("visual_pages", [])) > task["max_visual_pages"]:
         return False
     try:
         count = _token_count(client, service, _messages(prompt, request, visual_pages), task["generation"]["chat_template_kwargs"])
         if count + task["max_tokens"] + task["context_margin_tokens"] > service["max_model_len"]:
             return False
+        if relation_judgment:
+            return True
         # 原始 block 不截斷；多個 block 分批，避免新教材擠爆固定輸出預算。
         if sum(len(section["evidence"]) for section in request["sections"]) == 1:
             return True

@@ -33,7 +33,7 @@ def test_preflight_and_both_tasks_use_the_same_resident_service():
         content = {"material_semantics": {"concepts": [], "relations": []}, "assessment": {"schema": "assessment-semantics-response/v2", "candidates": []}}[task]
         encoded = json.dumps(content)
         if task == "material_semantics":
-            encoded = "</think><final_json>" + encoded + "</final_json>"
+            encoded = "<final_json>" + encoded + "</final_json>"
         return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": encoded}}]})
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
@@ -63,7 +63,7 @@ def test_assessment_tokenizer_and_generation_both_disable_thinking():
     ]
 
 
-@pytest.mark.parametrize("count, fits", [(27648, True), (27649, False)])
+@pytest.mark.parametrize("count, fits", [(23552, True), (23553, False)])
 def test_material_packing_and_generation_share_exact_token_budget(count, fits):
     requests = []
     def respond(request):
@@ -71,7 +71,7 @@ def test_material_packing_and_generation_share_exact_token_budget(count, fits):
         requests.append((request.url.path, body))
         if request.url.path == "/tokenize":
             return httpx.Response(200, json={"count": count, "max_model_len": 32768})
-        assert body["max_tokens"] == 4096
+        assert body["max_tokens"] == 8192
         return httpx.Response(200, json={"choices": [{
             "finish_reason": "length", "message": {"content": '{"concepts":[]}'},
         }]})
@@ -81,7 +81,7 @@ def test_material_packing_and_generation_share_exact_token_budget(count, fits):
         with pytest.raises(SemanticServiceError, match="SEMANTIC_OUTPUT_TRUNCATED" if fits else "SEMANTIC_INPUT_TOO_LARGE"):
             request_semantics(client, **arguments)
     assert requests[0][1]["messages"] == requests[1][1]["messages"]
-    template = {"enable_thinking": True, "reasoning_effort": "xhigh"}
+    template = {"enable_thinking": False}
     assert requests[0][1]["chat_template_kwargs"] == template
     assert requests[1][1]["chat_template_kwargs"] == template
     if fits:
@@ -123,7 +123,7 @@ def test_preflight_rejects_more_than_one_served_model():
             preflight_semantic_service(_lock(), client=client)
 
 
-@pytest.mark.parametrize("fresh_count,fits", [(1536, True), (1537, False)])
+@pytest.mark.parametrize("fresh_count,fits", [(8192, True), (8193, False)])
 def test_material_bundle_budget_excludes_existing_catalog(fresh_count, fits):
     """舊概念目錄只佔 context；新增教材另有輸出容量預算。"""
     calls = []
@@ -131,7 +131,7 @@ def test_material_bundle_budget_excludes_existing_catalog(fresh_count, fits):
         body = json.loads(request.content)
         material = json.loads(body["messages"][-1]["content"].split("\nINPUT:\n", 1)[1])
         calls.append(material)
-        return httpx.Response(200, json={"count": 6000 if material["existing_concepts"] else fresh_count, "max_model_len": 32768})
+        return httpx.Response(200, json={"count": 14000 if material["existing_concepts"] else fresh_count, "max_model_len": 32768})
     material = {"existing_concepts": [{"k": "array", "l": "Array", "a": [], "c": ["Existing claim"], "e": [0]}],
                 "sections": [{"title": "New material", "evidence": [[1, 1, "paragraph", "First"], [2, 2, "paragraph", "Second"]]}]}
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
@@ -157,3 +157,30 @@ def test_material_final_boundary_fails_closed_without_exposing_prefix(content):
     with pytest.raises(SemanticServiceError) as error:
         parse_material_final(content)
     assert str(error.value) == "SEMANTIC_RESPONSE_INVALID"
+
+
+def test_material_relation_judgment_uses_low_with_full_context_budget():
+    seen = []
+    def respond(request):
+        body = json.loads(request.content)
+        seen.append((request.url.path, body))
+        assert body["chat_template_kwargs"] == {"enable_thinking": True, "reasoning_effort": "low"}
+        if request.url.path == "/tokenize":
+            return httpx.Response(200, json={"count": 12000, "max_model_len": 32768})
+        assert body["seed"] == 17001
+        assert "Concepts, Claims, Relations" not in body["messages"][0]["content"]
+        assert "A_to_B means" in body["messages"][0]["content"]
+        assert body["response_format"]["format"]["type"] == "sequence"
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {
+            "content": '</think><final_json>{"decisions":[]}</final_json>'}}]})
+    document = {"pairs": [], "sections": [{"title": "Sources", "evidence": [[0, 1, "paragraph", "First"], [1, 2, "paragraph", "Second"]]}]}
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        assert material_request_fits(client, _lock(), document, relation_judgment=True)
+        assert request_semantics(client, runtime_lock=_lock(), task="material_relations", request=document, response_schema={}) == {"decisions": []}
+    assert seen[0][1]["messages"] == seen[-1][1]["messages"]
+
+
+def test_disabled_material_thinking_requires_direct_final_region():
+    assert parse_material_final('<final_json>{"concepts":[],"relations":[]}</final_json>', thinking=False) == {"concepts": [], "relations": []}
+    with pytest.raises(SemanticServiceError, match="SEMANTIC_RESPONSE_INVALID"):
+        parse_material_final('unexpected</think><final_json>{"concepts":[],"relations":[]}</final_json>', thinking=False)

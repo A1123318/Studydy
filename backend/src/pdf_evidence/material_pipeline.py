@@ -24,6 +24,9 @@ from knowledge_map.structure import (
     build_semantic_bundles,
     semantic_request,
     semantic_response_schema,
+    material_relation_pairs,
+    material_relation_schema,
+    apply_material_relation_decisions,
 )
 from runtime.semantic_service import (
     MATERIAL_OUTPUT_PROTOCOL,
@@ -54,8 +57,23 @@ class MaterialAnalysisError(RuntimeError):
         self.reason_code = reason_code
 
 
+
+def _material_generation_valid(generation: Any) -> bool:
+    if not isinstance(generation, dict):
+        return False
+    template = generation.get("chat_template_kwargs")
+    return template in (
+        {"enable_thinking": False},
+        {"enable_thinking": True, "reasoning_effort": "low"},
+        {"enable_thinking": True, "reasoning_effort": "xhigh"},
+    ) and generation == {
+        "temperature": 1.0, "top_p": 0.95, "top_k": 20,
+        "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0,
+        "seed": 17001, "chat_template_kwargs": template,
+    }
+
 def validate_runtime_lock(lock: Any) -> dict[str, Any]:
-    """Final lock 不允許第二 Python、verifier 或第二 semantic lifecycle。"""
+    """Material stages share the fixed Python and resident semantic lifecycle."""
 
     try:
         if not isinstance(lock, dict) or set(lock) != {
@@ -107,7 +125,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or set(material) != {
                 "request_schema", "response_schema", "bundle_policy",
                 "max_tokens", "prompt", "retry_attempts", "generation", "max_new_input_tokens",
-                "max_visual_pages", "context_margin_tokens", "output_protocol",
+                "max_visual_pages", "context_margin_tokens", "output_protocol", "relation_judgment",
             }
             or material["request_schema"] != "material-semantics-request/v2"
             or material["response_schema"] != "material-semantics-response/v4"
@@ -121,15 +139,16 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or not 0 <= material["context_margin_tokens"] < semantic["max_model_len"] - material["max_tokens"]
             or type(material["max_visual_pages"]) is not int
             or not 0 <= material["max_visual_pages"] <= MAX_VISUAL_PAGES
-            or material["generation"] != {
-                "temperature": 1.0, "top_p": 0.95, "top_k": 20,
-                "min_p": 0.0, "presence_penalty": 0.0, "repetition_penalty": 1.0,
-                "chat_template_kwargs": {
-                    "enable_thinking": True,
-                    "reasoning_effort": material["generation"]["chat_template_kwargs"]["reasoning_effort"],
-                },
-            }
-            or material["generation"]["chat_template_kwargs"]["reasoning_effort"] not in {"xhigh", "low"}
+            or not _material_generation_valid(material["generation"])
+            or set(material["relation_judgment"]) != {"max_pairs", "max_tokens", "generation", "prompt"}
+            or type(material["relation_judgment"]["max_pairs"]) is not int
+            or not 1 <= material["relation_judgment"]["max_pairs"] <= 15
+            or type(material["relation_judgment"]["max_tokens"]) is not int
+            or not 1 <= material["relation_judgment"]["max_tokens"] < semantic["max_model_len"] - material["context_margin_tokens"]
+            or not _material_generation_valid(material["relation_judgment"]["generation"])
+            or material["relation_judgment"]["generation"]["chat_template_kwargs"] != {"enable_thinking": True, "reasoning_effort": "low"}
+            or not isinstance(material["relation_judgment"]["prompt"], str)
+            or not material["relation_judgment"]["prompt"]
             or not isinstance(material["prompt"], str)
             or not material["prompt"]
             or set(assessment) != {
@@ -157,7 +176,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or ocr["native_schema"] != "page-native/v3"
             or ocr["processing_policy"] != "native-first-page-evidence/v10"
             or ocr["normalizer_policy"] != "ocr-text-nfc-line-preserving/v1"
-            or material["retry_attempts"] != 2
+            or material["retry_attempts"] != 1
         ):
             raise ValueError
         return lock
@@ -342,10 +361,10 @@ def analyze_material(
                 for reference in request_document.get("visual_pages", [])
             )
 
-        def prepare_request(request_document: dict[str, Any]) -> dict[str, Any] | None:
+        def prepare_request(request_document: dict[str, Any], *, relation_judgment: bool = False) -> dict[str, Any] | None:
             references = request_document.get("visual_pages", [])
             if not references:
-                return request_document if material_request_fits(http, lock, request_document) else None
+                return request_document if material_request_fits(http, lock, request_document, relation_judgment=relation_judgment) else None
             areas = context["visual_page_areas"]
             ranked = sorted(references, key=lambda ref: (-areas.get(ref["page"], 0.0), ref["page"]))
             # Prefer the complete text context over additional images. Keep at
@@ -354,7 +373,7 @@ def analyze_material(
             for count in range(len(ranked), 0, -1):
                 selected = sorted(ranked[:count], key=lambda ref: ref["page"])
                 candidate = {**request_document, "visual_pages": selected}
-                if material_request_fits(http, lock, candidate, visual_pages=visuals(candidate)):
+                if material_request_fits(http, lock, candidate, visual_pages=visuals(candidate), relation_judgment=relation_judgment):
                     return candidate
             return None
 
@@ -406,7 +425,62 @@ def analyze_material(
                         "evidence_refs": [item["evidence_id"] for item in bundle["evidence"]],
                         "pages": request_document["visual_pages"],
                     })
-                report("semantics", bundle["evidence"][-1]["page"], len(page_numbers))
+                if bundle["evidence"][-1]["page"] < len(page_numbers):
+                    report("semantics", bundle["evidence"][-1]["page"], len(page_numbers))
+            pairs = material_relation_pairs(context, state)
+            if pairs:
+                # Draft edges are proposals only. The final graph receives only
+                # decisions made with fixed, production-generated endpoints.
+                state.relations = []
+                full_bundle = next(build_semantic_bundles(context, state=SemanticState(), fits=lambda _request: True))
+                batch_size = lock["material_semantics"]["relation_judgment"]["max_pairs"]
+                for offset in range(0, len(pairs), batch_size):
+                    batch = pairs[offset:offset + batch_size]
+                    pages = {page for pair in batch for page in pair["pages"]}
+                    local_context = {**context, "visual_pages": [
+                        ref for ref in context.get("visual_pages", []) if ref["page"] in pages
+                    ]}
+                    # Prefer the complete document. If it exceeds 32K, retain
+                    # complete pages containing the endpoints' Claim sources.
+                    local_items = [item for item in full_bundle["evidence"] if item["page"] in pages]
+                    local_ids = {item["evidence_id"] for item in local_items}
+                    local_bundle = {"evidence": local_items, "sections": [
+                        {**section, "evidence_ids": [ref for ref in section["evidence_ids"] if ref in local_ids]}
+                        for section in full_bundle["sections"] if any(ref in local_ids for ref in section["evidence_ids"])
+                    ]}
+                    candidates = [full_bundle]
+                    if len(local_items) < len(full_bundle["evidence"]):
+                        candidates.append(local_bundle)
+                    request_document = None
+                    for review_bundle in candidates:
+                        document = semantic_request(local_context, review_bundle, SemanticState())
+                        document.pop("existing_concepts")
+                        document["context_scope"] = "whole_document" if review_bundle is full_bundle else "endpoint_pages"
+                        document["pairs"] = [{key: value for key, value in pair.items() if key != "draft_confidence"} for pair in batch]
+                        request_document = prepare_request(document, relation_judgment=True)
+                        if request_document is not None:
+                            break
+                    if request_document is None:
+                        raise MaterialAnalysisError("SEMANTIC_INPUT_TOO_LARGE")
+                    selected_visuals = visuals(request_document)
+                    semantic_calls += 1
+                    response = semantic_call(
+                        http, runtime_lock=lock, task="material_relations", request=request_document,
+                        response_schema=material_relation_schema(
+                            [pair["id"] for pair in batch],
+                            [row[0] for section in request_document["sections"] for row in section["evidence"]],
+                        ),
+                        **({"visual_pages": selected_visuals} if selected_visuals else {}),
+                    )
+                    apply_material_relation_decisions(response, pairs=batch, context=context, bundle=review_bundle, state=state)
+                    if selected_visuals:
+                        visual_requests.append({
+                            "evidence_refs": [item["evidence_id"] for item in review_bundle["evidence"]],
+                            "pages": request_document["visual_pages"],
+                        })
+            report("semantics", len(page_numbers), len(page_numbers))
+        except (SemanticServiceError, ValueError) as error:
+            raise MaterialAnalysisError(_reason(error)) from None
         finally:
             if owned_client:
                 http.close()

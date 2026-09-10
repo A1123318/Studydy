@@ -135,7 +135,7 @@ def test_same_multimodal_messages_reach_tokenizer_and_resident_qwen(tmp_path, co
         observed.append((message.url.path, body))
         if message.url.path == "/tokenize":
             return httpx.Response(200, json={"count": 100, "max_model_len": 32768})
-        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": '</think><final_json>{"concepts":[],"relations":[]}</final_json>'}}]})
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": '<final_json>{"concepts":[],"relations":[]}</final_json>'}}]})
     lock = _settings(tmp_path)["runtime_lock"]
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         assert material_request_fits(client, lock, request, visual_pages=visuals)
@@ -193,7 +193,7 @@ def test_low_candidate_reserves_output_and_margin_within_32k(tmp_path, count, fi
     request, visuals = _visual_request(tmp_path)
     lock = _settings(tmp_path)["runtime_lock"]
     lock["material_semantics"].update(max_new_input_tokens=8192, max_tokens=8192)
-    lock["material_semantics"]["generation"]["chat_template_kwargs"]["reasoning_effort"] = "low"
+    lock["material_semantics"]["generation"]["chat_template_kwargs"] = {"enable_thinking": True, "reasoning_effort": "low"}
     pipeline.validate_runtime_lock(lock)
     calls = []
     def respond(message):
@@ -277,7 +277,7 @@ def test_truncated_semantics_does_not_leave_private_page_renders(tmp_path, monke
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         with pytest.raises(pipeline.MaterialAnalysisError, match="SEMANTIC_OUTPUT_TRUNCATED"):
             pipeline.analyze_material(_request(path), _settings(tmp_path), client=client, semantic_call=truncated)
-    assert len(attempts) == 2
+    assert len(attempts) == 1
     assert all(not location.exists() for location in locations)
 
 

@@ -406,6 +406,97 @@ def semantic_request(
     return request
 
 
+
+def material_relation_pairs(context: dict[str, Any], state: SemanticState) -> list[dict[str, Any]]:
+    """Judge generated endpoint pairs without exposing the draft type or direction."""
+    handles = {item["evidence_id"]: index for index, item in enumerate(context["evidence"])}
+    seen: set[tuple[str, str]] = set()
+    pairs = []
+    for relation in state.relations:
+        a, b = sorted((relation["source_concept"], relation["target_concept"]))
+        if (a, b) in seen:
+            continue
+        seen.add((a, b))
+        refs = {
+            key: list(dict.fromkeys(handles[span["evidence_id"]]
+                                   for claim in state.concepts[key]["claims"]
+                                   for span in claim["source_spans"]))
+            for key in (a, b)
+        }
+        pairs.append({
+            "id": f"pair_{len(pairs) + 1}", "a": state.concepts[a]["label"], "b": state.concepts[b]["label"],
+            "a_id": a, "b_id": b, "a_evidence": refs[a], "b_evidence": refs[b],
+            "pages": sorted({context["evidence"][ref]["page"] for ref in refs[a] + refs[b]}),
+            "draft_confidence": relation["confidence"],
+        })
+    return pairs
+
+
+def material_relation_schema(pair_ids: list[str], evidence_handles: list[int]) -> dict[str, Any]:
+    def decision(statuses: list[str], types: list[str], directions: list[str]) -> dict[str, Any]:
+        return {
+            "type": "object", "additionalProperties": False,
+            "required": ["id", "status", "type", "direction", "evidence", "reason"],
+            "properties": {
+                "id": {"type": "string", "enum": pair_ids},
+                "status": {"type": "string", "enum": statuses},
+                "type": {"type": "string", "enum": types},
+                "direction": {"type": "string", "enum": directions},
+                "evidence": {"type": "array", "items": {"type": "integer", "enum": evidence_handles}},
+                "reason": {"type": "string"},
+            },
+        }
+    # These are the combinations already required by the graph validator.
+    # They do not choose a relation or its direction for any particular pair.
+    choices = [
+        decision(["supported"], sorted(set(RELATION_TYPES) - {"contrast"}), ["A_to_B", "B_to_A"]),
+        decision(["supported"], ["contrast"], ["A_to_B", "B_to_A", "symmetric"]),
+        decision(["no_relation", "insufficient_evidence", "needs_review"], ["none"], ["none"]),
+    ]
+    return {"type": "object", "additionalProperties": False, "required": ["decisions"], "properties": {
+        "decisions": {"type": "array", "items": {"anyOf": choices}},
+    }}
+
+
+def apply_material_relation_decisions(
+    response: dict[str, Any], *, pairs: list[dict[str, Any]],
+    context: dict[str, Any], bundle: dict[str, Any], state: SemanticState,
+) -> None:
+    decisions = response.get("decisions") if isinstance(response, dict) else None
+    expected = {pair["id"]: pair for pair in pairs}
+    if (not isinstance(decisions, list) or len(decisions) != len(pairs)
+            or any(not isinstance(row, dict) or set(row) != {"id", "status", "type", "direction", "evidence", "reason"}
+                   or not isinstance(row["id"], str) for row in decisions)
+            or {row["id"] for row in decisions} != set(expected)):
+        raise ValueError("SEMANTIC_OUTPUT_INVALID")
+    proposals = []
+    abstentions = 0
+    supplied = {item["evidence_id"] for item in bundle["evidence"]}
+    allowed = {i for i, item in enumerate(context["evidence"]) if item["evidence_id"] in supplied}
+    for row in decisions:
+        if (any(not isinstance(row[key], str) for key in ("status", "type", "direction", "reason"))
+                or not row["reason"].strip() or not isinstance(row["evidence"], list)
+                or any(type(ref) is not int or ref not in allowed for ref in row["evidence"])):
+            raise ValueError("SEMANTIC_OUTPUT_INVALID")
+        if row["status"] != "supported":
+            if (row["status"] not in {"no_relation", "insufficient_evidence", "needs_review"}
+                    or row["type"] != "none" or row["direction"] != "none"):
+                raise ValueError("SEMANTIC_OUTPUT_INVALID")
+            abstentions += 1
+            continue
+        if (row["type"] not in RELATION_TYPES or row["direction"] not in {"A_to_B", "B_to_A", "symmetric"}
+                or (row["direction"] == "symmetric" and row["type"] != "contrast")):
+            raise ValueError("SEMANTIC_OUTPUT_INVALID")
+        pair = expected[row["id"]]
+        source, target = pair["a_id"], pair["b_id"]
+        if row["direction"] == "B_to_A":
+            source, target = target, source
+        proposals.append({"s": source, "t": target, "k": row["type"], "r": row["reason"],
+                          "e": row["evidence"], "c": pair["draft_confidence"]})
+    # Reuse the existing source, endpoint and literal boundaries; a judge cannot bypass them.
+    apply_semantic_response({"concepts": [], "relations": proposals}, context=context, bundle=bundle, state=state)
+    state.rejected_relations += abstentions
+
 def _expand_claim(claim: Any, sources: list[dict[str, Any]]) -> dict[str, Any] | None:
     """模型只選完整 Evidence ID；引用文字由程式展開，不接受手算字元範圍。"""
 
