@@ -5,8 +5,6 @@ import { writeRoute } from "../../app/routes";
 import { Icon } from "../../ui/Icon";
 import {
   formatFileSize,
-  readLatestMaterialRun,
-  rememberLatestMaterialRun,
   validatePdfFile,
   validatePdfSelection,
 } from "./material-flow";
@@ -16,7 +14,6 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [latestRun] = useState(readLatestMaterialRun);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadKey = useRef(crypto.randomUUID());
   const runKey = useRef(crypto.randomUUID());
@@ -46,8 +43,6 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
         material_id: material.material_id,
         source_artifact_id: material.source_artifact_id,
       }, runKey.current);
-      const pointer = { materialId: run.material_id, runId: run.run_id };
-      rememberLatestMaterialRun(pointer);
       writeRoute({ name: "material-run", materialId: run.material_id, runId: run.run_id });
     } catch (error) {
       setMessage(errorMessage(error));
@@ -135,13 +130,6 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
             <Icon name="upload" size={18} />
             {isSubmitting ? "正在建立處理作業…" : "上傳並分析完整教材"}
           </button>
-          {latestRun && (
-            <button
-              className="secondary-button full-button latest-run-button"
-              type="button"
-              onClick={() => writeRoute({ name: "material-run", ...latestRun })}
-            ><Icon name="process" size={18} />返回最近處理作業</button>
-          )}
           <p className="privacy-note"><Icon name="lock" size={14} /> 教材只交由本機 Studydy 流程處理</p>
         </section>
 

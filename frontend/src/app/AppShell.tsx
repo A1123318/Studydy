@@ -53,10 +53,11 @@ function routeNavigation(route: AppRoute): NavItem[] {
   return items;
 }
 
-export function AppShell({ children, route, sessionStatus }: {
+export function AppShell({ children, route, sessionStatus, accountAction }: {
   children: React.ReactNode;
   route: AppRoute;
   sessionStatus: SessionStatus;
+  accountAction?: React.ReactNode;
 }) {
   const isWorkspace = route.name === "knowledge-map" || route.name === "study-session";
   const sessionCopy = sessionStatus === "ready"
@@ -79,6 +80,7 @@ export function AppShell({ children, route, sessionStatus }: {
           <span aria-hidden="true" />
           {sessionCopy}
         </span>
+        {accountAction}
       </header>
 
       {isWorkspace && (

@@ -19,6 +19,16 @@ class ApiErrorView(_Closed):
     message: Literal["Request could not be completed."]
 
 
+class AccountCredentials(_Closed):
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=15, max_length=128, repr=False)
+
+
+class LearnerIdentityView(_Closed):
+    schema_: Literal["learner-identity/v1"] = Field(default="learner-identity/v1", alias="schema")
+    learner_id: UUID
+
+
 class MaterialView(_Closed):
     schema_: Literal["material/v1"] = Field(alias="schema")
     material_id: UUID

@@ -17,17 +17,35 @@ backend/.venv/bin/python backend/tests/runtime/browser_e2e_runner.py
 
 Backend tests create a pinned disposable PostgreSQL 18 container unless a private
 `STUDYDY_TEST_POSTGRES_DSN` pointing at a dedicated `studydy_test*` control database is supplied.
-They cover the single migration, owner isolation, immutable Knowledge Structure, source-bound
+They cover fresh installation and the additive credentials migration, owner isolation, immutable Knowledge Structure, source-bound
 Assessment, private answer, server-side scoring, append-only AnswerEvent, mastery, guidance,
 idempotency, stale state, and the HTTP API closed loop.
 
-The resource-free Knowledge Structure v2 cutover requires a fresh pre-release database. Do not
-apply the edited initial migration over a database with a different recorded checksum. Use a new
-test database and artifact root; retain historical qualification outputs independently.
+The accepted Knowledge Structure v2 schema can be upgraded with `0002_learner_credentials.sql`;
+existing learner IDs and owners remain unchanged. Migration tests apply `0001`, save synthetic
+records, apply `0002`, read the records again, and verify a repeat migration is a no-op. Databases
+from before the accepted initial-schema checksum still require a separate migration decision.
 
-The browser runner starts only a disposable Vite process. Its API fixtures use the final public
+The standalone browser runner starts only a disposable Vite process. Its API fixtures use the final public
 contract and verify Document Tree layout, the five Relation styles/reason interaction, Evidence
 locator, StudySession, Assessment, and feedback. Real model behavior is qualified separately.
+
+## Account regression (local only)
+
+Build the frontend first, then run:
+
+```bash
+npm --prefix frontend run build
+PYTHONPATH=backend/src:backend/tests:local_ai/src backend/.venv/bin/pytest -q backend/tests/runtime
+```
+
+`test_account_browser.py` reserves local API port 8001 and frontend port 4173, starts the production
+frontend with Vite preview, and uses real account endpoints and a disposable PostgreSQL database.
+Keep those ports free. The fixture uses synthetic saved material and disables model preflight and
+worker startup only inside the test; it does not load models or start a cloud pod. The browser
+registers B, logs A out, tests private PDF/Map denial, and logs A in from a separate browser context
+without copying cookies or browser storage. This proves account behavior, not model quality or the
+later full restart/resume qualification.
 
 ## Runtime verification
 

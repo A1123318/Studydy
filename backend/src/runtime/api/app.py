@@ -19,6 +19,8 @@ from starlette.exceptions import HTTPException as StarletteHttpException
 from starlette.routing import Match
 
 from .models import (
+    AccountCredentials,
+    LearnerIdentityView,
     AnswerFeedbackView,
     AnswerSubmissionCreate,
     ApiErrorView,
@@ -53,7 +55,8 @@ from ..learner_session import (
     IDLE_LIFETIME,
     SessionError,
     TrustedLearner,
-    create_session,
+    register_account,
+    login_account,
     refresh_session,
     resolve_session,
     revoke_session,
@@ -77,6 +80,8 @@ _ERROR_MESSAGE = "Request could not be completed."
 _SOURCE_LIMIT = 104_857_600
 _ERROR_STATUS = {
     "REQUEST_INVALID": (400, False),
+    "INVALID_CREDENTIALS": (401, False),
+    "ACCOUNT_UNAVAILABLE": (409, False),
     "SESSION_REQUIRED": (401, False),
     "ORIGIN_NOT_ALLOWED": (403, False),
     "RESOURCE_NOT_FOUND": (404, False),
@@ -198,6 +203,8 @@ def _error_response(reason_code: str, *, status_code: int | None = None) -> JSON
 
 def _fixed_exception(error: Exception) -> str:
     reason = str(error)
+    if isinstance(error, SessionError) and reason in _ERROR_STATUS:
+        return reason
     if "IDEMPOTENCY_CONFLICT" in reason or reason in {
         "MATERIAL_RUN_IDEMPOTENCY_CONFLICT",
         "ANSWER_ALREADY_SUBMITTED",
@@ -313,7 +320,7 @@ def _install_openapi(app: FastAPI) -> None:
         "/v1/study-sessions/{study_session_id}/assessments",
         "/v1/study-sessions/{study_session_id}/assessments/{assessment_revision}/submissions",
     }
-    public_paths = {"/v1/session"}
+    public_paths = {"/v1/accounts", "/v1/session/login"}
 
     def openapi() -> dict[str, Any]:
         if app.openapi_schema is not None:
@@ -370,6 +377,10 @@ def _install_openapi(app: FastAPI) -> None:
                 if path not in public_paths:
                     operation["security"] = [{"CookieSession": []}]
                 response_codes = {400, 500}
+                if path == "/v1/accounts":
+                    response_codes.add(409)
+                if path == "/v1/session/login":
+                    response_codes.add(401)
                 if path not in public_paths:
                     response_codes.add(401)
                 if method in {"post", "delete"}:
@@ -448,6 +459,13 @@ def create_app(settings: ApiSettings) -> FastAPI:
         except Exception as error:
             return _error_response(_fixed_exception(error))
 
+    @app.middleware("http")
+    async def private_response_cache(request: Request, call_next: Callable):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Cookie"
+        return response
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(_: Request, __: RequestValidationError):
         return _error_response("REQUEST_INVALID")
@@ -460,12 +478,27 @@ def create_app(settings: ApiSettings) -> FastAPI:
             return _error_response("REQUEST_INVALID", status_code=405)
         return _error_response("INTERNAL_ERROR")
 
-    @app.post("/v1/session", status_code=204, operation_id="createSession", tags=["session"])
-    async def create_session_route(request: Request, response: Response) -> None:
+    @app.post("/v1/accounts", status_code=201, response_model=LearnerIdentityView,
+              operation_id="registerAccount", tags=["session"])
+    def register_account_route(request: Request, response: Response, body: AccountCredentials) -> LearnerIdentityView:
         _require_query(request, set())
-        await _require_empty_body(request)
-        created = create_session(dsn=settings.dsn)
+        created = register_account(body.username, body.password, dsn=settings.dsn)
         _set_session_cookie(response, created.raw_token, settings)
+        return LearnerIdentityView(learner_id=created.learner_id)
+
+    @app.post("/v1/session/login", response_model=LearnerIdentityView,
+              operation_id="loginAccount", tags=["session"])
+    def login_account_route(request: Request, response: Response, body: AccountCredentials) -> LearnerIdentityView:
+        _require_query(request, set())
+        created = login_account(body.username, body.password, dsn=settings.dsn)
+        _set_session_cookie(response, created.raw_token, settings)
+        return LearnerIdentityView(learner_id=created.learner_id)
+
+    @app.get("/v1/session", response_model=LearnerIdentityView,
+             operation_id="readIdentity", tags=["session"])
+    def read_identity_route(request: Request) -> LearnerIdentityView:
+        _require_query(request, set())
+        return LearnerIdentityView(learner_id=_trusted_learner(request, settings).learner_id)
 
     @app.post("/v1/session/refresh", status_code=204, operation_id="refreshSession", tags=["session"])
     async def refresh_session_route(request: Request, response: Response) -> None:

@@ -12,7 +12,8 @@ PDF → native Evidence / optional OCR → document sections + Evidence bundle
 Supplementary resource recommendation (Agent 2) is removed. Concepts retain only the uploaded
 material's Evidence and PDF locators. Knowledge Structure and its public view use schema v2, with
 no resource-library fields or separate resource PDF kind. Fresh pre-release databases use the
-updated initial migration; historical evaluation artifacts remain separate and are not rewritten.
+initial migration followed by the additive learner-credentials migration; historical evaluation
+artifacts remain separate and are not rewritten.
 
 Qwen owns Concept boundaries, Claim meaning, cross-section consolidation, Relation proposals/reasons,
 and Assessment semantics. Code owns source identity, Evidence/span binding, exact technical literals,
@@ -77,4 +78,13 @@ stops, swaps, or unloads Qwen. Assessment uses the same authenticated loopback s
 mDeBERTa is removed.
 
 Pre-release persistence is a clean final schema. `knowledge_structures` stores one immutable artifact
-instead of parallel material/map artifacts. No legacy reader, writer, adapter, or upgrade path exists.
+instead of parallel material/map artifacts. The credentials migration upgrades the accepted schema
+without rewriting stored artifacts.
+
+Account credentials live on `learners`; `learner_sessions` remains the authorization authority.
+Registration creates one learner and session atomically. Login verifies the salted scrypt password
+hash and issues a new session for the same learner. Logout revokes only that session. Existing
+anonymous learners remain intact and are not automatically attached to accounts. All API/PDF
+responses are private and `no-store`. The frontend retires its client and unmounts private views on
+logout or session expiry; it never creates anonymous identities or replays failed writes under a
+new identity. The browser-global latest-material pointer and its consumers are removed.

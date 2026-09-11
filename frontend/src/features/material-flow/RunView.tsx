@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { ApiClientError, errorMessage, type StudydyApiClient } from "../../api/client";
+import { errorMessage, type StudydyApiClient } from "../../api/client";
 import type { MaterialProcessingRunView } from "../../api/contracts";
 import { writeRoute, type AppRoute } from "../../app/routes";
 import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
 import {
   automaticPollIntervalMs,
-  forgetLatestMaterialRun,
   materialElapsedLabel,
   materialFailureMessage,
   materialProgressStageLabel,
@@ -33,7 +32,6 @@ export function RunView({ apiClient, route }: {
         const next = await apiClient.getMaterialRun(route.runId);
         if (cancelled) return;
         if (next.material_id !== route.materialId) {
-          forgetLatestMaterialRun();
           throw new Error("RUN_MATERIAL_MISMATCH");
         }
         setRun(next);
@@ -43,9 +41,6 @@ export function RunView({ apiClient, route }: {
         }
       } catch (error) {
         if (!cancelled) {
-          if (error instanceof ApiClientError && error.reasonCode === "RESOURCE_NOT_FOUND") {
-            forgetLatestMaterialRun();
-          }
           setMessage(errorMessage(error));
         }
       }

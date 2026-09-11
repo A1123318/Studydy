@@ -41,7 +41,7 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
             process.wait()
 
 
-def main() -> int:
+def main(spec: str = "e2e/product-cutover.spec.ts", *, production: bool = False) -> int:
     if not _port_is_free():
         print("BROWSER_E2E_PORT_OCCUPIED")
         return 1
@@ -51,7 +51,7 @@ def main() -> int:
         log_path = Path(directory) / "vite.log"
         with log_path.open("wb") as log:
             vite = subprocess.Popen(
-                [str(VITE), "--host", "127.0.0.1", "--port", str(PORT), "--strictPort"],
+                [str(VITE), *(["preview"] if production else []), "--host", "127.0.0.1", "--port", str(PORT), "--strictPort"],
                 cwd=FRONTEND,
                 env=environment,
                 stdin=subprocess.DEVNULL,
@@ -72,7 +72,7 @@ def main() -> int:
                 else:
                     return 1
                 completed = subprocess.run(
-                    [str(PLAYWRIGHT), "test", "e2e/product-cutover.spec.ts"],
+                    [str(PLAYWRIGHT), "test", spec],
                     cwd=FRONTEND,
                     env=environment,
                     check=False,

@@ -100,7 +100,7 @@ async function json(route: Route, body: unknown, status = 200) {
 }
 
 async function routes(page: Page, view = structureView()) {
-  await page.route("**/v1/session", (route) => route.fulfill({ status: 204 }));
+  await page.route("**/v1/session", (route) => route.request().method() === "GET" ? json(route, { schema: "learner-identity/v1", learner_id: sessionId }) : route.fulfill({ status: 204 }));
   await page.route("**/v1/session/refresh", (route) => route.fulfill({ status: 204 }));
   await page.route(`**/v1/material-processing-runs/${runId}`, (route) => json(route, run));
   await page.route("**/v1/materials/*/knowledge-structures/**", (route) => json(route, view));

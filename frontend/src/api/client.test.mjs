@@ -71,11 +71,11 @@ test("unknown relation type and leaked private answer fail closed", async () => 
   await assert.rejects(leaked.getAssessment(sessionId, assessment.assessment_revision), (error) => error instanceof ApiClientError && error.kind === "schema");
 });
 
-test("session creation is coalesced and safe API errors stay fixed", async () => {
+test("session refresh is coalesced and safe API errors stay fixed", async () => {
   let calls = 0;
-  const client = new StudydyApiClient(async () => { calls += 1; return new Response(null, { status: 204 }); });
+  const client = new StudydyApiClient(async (path) => { calls += 1; return path.endsWith("refresh") ? new Response(null, { status: 204 }) : Response.json({ schema: "learner-identity/v1", learner_id: sessionId }); });
   await Promise.all([client.ensureSession(), client.ensureSession(), client.ensureSession()]);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 
   const paths = [];
   const recovered = new StudydyApiClient(async (input) => {
@@ -85,9 +85,55 @@ test("session creation is coalesced and safe API errors stay fixed", async () =>
     }
     return new Response(null, { status: 204 });
   });
-  await recovered.ensureSession();
-  assert.deepEqual(paths, ["/v1/session/refresh", "/v1/session"]);
+  await assert.rejects(recovered.ensureSession(), (error) => error.reasonCode === "SESSION_REQUIRED");
+  assert.deepEqual(paths, ["/v1/session/refresh"]);
 
   const failed = new StudydyApiClient(async () => Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, { status: 503 }));
   await assert.rejects(failed.getMaterialRun(runId), (error) => error instanceof ApiClientError && error.reasonCode === "STORAGE_UNAVAILABLE" && error.retryable);
+});
+
+
+test("expired writes are never replayed and retire the client", async () => {
+  const paths = [];
+  let expired = 0;
+  const client = new StudydyApiClient(async (path) => {
+    paths.push(path);
+    return Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: "SESSION_REQUIRED", retryable: false, message: "Request could not be completed." }, { status: 401 });
+  });
+  client.onSessionExpired = () => expired++;
+  await assert.rejects(client.createMaterial(new Blob(["pdf"], { type: "application/pdf" })), (error) => error.reasonCode === "SESSION_REQUIRED");
+  await assert.rejects(client.getMaterialRun(runId));
+  assert.deepEqual(paths, ["/v1/materials"]);
+  assert.equal(expired, 1);
+});
+
+test("logout discards delayed responses and blocks chained writes", async () => {
+  let finish;
+  let calls = 0;
+  const client = new StudydyApiClient(async (_path, init) => {
+    calls++;
+    assert.equal(init.cache, "no-store");
+    return new Promise(resolve => { finish = resolve; });
+  });
+  const pending = client.getMaterialRun(runId);
+  client.invalidate();
+  finish(Response.json(runView()));
+  await assert.rejects(pending, (error) => error.reasonCode === "SESSION_REQUIRED");
+  await assert.rejects(client.createMaterialRun({}, "old-write"));
+  assert.equal(calls, 1);
+});
+
+test("responses still parsing at logout cannot publish private data", async () => {
+  let finish;
+  let parsing;
+  const started = new Promise(resolve => { parsing = resolve; });
+  const client = new StudydyApiClient(async () => ({ ok: true, status: 200, json: () => {
+    parsing();
+    return new Promise(resolve => { finish = resolve; });
+  } }));
+  const pending = client.getMaterialRun(runId);
+  await started;
+  client.invalidate();
+  finish(runView());
+  await assert.rejects(pending, (error) => error.reasonCode === "SESSION_REQUIRED");
 });

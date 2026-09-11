@@ -224,3 +224,9 @@ code {
     transition-duration: .01ms !important;
   }
 }
+
+.account-form { max-width: 36rem; margin: 2rem auto; padding: 2rem; }
+.account-form label { display: grid; gap: .5rem; font-weight: 600; }
+.account-form input { padding: .75rem; border: 1px solid #9aabaa; border-radius: .5rem; }
+.account-form form > p { font-size: .875rem; }
+.account-form button { margin: .5rem .5rem 0 0; }

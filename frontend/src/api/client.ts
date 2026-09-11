@@ -21,7 +21,7 @@ type FetchRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Re
 type Json = Record<string, unknown>;
 
 const knownReasons = new Set<KnownApiReasonCode>([
-  "REQUEST_INVALID", "SESSION_REQUIRED", "ORIGIN_NOT_ALLOWED", "RESOURCE_NOT_FOUND",
+  "INVALID_CREDENTIALS", "ACCOUNT_UNAVAILABLE", "REQUEST_INVALID", "SESSION_REQUIRED", "ORIGIN_NOT_ALLOWED", "RESOURCE_NOT_FOUND",
   "IDEMPOTENCY_CONFLICT", "NO_SAFE_ASSESSMENT", "MATERIAL_TOO_LARGE",
   "MATERIAL_PDF_INVALID", "UNSUPPORTED_MEDIA_TYPE", "STORAGE_UNAVAILABLE", "INTERNAL_ERROR",
 ]);
@@ -170,7 +170,9 @@ function apiError(value: unknown): value is ApiErrorView {
 }
 
 function safeMessage(reason: ApiReasonCode): string {
-  if (reason === "SESSION_REQUIRED") return "工作階段已失效，請重新整理後再試。";
+  if (reason === "SESSION_REQUIRED") return "工作階段已失效，請重新登入。";
+  if (reason === "INVALID_CREDENTIALS") return "帳號或密碼不正確。";
+  if (reason === "ACCOUNT_UNAVAILABLE") return "這個帳號名稱無法使用，請選擇其他名稱。";
   if (reason === "RESOURCE_NOT_FOUND") return "找不到這筆資料，或你沒有權限讀取。";
   if (reason === "NO_SAFE_ASSESSMENT") return "目前沒有可安全提供的新題目。";
   if (reason === "MATERIAL_TOO_LARGE") return "PDF 不可超過 100 MiB。";
@@ -201,43 +203,80 @@ export class ApiClientError extends Error {
   get retryable(): boolean { return this.details.retryable ?? false; }
 }
 
+export type LearnerIdentity = { schema: "learner-identity/v1"; learner_id: string };
+
+function identity(value: unknown): value is LearnerIdentity {
+  const item = object(value);
+  return !!item && item.schema === "learner-identity/v1" && typeof item.learner_id === "string" && uuid.test(item.learner_id);
+}
+
 export class StudydyApiClient {
-  private sessionReady: Promise<void> | null = null;
+  private sessionReady: Promise<LearnerIdentity> | null = null;
+  private active = true;
+  private readonly pending = new Set<AbortController>();
   private readonly fetchRequest: FetchRequest;
+  onSessionExpired: (() => void) | null = null;
 
   constructor(fetchRequest: FetchRequest = fetch.bind(globalThis)) {
     this.fetchRequest = fetchRequest;
   }
 
-  async ensureSession(): Promise<void> {
+  invalidate(): void {
+    this.active = false;
+    this.sessionReady = null;
+    for (const controller of this.pending) controller.abort();
+    this.pending.clear();
+  }
+
+  private requireActive(): void {
+    if (!this.active) throw new ApiClientError("api", "工作階段已結束，請重新登入。", { reasonCode: "SESSION_REQUIRED" });
+  }
+
+  async ensureSession(): Promise<LearnerIdentity> {
+    this.requireActive();
     if (!this.sessionReady) {
       this.sessionReady = this.request("/v1/session/refresh", { method: "POST", headers: { Origin: origin() } })
-        .catch((error) => {
-          if (error instanceof ApiClientError && error.reasonCode === "SESSION_REQUIRED") {
-            return this.request("/v1/session", { method: "POST", headers: { Origin: origin() } });
-          }
-          throw error;
-        })
-        .then(() => undefined)
-        .catch((error) => { this.sessionReady = null; throw error; });
+        .then(() => this.currentIdentity())
+        .finally(() => { this.sessionReady = null; });
     }
     return this.sessionReady;
   }
 
-  private async request(path: string, init: RequestInit, retry = true): Promise<Response> {
+  currentIdentity(): Promise<LearnerIdentity> {
+    return this.json("/v1/session", { method: "GET" }, identity);
+  }
+
+  authenticate(mode: "login" | "register", username: string, password: string): Promise<LearnerIdentity> {
+    return this.json(mode === "register" ? "/v1/accounts" : "/v1/session/login", {
+      method: "POST", headers: { "Content-Type": "application/json", Origin: origin() },
+      body: JSON.stringify({ username, password }),
+    }, identity);
+  }
+
+  async logout(): Promise<void> {
+    await this.request("/v1/session", { method: "DELETE", headers: { Origin: origin() } });
+  }
+
+  private async request(path: string, init: RequestInit): Promise<Response> {
+    this.requireActive();
+    const controller = new AbortController();
+    this.pending.add(controller);
     let response: Response;
     try {
-      response = await this.fetchRequest(path, { ...init, credentials: "same-origin" });
+      response = await this.fetchRequest(path, { ...init, credentials: "same-origin", cache: "no-store", signal: controller.signal });
     } catch {
       throw new ApiClientError("network", "無法連線到 Studydy。", { reasonCode: "NETWORK_ERROR", retryable: true });
+    } finally {
+      this.pending.delete(controller);
     }
+    this.requireActive();
     if (response.ok) return response;
     let body: unknown;
     try { body = await response.json(); } catch { body = null; }
-    if (response.status === 401 && retry && path !== "/v1/session" && path !== "/v1/session/refresh") {
-      this.sessionReady = null;
-      await this.ensureSession();
-      return this.request(path, init, false);
+    this.requireActive();
+    if (response.status === 401 && apiError(body) && body.reason_code === "SESSION_REQUIRED") {
+      this.invalidate();
+      this.onSessionExpired?.();
     }
     if (!apiError(body)) throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status: response.status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
     const reason = knownReasons.has(body.reason_code as KnownApiReasonCode) ? body.reason_code as KnownApiReasonCode : "UNKNOWN_API_ERROR";
@@ -248,6 +287,7 @@ export class StudydyApiClient {
     const response = await this.request(path, init);
     let value: unknown;
     try { value = await response.json(); } catch { value = null; }
+    this.requireActive();
     if (!guard(value)) throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status: response.status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
     return value;
   }

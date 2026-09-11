@@ -167,9 +167,6 @@
   overflow-wrap: anywhere;
 }
 
-.latest-run-button {
-  margin-top: var(--space-3);
-}
 
 .state-actions {
   display: flex;

@@ -2,14 +2,6 @@ import type { MaterialProcessingRunView } from "../../api/contracts";
 
 export const maximumPdfBytes = 100 * 1024 * 1024;
 export const automaticPollIntervalMs = 1_500;
-const latestMaterialRunKey = "studydy.latest-material-run/v1";
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-export type LatestMaterialRunPointer = {
-  materialId: string;
-  runId: string;
-};
-
 export const materialProgressStages = [
   "queued",
   "evidence",
@@ -56,53 +48,6 @@ export function validatePdfSelection<T extends PdfFileDetails>(
   }
   const file = files[0];
   return { file, message: validatePdfFile(file) };
-}
-
-export function parseLatestMaterialRun(value: string | null): LatestMaterialRunPointer | null {
-  if (value === null) return null;
-  try {
-    const item = JSON.parse(value) as unknown;
-    if (
-      item === null
-      || typeof item !== "object"
-      || Array.isArray(item)
-      || Object.keys(item).length !== 2
-      || !("materialId" in item)
-      || !("runId" in item)
-      || typeof item.materialId !== "string"
-      || typeof item.runId !== "string"
-      || !uuidPattern.test(item.materialId)
-      || !uuidPattern.test(item.runId)
-    ) return null;
-    return { materialId: item.materialId, runId: item.runId };
-  } catch {
-    return null;
-  }
-}
-
-export function readLatestMaterialRun(): LatestMaterialRunPointer | null {
-  try {
-    return parseLatestMaterialRun(window.localStorage.getItem(latestMaterialRunKey));
-  } catch {
-    return null;
-  }
-}
-
-export function rememberLatestMaterialRun(pointer: LatestMaterialRunPointer): void {
-  if (!uuidPattern.test(pointer.materialId) || !uuidPattern.test(pointer.runId)) return;
-  try {
-    window.localStorage.setItem(latestMaterialRunKey, JSON.stringify(pointer));
-  } catch {
-    return;
-  }
-}
-
-export function forgetLatestMaterialRun(): void {
-  try {
-    window.localStorage.removeItem(latestMaterialRunKey);
-  } catch {
-    return;
-  }
 }
 
 export function formatFileSize(sizeBytes: number): string {

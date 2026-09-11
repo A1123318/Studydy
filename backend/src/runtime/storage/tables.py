@@ -32,6 +32,8 @@ class Learner(Base):
 
     learner_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    username: Mapped[str | None] = mapped_column(Text, unique=True)
+    password_hash: Mapped[str | None] = mapped_column(Text)
 
 
 class LearnerSession(Base):

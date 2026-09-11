@@ -3,13 +3,14 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from hashlib import sha256
+from hashlib import scrypt, sha256
 import re
 import secrets
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from .storage.database import DatabaseConfigurationError
 from .storage.tables import Learner, LearnerSession, database_session
@@ -54,36 +55,70 @@ def _token_digest(raw_token: str | None) -> bytes | None:
     return sha256(token_bytes).digest()
 
 
-def create_session(*, dsn: str | None = None) -> CreatedSession:
-    """原子建立 learner/session，raw token 只回傳這一次。"""
-
-    learner_id = uuid4()
-    session_id = uuid4()
+def _add_session(session: Session, learner_id: UUID) -> CreatedSession:
+    """沿用既有 session authority，僅為已確定的 learner 發行新 token。"""
     token_bytes = secrets.token_bytes(32)
-    raw_token = _encode_token(token_bytes)
-    token_digest = sha256(token_bytes).digest()
-    created_at = _utc_now()
-    idle_expires_at = created_at + IDLE_LIFETIME
-    absolute_expires_at = created_at + ABSOLUTE_LIFETIME
+    now = _utc_now()
+    session.add(LearnerSession(
+        session_id=uuid4(), learner_id=learner_id,
+        token_sha256=sha256(token_bytes).digest(), created_at=now,
+        idle_expires_at=now + IDLE_LIFETIME,
+        absolute_expires_at=now + ABSOLUTE_LIFETIME,
+        revoked_at=None, updated_at=now,
+    ))
+    return CreatedSession(learner_id=learner_id, raw_token=_encode_token(token_bytes))
 
+
+def _credentials(username: str, password: str) -> str:
+    username = username.strip().lower()
+    if re.fullmatch(r"[a-z0-9_]{3,32}", username) is None or not 15 <= len(password) <= 128:
+        raise SessionError("REQUEST_INVALID")
+    return username
+
+
+def _password_digest(password: str, salt: bytes) -> bytes:
+    # 使用標準函式庫 scrypt；128 MiB 記憶體成本，密碼不截斷或寫入 log。
+    return scrypt(password.encode("utf-8"), salt=salt, n=2**17, r=8, p=1,
+                  maxmem=256 * 1024 * 1024, dklen=32)
+
+
+def register_account(username: str, password: str, *, dsn: str | None = None) -> CreatedSession:
+    """原子建立 credentials、Learner 與 session，不接管既有匿名資料。"""
+    username = _credentials(username, password)
+    salt = secrets.token_bytes(16)
+    password_hash = "scrypt$131072$8$1$" + salt.hex() + "$" + _password_digest(password, salt).hex()
+    learner_id = uuid4()
     try:
         with database_session(dsn) as session:
-            session.add(Learner(learner_id=learner_id, created_at=created_at))
-            session.add(
-                LearnerSession(
-                    session_id=session_id,
-                    learner_id=learner_id,
-                    token_sha256=token_digest,
-                    created_at=created_at,
-                    idle_expires_at=idle_expires_at,
-                    absolute_expires_at=absolute_expires_at,
-                    revoked_at=None,
-                    updated_at=created_at,
-                )
-            )
+            session.add(Learner(learner_id=learner_id, created_at=_utc_now(),
+                                username=username, password_hash=password_hash))
+            session.flush()
+            created = _add_session(session, learner_id)
+    except IntegrityError as error:
+        if getattr(error.orig, "sqlstate", None) == "23505":
+            raise SessionError("ACCOUNT_UNAVAILABLE") from None
+        raise SessionError("SESSION_CREATE_FAILED") from None
     except (DatabaseConfigurationError, SQLAlchemyError):
         raise SessionError("SESSION_CREATE_FAILED") from None
-    return CreatedSession(learner_id=learner_id, raw_token=raw_token)
+    return created
+
+
+def login_account(username: str, password: str, *, dsn: str | None = None) -> CreatedSession:
+    """驗證密碼後為原 learner 建立 session；失效 token 不會被復活。"""
+    username = _credentials(username, password)
+    try:
+        with database_session(dsn) as session:
+            learner = session.scalar(select(Learner).where(Learner.username == username))
+            # 不存在的帳號也執行同成本雜湊，錯誤訊息不區分帳號或密碼。
+            stored = learner.password_hash if learner is not None else None
+            salt = bytes.fromhex(stored.split("$")[4]) if stored else bytes(16)
+            digest = _password_digest(password, salt)
+            if stored is None or not secrets.compare_digest(digest.hex(), stored.split("$")[5]):
+                raise SessionError("INVALID_CREDENTIALS")
+            created = _add_session(session, learner.learner_id)
+    except (DatabaseConfigurationError, SQLAlchemyError):
+        raise SessionError("SESSION_STORAGE_FAILED") from None
+    return created
 
 
 def resolve_session(
