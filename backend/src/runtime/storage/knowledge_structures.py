@@ -191,6 +191,8 @@ def read_knowledge_structure(
                 MaterialProcessingRun.output_binding,
                 MaterialProcessingRun.runtime_binding,
                 MaterialProcessingRun.source_artifact_id,
+                KnowledgeStructure.structure_revision,
+                KnowledgeStructure.run_id,
             ).join(
                 MaterialProcessingRun,
                 KnowledgeStructure.run_id == MaterialProcessingRun.run_id,
@@ -209,9 +211,11 @@ def read_knowledge_structure(
             row = session.execute(statement).one_or_none()
         if row is None:
             raise KnowledgeStructureStoreError("KNOWLEDGE_STRUCTURE_UNAVAILABLE")
-        document, binding, runtime_binding, source_artifact_id = row
+        document, binding, runtime_binding, source_artifact_id, stored_revision, stored_run_id = row
         if (
             not validate_knowledge_structure(document)
+            or document.get("revision") != stored_revision
+            or document.get("run_id") != str(stored_run_id)
             or not isinstance(binding, dict)
             or binding != _binding(document)
             or not isinstance(runtime_binding, dict)

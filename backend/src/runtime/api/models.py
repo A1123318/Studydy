@@ -72,6 +72,39 @@ class MaterialProcessingRunView(_Closed):
     completed_at: datetime | None
 
 
+class MaterialAttemptView(_Closed):
+    run_id: UUID
+    status: Literal["pending", "running", "succeeded", "partial", "failed"]
+    progress_stage: Literal["queued", "evidence", "semantics", "publishing", "completed"]
+    completed_pages: int
+    total_pages: int | None
+    error_code: str | None
+    created_at: datetime
+
+
+class MaterialStructureLink(_Closed):
+    run_id: UUID
+    knowledge_structure_revision: str
+    created_at: datetime
+    status: Literal["succeeded", "partial"]
+
+
+class MaterialLibraryItem(_Closed):
+    schema_: Literal["material-library-item/v1"] = Field(alias="schema")
+    material_id: UUID
+    source_artifact_id: UUID
+    display_name: str
+    size_bytes: int
+    created_at: datetime
+    latest_attempt: MaterialAttemptView | None
+    available_structures: list[MaterialStructureLink]
+
+
+class MaterialLibraryView(_Closed):
+    schema_: Literal["material-library/v1"] = Field(default="material-library/v1", alias="schema")
+    materials: list[MaterialLibraryItem]
+
+
 class SourceLocatorView(_Closed):
     page: int
     block_id: str

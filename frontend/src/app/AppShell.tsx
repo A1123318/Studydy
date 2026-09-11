@@ -6,7 +6,9 @@ import "./shell.css";
 type SessionStatus = "starting" | "ready" | "failed";
 
 function routeTitle(route: AppRoute): string {
-  if (route.name === "home") return "上傳教材";
+  if (route.name === "home") return "我的教材";
+  if (route.name === "upload") return "上傳教材";
+  if (route.name === "material-detail") return "教材詳情";
   if (route.name === "material-run") return "教材處理";
   if (route.name === "knowledge-map") return "知識地圖";
   return "本次學習";
@@ -21,12 +23,15 @@ type NavItem = {
 
 function routeNavigation(route: AppRoute): NavItem[] {
   const items: NavItem[] = [{
-    icon: "upload",
-    label: "上傳教材",
+    icon: "map",
+    label: "我的教材",
     active: route.name === "home",
     open: () => writeRoute({ name: "home" }),
+  }, {
+    icon: "upload", label: "上傳教材", active: route.name === "upload",
+    open: () => writeRoute({ name: "upload" }),
   }];
-  if (route.name !== "home") {
+  if ("runId" in route) {
     items.push({
       icon: "process",
       label: "處理狀態",
@@ -67,7 +72,7 @@ export function AppShell({ children, route, sessionStatus, accountAction }: {
     <div className={`app-shell${isWorkspace ? " is-workspace" : " is-focused"}`}>
       <header className="app-header">
         <button
-          aria-label="返回 Studydy 上傳教材"
+          aria-label="返回 Studydy 教材庫"
           className="brand"
           type="button"
           onClick={() => writeRoute({ name: "home" })}
@@ -80,6 +85,7 @@ export function AppShell({ children, route, sessionStatus, accountAction }: {
           <span aria-hidden="true" />
           {sessionCopy}
         </span>
+        {sessionStatus === "ready" && <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}>教材庫</button>}
         {accountAction}
       </header>
 

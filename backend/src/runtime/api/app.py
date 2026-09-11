@@ -7,7 +7,7 @@ import ipaddress
 import json
 import tempfile
 from typing import Any, Callable, Iterator
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Request, Response
@@ -31,6 +31,8 @@ from .models import (
     MaterialProcessingCreate,
     MaterialProcessingRunView,
     MaterialView,
+    MaterialLibraryItem,
+    MaterialLibraryView,
     LearnerProgressView,
     StudySessionCreate,
     StudySessionView,
@@ -72,6 +74,7 @@ from ..storage.artifacts import (
     publish_idempotent_source_pdf,
 )
 from ..storage.knowledge_structures import read_knowledge_structure
+from ..storage.materials import read_material_library
 from ..workers import start_runtime_workers
 
 
@@ -361,6 +364,11 @@ def _install_openapi(app: FastAPI) -> None:
                         }
                     )
                 if path == "/v1/materials" and method == "post":
+                    operation.setdefault("parameters", []).append({
+                        "name": "X-Material-Name", "in": "header", "required": False,
+                        "description": "URI-encoded UTF-8 filename, 1–200 decoded characters; first upload owns the name.",
+                        "schema": {"type": "string", "maxLength": 2400},
+                    })
                     operation["requestBody"] = {
                         "required": True,
                         "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
@@ -517,6 +525,23 @@ def create_app(settings: ApiSettings) -> FastAPI:
         revoke_session(request.cookies.get(_COOKIE_NAME), dsn=settings.dsn)
         response.delete_cookie(_COOKIE_NAME, path="/", secure=settings.secure_cookie, httponly=True, samesite="strict")
 
+    @app.get("/v1/materials", response_model=MaterialLibraryView,
+             operation_id="listMaterials", tags=["materials"])
+    def list_materials_route(request: Request) -> MaterialLibraryView:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        return MaterialLibraryView(materials=read_material_library(learner.learner_id, dsn=settings.dsn))
+
+    @app.get("/v1/materials/{material_id}", response_model=MaterialLibraryItem,
+             operation_id="getMaterial", tags=["materials"])
+    def read_material_route(request: Request, material_id: UUID) -> MaterialLibraryItem:
+        _require_query(request, set())
+        learner = _trusted_learner(request, settings)
+        materials = read_material_library(learner.learner_id, material_id=material_id, dsn=settings.dsn)
+        if not materials:
+            raise _ApiFailure("RESOURCE_NOT_FOUND")
+        return MaterialLibraryItem.model_validate(materials[0])
+
     @app.post(
         "/v1/materials",
         response_model=MaterialView,
@@ -531,6 +556,13 @@ def create_app(settings: ApiSettings) -> FastAPI:
         learner = _trusted_learner(request, settings)
         if request.headers.get("content-type") != "application/pdf":
             raise _ApiFailure("UNSUPPORTED_MEDIA_TYPE")
+        names = request.headers.getlist("x-material-name")
+        if len(names) > 1 or (names and len(names[0]) > 2400):
+            raise _ApiFailure("REQUEST_INVALID")
+        try:
+            display_name = unquote(names[0], encoding="utf-8", errors="strict") if names else None
+        except UnicodeError:
+            raise _ApiFailure("REQUEST_INVALID") from None
         with tempfile.TemporaryFile(mode="w+b") as source:
             size = 0
             async for chunk in request.stream():
@@ -539,7 +571,7 @@ def create_app(settings: ApiSettings) -> FastAPI:
                     raise _ApiFailure("MATERIAL_TOO_LARGE")
                 source.write(chunk)
             source.seek(0)
-            published = publish_idempotent_source_pdf(learner.learner_id, source, key, dsn=settings.dsn)
+            published = publish_idempotent_source_pdf(learner.learner_id, source, key, dsn=settings.dsn, display_name=display_name)
         return MaterialView.model_validate(
             {
                 "schema": "material/v1",

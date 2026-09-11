@@ -64,7 +64,7 @@ export function RunView({ apiClient, route }: {
       action={(
         <div className="state-actions">
           <button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button>
-          <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}><Icon name="arrow-left" />返回上傳</button>
+          <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />返回上傳</button>
         </div>
       )}
       description={message}
@@ -142,7 +142,7 @@ export function RunView({ apiClient, route }: {
   if (run.status === "failed") return (
     <section className="terminal-failure">
       <StateView
-        action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}><Icon name="arrow-left" />返回上傳</button>}
+        action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />返回上傳</button>}
         description={materialFailureMessage(run.error_code ?? "MATERIAL_ANALYSIS_FAILED")}
         image="/assets/studydy/failure-confused.png"
         title="教材處理失敗"
@@ -158,7 +158,7 @@ export function RunView({ apiClient, route }: {
 
   if (!materialRunHasUsableMap(run)) return (
     <StateView
-      action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "home" })}><Icon name="arrow-left" />改用其他教材</button>}
+      action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />改用其他教材</button>}
       description="這份教材沒有產生可安全顯示的概念，因此沒有發布知識地圖。請改用包含清楚教學內容的 PDF。"
       image="/assets/studydy/empty-disappointed.png"
       title="目前沒有可開啟的知識地圖"

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import os
+import threading
+
+import uvicorn
 from pathlib import Path
 import signal
 import socket
@@ -22,6 +26,7 @@ PORT = 4173
 
 def _port_is_free() -> bool:
     with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             listener.bind(("127.0.0.1", PORT))
             return True
@@ -39,6 +44,27 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
+
+
+@contextmanager
+def local_api(app):
+    """兩種真 DB browser fixture 共用專屬 API socket，不啟動模型 worker。"""
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 8001))
+        server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="error", access_log=False))
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started and thread.is_alive() and time.monotonic() < deadline:
+                time.sleep(.05)
+            assert server.started
+            yield
+        finally:
+            server.should_exit = True
+            thread.join(timeout=10)
+            assert not thread.is_alive()
 
 
 def main(spec: str = "e2e/product-cutover.spec.ts", *, production: bool = False) -> int:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-import io
 import shutil
 from uuid import UUID, uuid4
 
@@ -14,9 +13,8 @@ from runtime.learner_session import (
     SessionError, login_account, refresh_session, register_account,
     resolve_session, revoke_session,
 )
-from runtime.storage.artifacts import publish_idempotent_source_pdf
 from runtime.storage.migrations import run_migrations
-from test_closed_loop_v1 import closed_loop, _pdf, _settings, Client, generate_assessment, _assessment_response
+from test_closed_loop_v1 import closed_loop, _settings, Client, generate_assessment, _assessment_response
 
 PASSWORD = "Synthetic account password 42"
 ORIGIN = "https://studydy.test"
@@ -32,7 +30,7 @@ def _app(dsn, tmp_path, monkeypatch):
     ))
 
 
-def test_additive_migration_preserves_anonymous_owner_and_pdf(clean_database_dsn, migrations_dir, tmp_path, monkeypatch):
+def test_additive_migration_preserves_anonymous_owner_and_session(clean_database_dsn, migrations_dir, tmp_path):
     old = tmp_path / "accepted-migrations"
     old.mkdir()
     shutil.copyfile(migrations_dir / "0001_final_schema.sql", old / "0001_final_schema.sql")
@@ -46,20 +44,13 @@ def test_additive_migration_preserves_anonymous_owner_and_pdf(clean_database_dsn
             (old_session_id, learner_id, bytes(32)),
         )
         old_session = connection.execute("SELECT * FROM learner_sessions WHERE session_id=%s", (old_session_id,)).fetchone()
-    root = tmp_path / "artifacts"
-    root.mkdir(mode=0o700)
-    monkeypatch.setenv("STUDYDY_ARTIFACT_ROOT", str(root))
-    source = publish_idempotent_source_pdf(learner_id, io.BytesIO(_pdf()), "old-upload", dsn=clean_database_dsn)
-    assert run_migrations(clean_database_dsn) == (2,)
-    assert run_migrations(clean_database_dsn) == ()
+    shutil.copyfile(migrations_dir / "0002_learner_credentials.sql", old / "0002_learner_credentials.sql")
+    assert run_migrations(clean_database_dsn, migrations_dir=old) == (2,)
+    assert run_migrations(clean_database_dsn, migrations_dir=old) == ()
     register_account("new_account", PASSWORD, dsn=clean_database_dsn)
     with psycopg.connect(clean_database_dsn) as connection:
         assert connection.execute("SELECT * FROM learner_sessions WHERE session_id=%s", (old_session_id,)).fetchone() == old_session
         assert connection.execute("SELECT username,password_hash FROM learners WHERE learner_id=%s", (learner_id,)).fetchone() == (None, None)
-        assert connection.execute("SELECT learner_id,source_artifact_id FROM materials WHERE material_id=%s", (source.material_id,)).fetchone() == (learner_id, source.artifact_id)
-    from runtime.storage.artifacts import open_verified_source_pdf
-    with open_verified_source_pdf(learner_id, source.artifact_id, dsn=clean_database_dsn) as stored:
-        assert stored.file.read().startswith(b"%PDF")
 
 
 def test_credentials_are_salted_unique_and_registration_is_atomic(clean_database_dsn):

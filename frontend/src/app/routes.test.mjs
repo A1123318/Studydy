@@ -23,3 +23,10 @@ test("final knowledge-structure routes round trip", () => {
 test("retired map revisions do not parse", () => {
   assert.equal(readRoute(`/materials/${materialId}/runs/${runId}/knowledge-maps/knowledge-map:sha256:${"a".repeat(64)}`).route.name, "home");
 });
+
+test("library, upload and material detail are independent canonical routes", () => {
+  for (const route of [{ name: "home" }, { name: "upload" }, { name: "material-detail", materialId }]) {
+    assert.deepEqual(readRoute(routePath(route)), { route, isCanonical: true });
+  }
+  assert.equal(readRoute("/materials/not-an-id").isCanonical, false);
+});

@@ -164,6 +164,7 @@ def _read_source_receipt(session: Session, learner_id: UUID, key: bytes):
             Artifact.size_bytes,
             Artifact.kind,
             Material.upload_request_fingerprint,
+            Material.display_name,
         )
         .join(
             Artifact,
@@ -179,11 +180,11 @@ def _read_source_receipt(session: Session, learner_id: UUID, key: bytes):
 
 
 def _published_source(
-    root: Path, existing: Any, fingerprint: bytes
+    root: Path, existing: Any, fingerprint: bytes, display_name: str | None
 ) -> PublishedSourcePdf:
     if existing[4] != "source_pdf":
         raise _error("ARTIFACT_PUBLISH_FAILED")
-    if bytes(existing[5]) != fingerprint:
+    if bytes(existing[5]) != fingerprint or existing[6] != display_name:
         raise _error("ARTIFACT_IDEMPOTENCY_CONFLICT")
     file = _verify_file(_object_path(root, existing[1]), bytes(existing[2]), existing[3])
     file.close()
@@ -195,9 +196,16 @@ def _publish_source(
     source: BinaryIO,
     *,
     key_digest: bytes,
+    display_name: str | None,
     dsn: str | None,
 ) -> PublishedSourcePdf:
     if not isinstance(learner_id, UUID) or not hasattr(source, "read"):
+        raise _error("ARTIFACT_REQUEST_INVALID")
+    if display_name is not None and (
+        not isinstance(display_name, str) or not 1 <= len(display_name) <= 200
+        or not display_name.strip()
+        or any(ord(char) < 32 or ord(char) == 127 or char in "/\\" for char in display_name)
+    ):
         raise _error("ARTIFACT_REQUEST_INVALID")
     root = _root()
     staging = root / ".staging" / f"{uuid4().hex}.tmp"
@@ -208,7 +216,7 @@ def _publish_source(
         with database_session(dsn) as session:
             existing = _read_source_receipt(session, learner_id, key_digest)
         if existing is not None:
-            return _published_source(root, existing, fingerprint)
+            return _published_source(root, existing, fingerprint, display_name)
 
         material_id = uuid4()
         artifact_id = uuid4()
@@ -220,6 +228,7 @@ def _publish_source(
                     insert(Material).values(
                         material_id=material_id,
                         learner_id=learner_id,
+                        display_name=display_name,
                         source_artifact_id=artifact_id,
                         upload_idempotency_key_sha256=key_digest,
                         upload_request_fingerprint=fingerprint,
@@ -245,7 +254,7 @@ def _publish_source(
                 winner = _read_source_receipt(session, learner_id, key_digest)
             if winner is None:
                 raise _error("ARTIFACT_PUBLISH_FAILED") from None
-            return _published_source(root, winner, fingerprint)
+            return _published_source(root, winner, fingerprint, display_name)
         except Exception:
             final.unlink(missing_ok=True)
             raise _error("ARTIFACT_PUBLISH_FAILED") from None
@@ -260,11 +269,13 @@ def publish_idempotent_source_pdf(
     idempotency_key: str,
     *,
     dsn: str | None = None,
+    display_name: str | None = None,
 ) -> PublishedSourcePdf:
     return _publish_source(
         learner_id,
         source,
         key_digest=_key_digest(idempotency_key),
+        display_name=display_name,
         dsn=dsn,
     )
 

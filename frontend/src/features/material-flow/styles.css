@@ -619,3 +619,9 @@
     justify-self: stretch;
   }
 }
+
+.material-library { width: min(100%, 64rem); margin: 0 auto; padding: 1.5rem; }
+.library-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.library-item { padding: 1.5rem; margin: 1rem 0; overflow-wrap: anywhere; }
+.library-title { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; }
+.library-item li { margin: .75rem 0; }

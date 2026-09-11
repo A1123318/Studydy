@@ -66,6 +66,32 @@ export type MaterialProcessingRunView = {
   completed_at: string | null;
 };
 
+export type MaterialAttemptView = Pick<MaterialProcessingRunView,
+  "run_id" | "status" | "progress_stage" | "completed_pages" | "total_pages" | "error_code" | "created_at">;
+
+export type MaterialStructureLink = {
+  run_id: string;
+  knowledge_structure_revision: string;
+  created_at: string;
+  status: "succeeded" | "partial";
+};
+
+export type MaterialLibraryItem = {
+  schema: "material-library-item/v1";
+  material_id: string;
+  source_artifact_id: string;
+  display_name: string;
+  size_bytes: number;
+  created_at: string;
+  latest_attempt: MaterialAttemptView | null;
+  available_structures: MaterialStructureLink[];
+};
+
+export type MaterialLibraryView = {
+  schema: "material-library/v1";
+  materials: MaterialLibraryItem[];
+};
+
 export type SourceLocatorView = {
   page: number;
   block_id: string;

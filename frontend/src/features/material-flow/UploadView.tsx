@@ -37,7 +37,7 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
     setIsSubmitting(true);
     setMessage(null);
     try {
-      const material = await apiClient.createMaterial(file, uploadKey.current);
+      const material = await apiClient.createMaterial(file, uploadKey.current, file.name);
       const run = await apiClient.createMaterialRun({
         schema: "material-processing-create/v1",
         material_id: material.material_id,

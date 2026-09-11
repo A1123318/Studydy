@@ -12,7 +12,7 @@ PDF → native Evidence / optional OCR → document sections + Evidence bundle
 Supplementary resource recommendation (Agent 2) is removed. Concepts retain only the uploaded
 material's Evidence and PDF locators. Knowledge Structure and its public view use schema v2, with
 no resource-library fields or separate resource PDF kind. Fresh pre-release databases use the
-initial migration followed by the additive learner-credentials migration; historical evaluation
+initial migration followed by additive learner-credentials and material-name migrations; historical evaluation
 artifacts remain separate and are not rewritten.
 
 Qwen owns Concept boundaries, Claim meaning, cross-section consolidation, Relation proposals/reasons,
@@ -88,3 +88,9 @@ anonymous learners remain intact and are not automatically attached to accounts.
 responses are private and `no-store`. The frontend retires its client and unmounts private views on
 logout or session expiry; it never creates anonymous identities or replays failed writes under a
 new identity. The browser-global latest-material pointer and its consumers are removed.
+
+The material library is a read projection over Material, Artifact, MaterialProcessingRun and
+KnowledgeStructure. Materials retain an optional uploaded display name; older rows have a
+recognizable date/ID label. Latest attempts and published revisions are listed independently, so a
+failed new attempt cannot hide a prior result. Reopen uses existing exact-revision GET endpoints
+and creates no learning records. There is no separate material-history store.

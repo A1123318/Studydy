@@ -137,3 +137,36 @@ test("responses still parsing at logout cannot publish private data", async () =
   finish(runView());
   await assert.rejects(pending, (error) => error.reasonCode === "SESSION_REQUIRED");
 });
+
+function libraryItem() {
+  return { schema: "material-library-item/v1", material_id: materialId,
+    source_artifact_id: "44444444-4444-4444-8444-444444444444", display_name: "堆疊.pdf",
+    size_bytes: 120, created_at: "2026-09-11T00:00:00Z", latest_attempt: null,
+    available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
+      created_at: "2026-09-11T00:01:00Z", status: "succeeded" }] };
+}
+
+test("material library reads use server identity and carry exact published revisions", async () => {
+  const requests = [];
+  const item = libraryItem();
+  const client = new StudydyApiClient(async (path, init) => {
+    requests.push([path, init.method]);
+    return Response.json(path === "/v1/materials" ? { schema: "material-library/v1", materials: [item] } : item);
+  });
+  assert.equal((await client.listMaterials()).materials[0].available_structures[0].knowledge_structure_revision, structureRevision);
+  assert.deepEqual(await client.getMaterial(materialId), item);
+  assert.deepEqual(requests, [["/v1/materials", "GET"], [`/v1/materials/${materialId}`, "GET"]]);
+  await assert.rejects(client.getMaterial(sessionId), error => error.reasonCode === "RESPONSE_SCHEMA_MISMATCH");
+});
+
+test("library rejects invalid lifecycle and uploaded filenames use UTF-8 encoding", async () => {
+  const item = libraryItem();
+  item.available_structures[0].status = "failed";
+  const invalid = new StudydyApiClient(async () => Response.json({ schema: "material-library/v1", materials: [item] }));
+  await assert.rejects(invalid.listMaterials(), error => error.kind === "schema");
+  const client = new StudydyApiClient(async (_path, init) => {
+    assert.equal(init.headers["X-Material-Name"], encodeURIComponent("陣列 & 堆疊.pdf"));
+    return Response.json({ schema: "material/v1", material_id: materialId, source_artifact_id: item.source_artifact_id, source_sha256: "a".repeat(64), size_bytes: 120 });
+  });
+  await client.createMaterial(new Blob(["pdf"], { type: "application/pdf" }), "upload", "陣列 & 堆疊.pdf");
+});

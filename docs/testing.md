@@ -17,13 +17,14 @@ backend/.venv/bin/python backend/tests/runtime/browser_e2e_runner.py
 
 Backend tests create a pinned disposable PostgreSQL 18 container unless a private
 `STUDYDY_TEST_POSTGRES_DSN` pointing at a dedicated `studydy_test*` control database is supplied.
-They cover fresh installation and the additive credentials migration, owner isolation, immutable Knowledge Structure, source-bound
+They cover fresh installation and the additive credentials and material-name migrations, owner isolation, immutable Knowledge Structure, source-bound
 Assessment, private answer, server-side scoring, append-only AnswerEvent, mastery, guidance,
 idempotency, stale state, and the HTTP API closed loop.
 
 The accepted Knowledge Structure v2 schema can be upgraded with `0002_learner_credentials.sql`;
-existing learner IDs and owners remain unchanged. Migration tests apply `0001`, save synthetic
-records, apply `0002`, read the records again, and verify a repeat migration is a no-op. Databases
+existing learner IDs and owners remain unchanged. `0003_material_display_name.sql` adds names.
+Migration tests upgrade the accepted schema with saved synthetic records, verify the records and
+old upload receipts remain readable, and verify a repeat migration is a no-op. Databases
 from before the accepted initial-schema checksum still require a separate migration decision.
 
 The standalone browser runner starts only a disposable Vite process. Its API fixtures use the final public
@@ -46,6 +47,18 @@ worker startup only inside the test; it does not load models or start a cloud po
 registers B, logs A out, tests private PDF/Map denial, and logs A in from a separate browser context
 without copying cookies or browser storage. This proves account behavior, not model quality or the
 later full restart/resume qualification.
+
+## Material library regression (local only)
+
+The same runtime command includes `test_material_library.py` and `test_material_library_browser.py`.
+The latter uses the shared local API/Vite fixture with a production build and real PostgreSQL.
+It verifies fresh browser login through the server-backed library, named and unfinished materials,
+prior succeeded/partial results after a newer failure, exact version reopen, PDF reads and account
+isolation. Product-table snapshots must remain identical and backend model HTTP calls must remain
+zero. It does not test or implement learning-history restoration.
+
+The standalone mocked browser suite also tests library loading/error/empty states and rejects a
+Map route whose processing run points at another revision.
 
 ## Runtime verification
 

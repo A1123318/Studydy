@@ -13,6 +13,8 @@ import type {
   MaterialProcessingCreate,
   MaterialProcessingRunView,
   MaterialView,
+  MaterialLibraryItem,
+  MaterialLibraryView,
   StudySessionCreate,
   StudySessionView,
 } from "./contracts";
@@ -71,6 +73,38 @@ function materialRun(value: unknown): value is MaterialProcessingRunView {
       && item.progress_stage === "completed" && typeof item.completed_at === "string";
   }
   return item.output_binding === null;
+}
+
+function libraryItem(value: unknown): value is MaterialLibraryItem {
+  const item = object(value);
+  if (!item || item.schema !== "material-library-item/v1"
+    || typeof item.material_id !== "string" || !uuid.test(item.material_id)
+    || typeof item.source_artifact_id !== "string" || !uuid.test(item.source_artifact_id)
+    || typeof item.display_name !== "string" || !item.display_name.trim()
+    || !Number.isInteger(item.size_bytes) || Number(item.size_bytes) < 1
+    || typeof item.created_at !== "string" || !Number.isFinite(Date.parse(item.created_at))
+    || !Array.isArray(item.available_structures)) return false;
+  const attempt = object(item.latest_attempt);
+  if (item.latest_attempt !== null && (!attempt
+    || typeof attempt.run_id !== "string" || !uuid.test(attempt.run_id)
+    || !["pending", "running", "succeeded", "partial", "failed"].includes(String(attempt.status))
+    || !["queued", "evidence", "semantics", "publishing", "completed"].includes(String(attempt.progress_stage))
+    || !Number.isInteger(attempt.completed_pages)
+    || !(attempt.total_pages === null || Number.isInteger(attempt.total_pages))
+    || !(attempt.error_code === null || typeof attempt.error_code === "string")
+    || typeof attempt.created_at !== "string")) return false;
+  return item.available_structures.every((value) => {
+    const link = object(value);
+    return !!link && typeof link.run_id === "string" && uuid.test(link.run_id)
+      && revision(link.knowledge_structure_revision, "knowledge-structure")
+      && ["succeeded", "partial"].includes(String(link.status))
+      && typeof link.created_at === "string" && Number.isFinite(Date.parse(link.created_at));
+  });
+}
+
+function library(value: unknown): value is MaterialLibraryView {
+  const item = object(value);
+  return !!item && item.schema === "material-library/v1" && Array.isArray(item.materials) && item.materials.every(libraryItem);
 }
 
 function locator(value: unknown): boolean {
@@ -300,9 +334,21 @@ export class StudydyApiClient {
     }, guard);
   }
 
-  async createMaterial(pdf: Blob, key: string = crypto.randomUUID()): Promise<MaterialView> {
+  async createMaterial(pdf: Blob, key: string = crypto.randomUUID(), displayName?: string): Promise<MaterialView> {
     if (pdf.type !== "application/pdf" || pdf.size < 1 || pdf.size > maximumPdfBytes) throw new ApiClientError("input", "請選擇有效且不超過 100 MiB 的 PDF。", { reasonCode: "REQUEST_INPUT_INVALID" });
-    return this.json("/v1/materials", { method: "POST", headers: { "Content-Type": "application/pdf", Origin: origin(), "Idempotency-Key": key }, body: pdf }, material);
+    const headers: Record<string, string> = { "Content-Type": "application/pdf", Origin: origin(), "Idempotency-Key": key };
+    if (displayName !== undefined) headers["X-Material-Name"] = encodeURIComponent(displayName);
+    return this.json("/v1/materials", { method: "POST", headers, body: pdf }, material);
+  }
+
+  listMaterials(): Promise<MaterialLibraryView> {
+    return this.json("/v1/materials", { method: "GET" }, library);
+  }
+
+  async getMaterial(materialId: string): Promise<MaterialLibraryItem> {
+    const item = await this.json(`/v1/materials/${encodeURIComponent(materialId)}`, { method: "GET" }, libraryItem);
+    if (item.material_id !== materialId) throw new ApiClientError("schema", "教材身分不一致。", { reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+    return item;
   }
 
   createMaterialRun(body: MaterialProcessingCreate, key: string = crypto.randomUUID()): Promise<MaterialProcessingRunView> {

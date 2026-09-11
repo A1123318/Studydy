@@ -13,7 +13,7 @@
 PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrations import run_migrations; print(run_migrations())'
 ```
 
-空 DB 回傳 `(1, 2)`；目前 accepted schema 回傳 `(2,)`；再執行回傳 `()`。
+空 DB 套用全部現行 migrations；`0002` 加入帳號，`0003` 加入教材名稱；再執行回傳 `()`。
 `0001` 不變，`0002` 只在 `learners` 新增 nullable username/password_hash 與約束。
 既有 learner、session、教材、學習與作答資料全部保留，不修改 owner。舊匿名 learner
 不會自動綁定帳號；本單元未提供匿名資料搬移。不同初始 migration checksum 的舊實驗 DB
@@ -23,12 +23,12 @@ PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrati
 
 1. 開啟 Studydy，選「建立新帳號」。帳號名稱為 3–32 個英文字母、數字或底線，不分大小寫。
 2. 密碼為 15–128 個字元，可包含空格；沒有密碼重設服務，請自行妥善保存。
-3. 註冊成功後進入既有上傳頁；右上角「登出」只撤銷本次授權，不刪除資料。
+3. 註冊成功後進入教材庫；右上角「登出」只撤銷本次授權，不刪除資料。
 4. 新瀏覽器輸入相同帳密，後端會取得同一 learner。其他瀏覽器的有效 session 可繼續使用。
 5. session 有效時沿用 idle refresh（7 天，最長 30 天）；過期需重新登入。失敗的上傳／作答
    不會自動重送，請登入後明確操作。登出失敗時私有畫面仍清空，請按「再試一次」完成登出。
 
-教材庫與歷史恢復 UI 不包含在本次帳號功能；原有直接網址仍受後端 owner 檢查保護。
+登入後可從[教材庫](material-library.md)找回教材；學習歷史恢復 UI 尚未提供。原有直接網址仍受後端 owner 檢查保護。
 不再使用未區分帳號的 localStorage 最近教材指標。切換帳號會清除頁面內私有狀態；同 origin
 其他分頁會收到身分變更通知，須重新登入後再操作。
 

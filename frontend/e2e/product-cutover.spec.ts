@@ -292,3 +292,40 @@ test("stale guidance can reload current progress without applying the old target
   await expect(page.getByRole("heading", { name: "練習目前概念", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "繼續學習", exact: true })).toHaveCount(0);
 });
+
+test("library loading, read failure and empty state retain usable actions", async ({ page }) => {
+  await routes(page);
+  let release: (() => void) | undefined;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  let failRead = true;
+  await page.route("**/v1/materials", async route => {
+    if (failRead) {
+      await ready;
+      return json(route, { schema: "api-error/v1", request_id: sessionId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, 503);
+    }
+    return json(route, { schema: "material-library/v1", materials: [] });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "正在讀取教材庫", exact: true })).toBeVisible();
+  release!();
+  await expect(page.getByRole("heading", { name: "無法讀取教材", exact: true })).toBeVisible();
+  failRead = false;
+  await page.getByRole("button", { name: "重新讀取", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "還沒有教材", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "上傳教材", exact: true }).click();
+  await expect(page).toHaveURL(/\/upload$/);
+  await expect(page.locator('input[type="file"]')).toHaveCount(1);
+});
+
+test("reopen rejects a run from a different Knowledge Structure revision", async ({ page }) => {
+  await routes(page);
+  await page.route(`**/v1/material-processing-runs/${runId}`, route => json(route, {
+    ...run, output_binding: { ...run.output_binding, knowledge_structure_revision: `knowledge-structure:sha256:${"7".repeat(64)}` },
+  }));
+  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v1", materials: [] }));
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await expect(page.getByRole("heading", { name: "無法讀取知識地圖", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "開始本次學習", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "返回教材庫", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "還沒有教材", exact: true })).toBeVisible();
+});

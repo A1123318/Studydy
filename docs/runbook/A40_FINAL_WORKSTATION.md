@@ -6,8 +6,8 @@
    `VLLM_API_KEY`.
 3. Export an absolute private `STUDYDY_LOCAL_RUNTIME_ROOT`; its OCR Python minor must be 3.12.
    Export `STUDYDY_ARTIFACT_ROOT` and database DSN only in the private shell. Never echo them.
-4. Apply the migrations to a fresh database, or apply only the pending credentials migration to
-   the accepted schema. A second invocation must return an empty tuple. Before upgrading a database
+4. Apply the migrations to a fresh database, or apply the pending additive migrations (credentials and
+   material names) to the accepted schema. A second invocation must return an empty tuple. Before upgrading a database
    containing needed data, stop product writes and privately preserve the database and source PDF
    store together. Do not replace their configured locations. See [account setup](../accounts.md).
 5. Run `runtime.local_runtime verify`, the complete local regression in `docs/testing.md`, and the A40

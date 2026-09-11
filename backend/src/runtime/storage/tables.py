@@ -69,6 +69,7 @@ class Material(Base):
     source_artifact_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), unique=True, nullable=False)
     upload_idempotency_key_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     upload_request_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

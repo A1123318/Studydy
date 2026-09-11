@@ -29,20 +29,21 @@ export default function KnowledgeMap({ apiClient, route }: {
     ]).then(
       ([map, run]) => {
         if (cancelled) return;
-        if (run.material_id !== route.materialId) throw new Error("RUN_MATERIAL_MISMATCH");
+        if (run.material_id !== route.materialId
+          || run.output_binding?.knowledge_structure_revision !== route.structureRevision) throw new Error("RUN_STRUCTURE_MISMATCH");
         setView(map);
         setSourceArtifactId(run.source_artifact_id);
         setMessage(null);
       },
-      (error) => {
-        if (!cancelled) setMessage(errorMessage(error));
-      },
-    );
+    ).catch((error) => {
+      if (!cancelled) setMessage(errorMessage(error));
+    });
     return () => { cancelled = true; };
   }, [apiClient, route.structureRevision, route.materialId, route.runId]);
 
   if (message) return (
     <StateView
+      action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}>返回教材庫</button>}
       description={message}
       image="/assets/studydy/failure-confused.png"
       title="無法讀取知識地圖"

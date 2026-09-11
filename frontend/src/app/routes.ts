@@ -1,5 +1,7 @@
 export type AppRoute =
   | { name: "home" }
+  | { name: "upload" }
+  | { name: "material-detail"; materialId: string }
   | { name: "material-run"; materialId: string; runId: string }
   | { name: "knowledge-map"; materialId: string; runId: string; structureRevision: string }
   | { name: "study-session"; materialId: string; runId: string; structureRevision: string; studySessionId: string };
@@ -15,6 +17,7 @@ function validSegment(value: string): boolean {
 
 export function readRoute(pathname: string): RouteRead {
   if (pathname === "/") return { route: { name: "home" }, isCanonical: true };
+  if (pathname === "/upload") return { route: { name: "upload" }, isCanonical: true };
   const segments = pathname.split("/").filter(Boolean).map((part) => {
     try {
       return decodeURIComponent(part);
@@ -22,6 +25,10 @@ export function readRoute(pathname: string): RouteRead {
       return "";
     }
   });
+  if (segments.length === 2 && segments[0] === "materials" && uuidPattern.test(segments[1])) {
+    const route: AppRoute = { name: "material-detail", materialId: segments[1] };
+    return { route, isCanonical: routePath(route) === pathname };
+  }
   if (
     segments.length === 4
     && segments[0] === "materials"
@@ -74,6 +81,11 @@ export function readRoute(pathname: string): RouteRead {
 
 export function routePath(route: AppRoute): string {
   if (route.name === "home") return "/";
+  if (route.name === "upload") return "/upload";
+  if (route.name === "material-detail") {
+    if (!uuidPattern.test(route.materialId)) throw new Error("ROUTE_INVALID");
+    return `/materials/${route.materialId}`;
+  }
   if (!validSegment(route.materialId) || !validSegment(route.runId)) throw new Error("ROUTE_INVALID");
   const base = `/materials/${route.materialId}/runs/${route.runId}`;
   if (route.name === "material-run") return base;
