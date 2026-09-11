@@ -21,9 +21,9 @@ PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrati
 
 ## 使用
 
-1. 開啟 Studydy，選「建立新帳號」。帳號名稱為 3–32 個英文字母、數字或底線，不分大小寫。
-2. 密碼為 15–128 個字元，可包含空格；沒有密碼重設服務，請自行妥善保存。
-3. 註冊成功後進入教材庫；右上角「登出」只撤銷本次授權，不刪除資料。
+1. 開啟 Studydy，選「立即註冊」。帳號名稱為 3–32 個英文字母、數字或底線，不分大小寫。
+2. 密碼為 15–128 個字元，可包含空格，註冊時需再次確認；沒有密碼重設服務，請自行妥善保存。
+3. 註冊成功後進入首頁，可從側邊導覽前往教材庫；右上角「登出」只撤銷本次授權，不刪除資料。
 4. 新瀏覽器輸入相同帳密，後端會取得同一 learner。其他瀏覽器的有效 session 可繼續使用。
 5. session 有效時沿用 idle refresh（7 天，最長 30 天）；過期需重新登入。失敗的上傳／作答
    不會自動重送，請登入後明確操作。登出失敗時私有畫面仍清空，請按「再試一次」完成登出。
@@ -52,3 +52,5 @@ PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrati
 未加入新 dependency、OAuth、MFA、進階限流或第二套 identity system。
 
 [本地帳號測試方式](testing.md#account-regression-local-only) 不需要雲端 pod 或模型啟動。
+
+登入／註冊的版型與保留的功能差異見[帳號入口視覺](auth-visual.md)。

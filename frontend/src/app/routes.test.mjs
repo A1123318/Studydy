@@ -25,7 +25,7 @@ test("retired map revisions do not parse", () => {
 });
 
 test("library, upload and material detail are independent canonical routes", () => {
-  for (const route of [{ name: "home" }, { name: "upload" }, { name: "material-detail", materialId }]) {
+  for (const route of [{ name: "home" }, { name: "materials" }, { name: "maps" }, { name: "upload" }, { name: "material-detail", materialId }]) {
     assert.deepEqual(readRoute(routePath(route)), { route, isCanonical: true });
   }
   assert.equal(readRoute("/materials/not-an-id").isCanonical, false);

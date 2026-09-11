@@ -43,7 +43,7 @@ export default function KnowledgeMap({ apiClient, route }: {
 
   if (message) return (
     <StateView
-      action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}>返回教材庫</button>}
+      action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回教材庫</button>}
       description={message}
       image="/assets/studydy/failure-confused.png"
       title="無法讀取知識地圖"

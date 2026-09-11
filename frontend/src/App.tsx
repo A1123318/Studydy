@@ -5,44 +5,13 @@ import { AppShell } from "./app/AppShell";
 import { readRoute, writeRoute, type AppRoute } from "./app/routes";
 import { MaterialFlow } from "./features/material-flow/MaterialFlow";
 import { StateView } from "./ui/StateView";
+import { AccountFrame, AccountPage } from "./features/account/AccountPage";
 
 type SessionState =
   | { status: "starting" }
   | { status: "signed-out" }
   | { status: "ready"; identity: LearnerIdentity; api: StudydyApiClient }
   | { status: "failed"; message: string; logoutPending: boolean };
-
-function AccountForm({ authenticate }: {
-  authenticate: (mode: "login" | "register", username: string, password: string) => Promise<void>;
-}) {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  return (
-    <section className="surface account-form">
-      <h1>{mode === "login" ? "登入 Studydy" : "建立帳號"}</h1>
-      <p>使用同一帳號登入，可保留相同的學習身分。登出不會刪除教材或學習資料。</p>
-      <form onSubmit={async (event) => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const fields = new FormData(form);
-        setBusy(true);
-        setMessage("");
-        try { await authenticate(mode, String(fields.get("username")), String(fields.get("password"))); }
-        catch (error) { setMessage(errorMessage(error)); }
-        finally { form.reset(); setBusy(false); }
-      }}>
-        <label>帳號名稱<input name="username" autoComplete="username" required pattern="[A-Za-z0-9_]{3,32}" minLength={3} maxLength={32} disabled={busy} /></label>
-        <p>3–32 個英文字母、數字或底線，不區分大小寫。</p>
-        <label>密碼<input name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={15} maxLength={128} disabled={busy} /></label>
-        <p>15–128 個字元，可使用空格；請妥善保存，目前沒有密碼重設功能。</p>
-        {message && <p role="alert" className="form-error">{message}</p>}
-        <button className="primary-button" disabled={busy} type="submit">{busy ? "處理中…" : mode === "login" ? "登入" : "註冊"}</button>
-        <button className="secondary-button" disabled={busy} type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setMessage(""); }}>{mode === "login" ? "建立新帳號" : "已有帳號，前往登入"}</button>
-      </form>
-    </section>
-  );
-}
 
 export default function App() {
   const [route, setRoute] = useState<AppRoute>(() => readRoute(window.location.pathname).route);
@@ -54,7 +23,10 @@ export default function App() {
     currentClient.current?.invalidate();
     currentClient.current = null;
     setSession({ status: "signed-out" });
-    writeRoute({ name: "home" }, true);
+    if (!["/login", "/register"].includes(window.location.pathname)) {
+      window.history.replaceState(null, "", "/login");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
   }, []);
 
   const newClient = useCallback(() => {
@@ -71,7 +43,10 @@ export default function App() {
     setSession({ status: "starting" });
     const api = newClient();
     void api.ensureSession().then(
-      (identity) => { if (currentClient.current === api) setSession({ status: "ready", identity, api }); },
+      (identity) => { if (currentClient.current === api) {
+        if (["/login", "/register"].includes(window.location.pathname)) writeRoute({ name: "home" }, true);
+        setSession({ status: "ready", identity, api });
+      } },
       (error) => {
         if (currentClient.current !== api) return;
         if (error instanceof ApiClientError && error.reasonCode === "SESSION_REQUIRED") clearPrivateView();
@@ -119,6 +94,7 @@ export default function App() {
 
   useEffect(() => {
     const readLocation = () => {
+      if (["/login", "/register"].includes(window.location.pathname)) { setRoute({ name: "home" }); return; }
       const next = readRoute(window.location.pathname);
       if (!next.isCanonical) writeRoute({ name: "home" }, true);
       setRoute(next.route);
@@ -128,21 +104,23 @@ export default function App() {
     return () => window.removeEventListener("popstate", readLocation);
   }, []);
 
-  return (
-    <AppShell route={session.status === "ready" ? route : { name: "home" }} sessionStatus={session.status === "signed-out" ? "failed" : session.status}
-      accountAction={session.status === "ready" && <button className="secondary-button" type="button" onClick={() => void logout()}>登出</button>}>
-      {session.status === "starting" && <StateView description="正在確認帳號工作階段，請稍候。" live title="連線中" tone="loading" />}
-      {session.status === "signed-out" && <AccountForm authenticate={async (mode, username, password) => {
-        const api = newClient();
-        const identity = await api.authenticate(mode, username, password);
-        if (currentClient.current !== api) return;
-        writeRoute({ name: "home" }, true);
-        channel.current?.postMessage("identity-changed");
-        setSession({ status: "ready", identity, api });
-      }} />}
-      {session.status === "ready" && <MaterialFlow key={session.identity.learner_id} apiClient={session.api} route={route} />}
-      {session.status === "failed" && <StateView action={<button className="primary-button" type="button" onClick={() => session.logoutPending ? void logout() : startSession()}>再試一次</button>}
-        description={session.message} title="暫時無法完成" tone="failure" />}
-    </AppShell>
-  );
+  if (session.status !== "ready") {
+    const mode = window.location.pathname === "/register" ? "register" : "login";
+    if (session.status === "signed-out") return <AccountPage key={mode} mode={mode} authenticate={async (action, username, password) => {
+      const api = newClient();
+      const identity = await api.authenticate(action, username, password);
+      if (currentClient.current !== api) return;
+      writeRoute({ name: "home" }, true);
+      channel.current?.postMessage("identity-changed");
+      setSession({ status: "ready", identity, api });
+    }} />;
+    return <AccountFrame mode={mode}>{session.status === "starting"
+      ? <StateView description="正在確認帳號狀態，請稍候。" live title="連線中" tone="loading" />
+      : <StateView action={<button className="primary-button" type="button" onClick={() => session.logoutPending ? void logout() : startSession()}>再試一次</button>}
+          description={session.message} title="暫時無法完成" tone="failure" />}</AccountFrame>;
+  }
+  return <AppShell route={route}
+    accountAction={<button className="secondary-button" type="button" onClick={() => void logout()}>登出</button>}>
+    <MaterialFlow key={session.identity.learner_id} apiClient={session.api} route={route} />
+  </AppShell>;
 }

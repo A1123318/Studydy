@@ -318,13 +318,13 @@ test("library loading, read failure and empty state retain usable actions", asyn
     }
     return json(route, { schema: "material-library/v1", materials: [] });
   });
-  await page.goto("/");
+  await page.goto("/materials");
   await expect(page.getByRole("heading", { name: "正在讀取教材庫", exact: true })).toBeVisible();
   release!();
   await expect(page.getByRole("heading", { name: "無法讀取教材", exact: true })).toBeVisible();
   failRead = false;
   await page.getByRole("button", { name: "重新讀取", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "還沒有教材", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "上傳教材", exact: true }).click();
   await expect(page).toHaveURL(/\/upload$/);
   await expect(page.locator('input[type="file"]')).toHaveCount(1);
@@ -340,5 +340,23 @@ test("reopen rejects a run from a different Knowledge Structure revision", async
   await expect(page.getByRole("heading", { name: "無法讀取知識地圖", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "開始新的學習", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "返回教材庫", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "還沒有教材", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
+});
+
+test("dashboard shows unavailable counts truthfully and retries its server-backed summary", async ({ page }) => {
+  await routes(page);
+  let unavailable = true;
+  await page.route('**/v1/materials', route => unavailable
+    ? json(route, { schema: 'api-error/v1', request_id: sessionId, reason_code: 'STORAGE_UNAVAILABLE', retryable: true, message: 'Request could not be completed.' }, 503)
+    : json(route, { schema: 'material-library/v1', materials: [] }));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: '歡迎回來！', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('資料服務暫時無法使用');
+  await expect(page.locator('.dashboard-stat strong')).toHaveText(['—', '—', '—', '—']);
+  unavailable = false;
+  await page.getByRole('button', { name: '重新讀取', exact: true }).click();
+  await expect(page.locator('.dashboard-stat strong')).toHaveText(['0', '0', '0', '0']);
+  await page.getByRole('button', { name: '前往我的教材', exact: true }).click();
+  await expect(page).toHaveURL(/\/materials$/);
+  await expect(page.getByRole('region', { name: '空教材引導' })).toBeVisible();
 });

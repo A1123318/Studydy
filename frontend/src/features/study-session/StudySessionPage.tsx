@@ -99,7 +99,7 @@ export function StudySessionPage({ apiClient, route }: {
     structureRevision: route.structureRevision,
   });
 
-  if (message) return <StateView action={<><button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button><button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}>返回教材庫</button></>} description={message} image="/assets/studydy/failure-confused.png" title="無法開啟本次學習" tone="failure" />;
+  if (message) return <StateView action={<><button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button><button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回教材庫</button></>} description={message} image="/assets/studydy/failure-confused.png" title="無法開啟本次學習" tone="failure" />;
   if (!data) return <StateView description="正在復原教材結構與本次學習狀態。" live title="正在讀取本次學習" tone="loading" />;
 
   const completed = data.session.status === "completed";

@@ -7,6 +7,9 @@ async function login(page: Page, username: string) {
   await page.getByLabel("帳號名稱", { exact: true }).fill(username);
   await page.getByLabel("密碼", { exact: true }).fill("Synthetic test password 42");
   await page.getByRole("button", { name: "登入", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "歡迎回來！", exact: true })).toBeVisible();
+  await expect(page.locator(".dashboard-stat strong")).toHaveText(username === "learner_test" ? ["3", "1", "0", "0"] : ["1", "0", "0", "0"]);
+  await page.getByRole("button", { name: "教材庫", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的教材", exact: true })).toBeVisible();
 }
 
@@ -28,7 +31,7 @@ test("fresh profiles discover their own materials and reopen both exact publishe
   await page.reload();
   await expect(page.getByRole("button", { name: "教材概念：Stack", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "登出", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "登入 Studydy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
   await original.close();
 
   // 全新 cookie jar/storage，只用帳密和教材名稱導航，不注入 UUID 或已知網址。
@@ -53,7 +56,7 @@ test("fresh profiles discover their own materials and reopen both exact publishe
   await expect(freshPage).toHaveURL(`http://127.0.0.1:4173${newerPath}`);
   await expect(freshPage.getByRole("button", { name: "教材概念：Stack", exact: true })).toBeVisible();
   await freshPage.getByRole("button", { name: "登出", exact: true }).click();
-  await expect(freshPage.getByRole("heading", { name: "登入 Studydy" })).toBeVisible();
+  await expect(freshPage.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
   await login(freshPage, "library_b");
   await expect(freshPage.getByRole("article", { name: "B 的私人教材.pdf", exact: true })).toBeVisible();
   await expect(freshPage.getByText("堆疊講義.pdf", { exact: true })).toHaveCount(0);

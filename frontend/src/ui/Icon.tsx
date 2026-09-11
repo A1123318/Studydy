@@ -1,4 +1,10 @@
 export type IconName =
+  | "settings"
+  | "user"
+  | "eye"
+  | "eye-off"
+  | "chart"
+  | "clock"
   | "arrow-left"
   | "book"
   | "check"
@@ -14,6 +20,12 @@ export type IconName =
   | "warning";
 
 const paths: Record<IconName, React.ReactNode> = {
+  settings: <><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /><path d="m9 3 1-1h4l1 1 .5 2 2 1 2-.5 2 3-.5 2-1.5 1v2l1.5 1 .5 2-2 3-2-.5-2 1-.5 2-1 1h-4l-1-1-.5-2-2-1-2 .5-2-3 .5-2 1.5-1v-2l-1.5-1-.5-2 2-3 2 .5 2-1Z" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,
+  eye: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  "eye-off": <><path d="m3 3 18 18M10.5 5.1 12 5c6 0 10 7 10 7a22 22 0 0 1-3 4M6 6a25 25 0 0 0-4 6s4 7 10 7a12 12 0 0 0 5-1" /><path d="M10 10a3 3 0 0 0 4 4" /></>,
+  chart: <><path d="M4 3v17h17M8 16v-5M13 16V7M18 16v-8" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></>,
   "arrow-left": <><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></>,
   book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>,
   check: <path d="m5 12 4 4L19 6" />,

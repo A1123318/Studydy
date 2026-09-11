@@ -1,5 +1,7 @@
 export type AppRoute =
   | { name: "home" }
+  | { name: "materials" }
+  | { name: "maps" }
   | { name: "upload" }
   | { name: "material-detail"; materialId: string }
   | { name: "material-run"; materialId: string; runId: string }
@@ -18,6 +20,8 @@ function validSegment(value: string): boolean {
 
 export function readRoute(pathname: string): RouteRead {
   if (pathname === "/") return { route: { name: "home" }, isCanonical: true };
+  if (pathname === "/materials") return { route: { name: "materials" }, isCanonical: true };
+  if (pathname === "/knowledge-maps") return { route: { name: "maps" }, isCanonical: true };
   if (pathname === "/upload") return { route: { name: "upload" }, isCanonical: true };
   const segments = pathname.split("/").filter(Boolean).map((part) => {
     try {
@@ -83,6 +87,8 @@ export function readRoute(pathname: string): RouteRead {
 
 export function routePath(route: AppRoute): string {
   if (route.name === "home") return "/";
+  if (route.name === "materials") return "/materials";
+  if (route.name === "maps") return "/knowledge-maps";
   if (route.name === "upload") return "/upload";
   if (route.name === "material-detail") {
     if (!uuidPattern.test(route.materialId)) throw new Error("ROUTE_INVALID");
