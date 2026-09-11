@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage, type StudydyApiClient } from "../../api/client";
-import type { MaterialLibraryItem, MaterialStructureLink } from "../../api/contracts";
+import type { MaterialLibraryItem, MaterialStructureLink, StudySessionLink } from "../../api/contracts";
 import { writeRoute } from "../../app/routes";
 import { StateView } from "../../ui/StateView";
 import { formatFileSize, materialFailureMessage, materialProgressStageLabel, materialRunLabel } from "./material-flow";
 
 function openStructure(item: MaterialLibraryItem, structure: MaterialStructureLink) {
   writeRoute({ name: "knowledge-map", materialId: item.material_id, runId: structure.run_id, structureRevision: structure.knowledge_structure_revision });
+}
+
+function openStudy(item: MaterialLibraryItem, session: StudySessionLink) {
+  writeRoute({ name: "study-session", materialId: item.material_id, runId: session.run_id,
+    structureRevision: session.knowledge_structure_revision, studySessionId: session.study_session_id });
 }
 
 export function MaterialLibrary({ apiClient, materialId }: { apiClient: StudydyApiClient; materialId?: string }) {
@@ -59,11 +64,19 @@ export function MaterialLibrary({ apiClient, materialId }: { apiClient: StudydyA
         {latest && (latest.status === "running" || latest.status === "pending") && <p>{materialProgressStageLabel(latest.progress_stage)} · 已完成 {latest.completed_pages} 頁{latest.total_pages !== null && `／共 ${latest.total_pages} 頁`}</p>}
         {latest?.status === "failed" && <p>{materialFailureMessage(latest.error_code ?? "")}{available.length > 0 && " 先前已發布的知識地圖仍可開啟。"}</p>}
         <div className="state-actions">
+          {item.study_sessions[0] && <button className="primary-button" type="button" onClick={() => openStudy(item, item.study_sessions[0])}>{item.study_sessions[0].status === "completed" ? "查看上次學習" : "接續上次學習"}</button>}
           {available[0] && <button className="primary-button" type="button" onClick={() => openStructure(item, available[0])}>開啟知識地圖</button>}
           {latest && <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
           {materialId && <a className="secondary-button" href={apiClient.sourceArtifactUrl(item.source_artifact_id)} target="_blank" rel="noreferrer">開啟原始 PDF</a>}
         </div>
         {available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>}
+        {materialId && item.study_sessions.length > 0 && <section aria-label="學習紀錄">
+          <h3>既有學習紀錄</h3>
+          <ul>{item.study_sessions.map((session, index) => <li key={session.study_session_id}>
+            <span>{new Date(session.started_at).toLocaleString()} · {session.status === "completed" ? "已完成" : session.status === "no_safe" ? "目前沒有安全題目" : "學習中"}</span>{" "}
+            <button className="secondary-button" type="button" onClick={() => openStudy(item, session)}>開啟學習紀錄 {item.study_sessions.length - index}</button>
+          </li>)}</ul>
+        </section>}
         {materialId && available.length > 0 && <section aria-label="已發布版本">
           <h3>已發布版本</h3>
           <ul>{available.map((structure, index) => <li key={structure.knowledge_structure_revision}>

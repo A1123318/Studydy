@@ -232,3 +232,6 @@
   }
 
 }
+
+.study-record-picker { display: grid; gap: .75rem; padding: 1rem; }
+.study-record-picker select { width: 100%; max-width: 100%; padding: .75rem; }

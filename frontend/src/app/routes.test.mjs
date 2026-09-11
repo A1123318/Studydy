@@ -30,3 +30,10 @@ test("library, upload and material detail are independent canonical routes", () 
   }
   assert.equal(readRoute("/materials/not-an-id").isCanonical, false);
 });
+
+test("selected saved assessments survive canonical study URLs", () => {
+  const route = { name: "study-session", materialId, runId, structureRevision, studySessionId,
+    assessmentRevision: `assessment:sha256:${"c".repeat(64)}` };
+  assert.deepEqual(readRoute(routePath(route)), { route, isCanonical: true });
+  assert.throws(() => routePath({ ...route, assessmentRevision: "not-an-assessment" }));
+});

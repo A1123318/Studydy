@@ -11,8 +11,8 @@
 - 處理中自動更新狀態；其他狀況可按「重新整理」。錯誤有重新讀取與返回教材庫的出口。
 
 重新開啟只讀取既有 Material、Artifact、ProcessingRun 和 KnowledgeStructure，不呼叫模型、
-不新增紀錄，也不恢復 StudySession、Assessment、Answer 或 progress。「開始本次學習」仍是
-明確的獨立操作；既有學習紀錄恢復 UI 留待後續單元。
+不新增紀錄。有既有學習時，「接續上次學習」會讀回原 session、題目、回饋與 progress；
+詳情提供既有學習紀錄選擇。「開始新的學習」是明確的獨立操作，見[學習恢復](learning-resume.md)。
 
 ## API 與 migration
 
@@ -50,4 +50,4 @@ accepted 單元 A schema 回傳 `(3,)`，空 DB 回傳 `(1, 2, 3)`，重跑回�
 
 測試比對七張產品表的完整內容摘要與筆數（含 Material、Artifact、Run、KS、StudySession、
 Assessment、AnswerEvent），確認純 reopen 不變更資料；攔截後端 HTTP transport 確認零模型外呼。
-來源為既有 controlled fixtures，不啟動模型、OCR 或雲端 Pod，不宣稱完成後續恢復或整合驗收。
+來源為既有 controlled fixtures，不啟動模型、OCR 或雲端 Pod，不宣稱完成正式模型或整合驗收。

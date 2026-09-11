@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiClientError, errorMessage, type StudydyApiClient } from "../../api/client";
-import type { AnswerFeedbackView, AssessmentView, KnowledgeStructureView } from "../../api/contracts";
+import type { AnswerFeedbackView, AssessmentRecordView, AssessmentView, KnowledgeStructureView } from "../../api/contracts";
 import { Icon } from "../../ui/Icon";
 import "./styles.css";
 
@@ -33,8 +33,11 @@ function assessmentError(error: unknown): AssessmentError {
   };
 }
 
-export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProgressChanged, onReloadSession, sourceArtifactId, studySessionId, view }: {
+export function AssessmentPanel({ apiClient, record, completed, onAssessmentCreated, concept, recommendedClaimId, onProgressChanged, onReloadSession, sourceArtifactId, studySessionId, view }: {
   apiClient: StudydyApiClient;
+  record: AssessmentRecordView | null;
+  completed: boolean;
+  onAssessmentCreated: (revision: string) => void;
   concept: Concept;
   recommendedClaimId: string | null;
   onProgressChanged: () => void;
@@ -44,9 +47,9 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
   view: KnowledgeStructureView;
 }) {
   const [selectedClaimId, setSelectedClaimId] = useState(concept.claims[0].claim_id);
-  const [assessment, setAssessment] = useState<AssessmentView | null>(null);
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<AnswerFeedbackView | null>(null);
+  const [assessment, setAssessment] = useState<AssessmentView | null>(record?.assessment ?? null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(record?.feedback?.selected_option_id ?? null);
+  const [feedback, setFeedback] = useState<AnswerFeedbackView | null>(record?.feedback ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -54,17 +57,6 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
   const [submissionError, setSubmissionError] = useState<AssessmentError | null>(null);
   const assessmentIntent = useRef<{ claimId: string; key: string } | null>(null);
   const submissionIntent = useRef<{ optionId: string; key: string } | null>(null);
-
-  useEffect(() => {
-    setSelectedClaimId(concept.claims[0].claim_id);
-    setAssessment(null);
-    setSelectedOptionId(null);
-    setFeedback(null);
-    setRequestError(null);
-    setSubmissionError(null);
-    assessmentIntent.current = null;
-    submissionIntent.current = null;
-  }, [concept.concept_id]);
 
   useEffect(() => {
     if (recommendedClaimId && concept.claims.some((claim) => claim.claim_id === recommendedClaimId)) {
@@ -84,7 +76,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
   }, [isLoading]);
 
   const requestAssessment = async (newIntent: boolean) => {
-    if (isLoading) return;
+    if (isLoading || completed) return;
     setIsLoading(true);
     setRequestError(null);
     setAssessment(null);
@@ -102,7 +94,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
     try {
       const next = await createForClaim(selectedClaimId, newIntent);
       setAssessment(next);
-      onProgressChanged();
+      onAssessmentCreated(next.assessment_revision);
       submissionIntent.current = null;
     } catch (error) {
       const nextError = assessmentError(error);
@@ -114,7 +106,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
   };
 
   const submit = async () => {
-    if (!assessment || !selectedOptionId || isSubmitting) return;
+    if (!assessment || !selectedOptionId || isSubmitting || completed || record?.can_submit === false) return;
     if (submissionIntent.current?.optionId !== selectedOptionId) {
       submissionIntent.current = { optionId: selectedOptionId, key: crypto.randomUUID() };
     }
@@ -146,6 +138,8 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
         <span className="feedback-icon"><Icon name={feedback.is_correct ? "check" : "warning"} size={28} /></span>
         <p className="eyebrow">作答回饋</p>
         <h2>{feedback.is_correct ? "答對了" : "這題需要再想一下"}</h2>
+        <p>{assessment.prompt}</p>
+        <p>你的作答：{assessment.options.find(option => option.option_id === feedback.selected_option_id)?.text}</p>
         <p className="feedback-rationale">{feedback.rationale}</p>
         <div className="feedback-evidence">
           <h3>教材依據</h3>
@@ -168,7 +162,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
             setFeedback(null);
             setSelectedOptionId(null);
           }}>回到教材</button>
-          <button className="primary-button" type="button" onClick={() => void requestAssessment(true)}><Icon name="refresh" />取得新題目</button>
+          {!completed && <button className="primary-button" type="button" onClick={() => void requestAssessment(true)}><Icon name="refresh" />取得目前概念的新題目</button>}
         </div>
       </section>
     );
@@ -206,6 +200,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
       )}
       <div className="assessment-actions">
         <button className="secondary-button" type="button" onClick={() => setRequestError(null)}>{requestError.noSafeItem ? "完成本次回顧" : "回到教材"}</button>
+        {requestError.conflict && <button className="secondary-button" type="button" onClick={onReloadSession}>重新整理本次學習</button>}
         {requestError.retryable && <button className="primary-button" type="button" onClick={() => void requestAssessment(false)}>再試一次</button>}
       </div>
     </section>
@@ -219,6 +214,8 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
       <strong className="assessment-elapsed">已等待 {elapsedSeconds} 秒</strong>
     </section>
   );
+
+  if (!assessment && completed) return <section className="assessment-card"><h2>本次學習已結束</h2><p>可從題目與作答紀錄選擇已保存的內容。</p></section>;
 
   if (!assessment) return (
     <section className="assessment-card assessment-ready">
@@ -250,7 +247,7 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
     <section className="assessment-card" aria-labelledby="assessment-question">
       <p className="eyebrow">單選評量</p>
       <h2 id="assessment-question">{assessment.prompt}</h2>
-      <fieldset className="assessment-options" disabled={isSubmitting}>
+      <fieldset className="assessment-options" disabled={isSubmitting || completed || record?.can_submit === false}>
         <legend className="sr-only">請選擇一個答案</legend>
         {assessment.options.map((option, index) => (
           <label className={selectedOptionId === option.option_id ? "is-selected" : undefined} key={option.option_id}>
@@ -273,10 +270,11 @@ export function AssessmentPanel({ apiClient, concept, recommendedClaimId, onProg
       {submissionError && (
         <div className="assessment-error" role="alert">
           <span>{submissionError.message}</span>
-          {submissionError.conflict && <button className="text-button" type="button" onClick={onReloadSession}>重新整理本次學習</button>}
+          <button className="text-button" type="button" onClick={onReloadSession}>查回作答結果</button>
         </div>
       )}
-      <button className="primary-button assessment-submit" disabled={!selectedOptionId || isSubmitting || submissionError?.conflict} type="button" onClick={() => void submit()}>
+      {(completed || record?.can_submit === false) && <p>這題已不在可作答的學習位置，僅供回顧。</p>}
+      <button className="primary-button assessment-submit" disabled={!selectedOptionId || isSubmitting || submissionError?.conflict || completed || record?.can_submit === false} type="button" onClick={() => void submit()}>
         {isSubmitting ? "正在送出…" : submissionError?.retryable ? "重新送出" : "送出答案"}
       </button>
     </section>

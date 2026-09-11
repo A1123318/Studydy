@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from .database import DatabaseConfigurationError
-from .tables import Artifact, KnowledgeStructure, Material, MaterialProcessingRun, database_session
+from .tables import Artifact, KnowledgeStructure, Material, MaterialProcessingRun, StudySession, database_session
 
 
 class MaterialLibraryError(RuntimeError):
@@ -16,7 +16,7 @@ class MaterialLibraryError(RuntimeError):
 def read_material_library(
     learner_id: UUID, *, material_id: UUID | None = None, dsn: str | None = None,
 ) -> list[dict]:
-    """直接投影自己的教材、最新嘗試與已發布版本，不生成或恢復學習狀態。"""
+    """直接投影自己的教材、最新嘗試與已發布版本，不生成或寫入學習狀態。"""
     try:
         with database_session(dsn) as session:
             statement = select(
@@ -58,6 +58,16 @@ def read_material_library(
                 MaterialProcessingRun.status.in_(("succeeded", "partial")),
                 MaterialProcessingRun.output_binding["knowledge_structure_revision"].astext == KnowledgeStructure.structure_revision,
             ).order_by(KnowledgeStructure.created_at.desc(), KnowledgeStructure.run_id.desc())).mappings().all()
+            studies = session.execute(select(
+                StudySession.material_id, StudySession.study_session_id,
+                StudySession.knowledge_structure_revision, StudySession.status,
+                StudySession.current_concept_id, StudySession.started_at, KnowledgeStructure.run_id,
+            ).join(KnowledgeStructure,
+                (KnowledgeStructure.learner_id == StudySession.learner_id)
+                & (KnowledgeStructure.material_id == StudySession.material_id)
+                & (KnowledgeStructure.structure_revision == StudySession.knowledge_structure_revision),
+            ).where(StudySession.learner_id == learner_id, StudySession.material_id.in_(ids))
+              .order_by(StudySession.started_at.desc(), StudySession.study_session_id.desc())).mappings().all()
     except (DatabaseConfigurationError, SQLAlchemyError):
         raise MaterialLibraryError("MATERIAL_LIBRARY_STORAGE_FAILED") from None
 
@@ -65,10 +75,14 @@ def read_material_library(
     published: dict[UUID, list[dict]] = {identity: [] for identity in ids}
     for row in structures:
         published[row["material_id"]].append({key: value for key, value in row.items() if key != "material_id"})
+    sessions: dict[UUID, list[dict]] = {identity: [] for identity in ids}
+    for row in studies:
+        sessions[row["material_id"]].append({key: value for key, value in row.items() if key != "material_id"})
     return [{
         "schema": "material-library-item/v1",
         **row,
         "display_name": row["display_name"] or f"教材 {row['created_at']:%Y-%m-%d} · {str(row['material_id'])[:8]}",
         "latest_attempt": latest.get(row["material_id"]),
         "available_structures": published[row["material_id"]],
+        "study_sessions": sessions[row["material_id"]],
     } for row in materials]

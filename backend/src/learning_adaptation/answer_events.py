@@ -13,7 +13,7 @@ from sqlalchemy import select
 from runtime.learner_session import TrustedLearner
 from runtime.storage.tables import AnswerEvent, Assessment, database_session
 
-from .assessments import AssessmentError, _stored as validate_stored_assessment
+from .assessments import AssessmentError, StoredAssessment, _stored as validate_stored_assessment
 from .study_sessions import StudySessionError, _learner, _row, _stored, _validate
 
 
@@ -242,6 +242,47 @@ def read_answer_events(learner: TrustedLearner, study_session_id: UUID, *, dsn: 
                 raise AnswerSubmissionError("ANSWER_EVENT_UNAVAILABLE")
             return events
     except (AnswerSubmissionError, StudySessionError):
+        raise
+    except Exception:
+        raise AnswerSubmissionError("ANSWER_STORAGE_FAILED") from None
+
+
+@dataclass(frozen=True)
+class AssessmentRecord:
+    assessment: StoredAssessment
+    feedback: AnswerFeedback | None
+    created_at: datetime
+
+
+def read_assessment_records(
+    learner: TrustedLearner, study_session_id: UUID, *, dsn: str | None = None,
+) -> tuple[AssessmentRecord, ...]:
+    """讀回原題與已提交的回饋；未答題不產生或公開私人答案。"""
+    learner_id = _learner(learner)
+    try:
+        with database_session(dsn) as session:
+            study = _row(session, learner_id, study_session_id)
+            _validate(session, study)
+            assessments = list(session.scalars(select(Assessment).where(
+                Assessment.study_session_id == study_session_id,
+                Assessment.knowledge_structure_revision == study.knowledge_structure_revision,
+            ).order_by(Assessment.created_at.desc(), Assessment.assessment_revision.desc())))
+            answers = list(session.scalars(select(AnswerEvent).where(
+                AnswerEvent.study_session_id == study_session_id,
+            ).order_by(AnswerEvent.event_number)))
+            if [answer.event_number for answer in answers] != list(range(1, study.last_event_number + 1)):
+                raise AnswerSubmissionError("ANSWER_EVENT_UNAVAILABLE")
+            by_assessment = {answer.assessment_revision: answer for answer in answers}
+            if not set(by_assessment) <= {item.assessment_revision for item in assessments}:
+                raise AnswerSubmissionError("ANSWER_EVENT_UNAVAILABLE")
+            records = []
+            for assessment in assessments:
+                validated = validate_stored_assessment(assessment)
+                answer = by_assessment.get(assessment.assessment_revision)
+                feedback = _feedback(_event(answer, assessment, study), assessment) if answer is not None else None
+                records.append(AssessmentRecord(validated, feedback, assessment.created_at))
+            return tuple(records)
+    except (AnswerSubmissionError, StudySessionError, AssessmentError):
         raise
     except Exception:
         raise AnswerSubmissionError("ANSWER_STORAGE_FAILED") from None

@@ -17,6 +17,7 @@ import type {
   MaterialLibraryView,
   StudySessionCreate,
   StudySessionView,
+  StudyResumeView,
 } from "./contracts";
 
 type FetchRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -83,7 +84,16 @@ function libraryItem(value: unknown): value is MaterialLibraryItem {
     || typeof item.display_name !== "string" || !item.display_name.trim()
     || !Number.isInteger(item.size_bytes) || Number(item.size_bytes) < 1
     || typeof item.created_at !== "string" || !Number.isFinite(Date.parse(item.created_at))
-    || !Array.isArray(item.available_structures)) return false;
+    || !Array.isArray(item.available_structures) || !Array.isArray(item.study_sessions)) return false;
+  if (!item.study_sessions.every((value) => {
+    const study = object(value);
+    return !!study && typeof study.study_session_id === "string" && uuid.test(study.study_session_id)
+      && revision(study.knowledge_structure_revision, "knowledge-structure")
+      && typeof study.run_id === "string" && uuid.test(study.run_id)
+      && ["active", "no_safe", "completed"].includes(String(study.status))
+      && typeof study.started_at === "string"
+      && (study.current_concept_id === null || revision(study.current_concept_id, "concept"));
+  })) return false;
   const attempt = object(item.latest_attempt);
   if (item.latest_attempt !== null && (!attempt
     || typeof attempt.run_id !== "string" || !uuid.test(attempt.run_id)
@@ -155,7 +165,7 @@ function studySession(value: unknown): value is StudySessionView {
     && typeof item.material_id === "string" && uuid.test(item.material_id)
     && revision(item.knowledge_structure_revision, "knowledge-structure")
     && (item.current_concept_id === null || revision(item.current_concept_id, "concept"))
-    && strings(item.deferred_concept_ids) && Number.isInteger(item.event_watermark)
+    && strings(item.deferred_concept_ids) && strings(item.no_safe_claim_ids) && Number.isInteger(item.event_watermark)
     && ["active", "no_safe", "completed"].includes(String(item.status));
 }
 
@@ -195,6 +205,33 @@ function progress(value: unknown): value is LearnerProgressView {
     return !!state && revision(state.concept_id, "concept") && typeof state.label === "string"
       && ["not_started", "learning", "needs_review", "mastered"].includes(String(state.status));
   });
+}
+
+function studyResume(value: unknown): value is StudyResumeView {
+  const item = object(value);
+  if (!item || item.schema !== "study-resume/v1" || !studySession(item.session)
+    || !knowledgeStructure(item.knowledge_structure) || !progress(item.progress)
+    || typeof item.run_id !== "string" || !uuid.test(item.run_id)
+    || typeof item.source_artifact_id !== "string" || !uuid.test(item.source_artifact_id)
+    || !Array.isArray(item.assessments)) return false;
+  const session = item.session;
+  if (item.progress.study_session_id !== session.study_session_id
+    || item.progress.knowledge_structure_revision !== session.knowledge_structure_revision
+    || item.knowledge_structure.knowledge_structure_revision !== session.knowledge_structure_revision
+    || item.progress.event_watermark !== session.event_watermark) return false;
+  if (!item.assessments.every((value) => {
+    const record = object(value);
+    if (!record || !assessment(record.assessment) || typeof record.created_at !== "string" || typeof record.can_submit !== "boolean") return false;
+    const question = record.assessment;
+    if (question.study_session_id !== session.study_session_id || question.knowledge_structure_revision !== session.knowledge_structure_revision) return false;
+    if (record.feedback !== null && (!feedback(record.feedback)
+      || record.feedback.study_session_id !== session.study_session_id
+      || record.feedback.assessment_revision !== question.assessment_revision
+      || record.feedback.question_id !== question.question_id
+      || !question.options.some(option => option.option_id === (record.feedback as AnswerFeedbackView).selected_option_id))) return false;
+    return !record.can_submit || (record.feedback === null && session.status !== "completed" && question.target_concept_id === session.current_concept_id);
+  })) return false;
+  return item.selected_assessment_revision === null || item.assessments.some(value => object(object(value)?.assessment)?.assessment_revision === item.selected_assessment_revision);
 }
 
 function apiError(value: unknown): value is ApiErrorView {
@@ -369,8 +406,16 @@ export class StudydyApiClient {
     return this.post("/v1/study-sessions", body, key, studySession);
   }
 
-  getStudySession(id: string): Promise<StudySessionView> {
-    return this.json(`/v1/study-sessions/${encodeURIComponent(id)}`, { method: "GET" }, studySession);
+  async resumeStudy(request: { materialId: string; structureRevision: string; studySessionId: string; runId: string; assessmentRevision?: string }): Promise<StudyResumeView> {
+    const query = new URLSearchParams({ run_id: request.runId });
+    if (request.assessmentRevision) query.set("assessment_revision", request.assessmentRevision);
+    const restored = await this.json(`/v1/materials/${encodeURIComponent(request.materialId)}/knowledge-structures/${encodeURIComponent(request.structureRevision)}/study-sessions/${encodeURIComponent(request.studySessionId)}/resume?${query}`, { method: "GET" }, studyResume);
+    if (restored.session.material_id !== request.materialId || restored.session.study_session_id !== request.studySessionId
+      || restored.session.knowledge_structure_revision !== request.structureRevision || restored.run_id !== request.runId
+      || (request.assessmentRevision !== undefined && restored.selected_assessment_revision !== request.assessmentRevision)) {
+      throw new ApiClientError("schema", "學習紀錄與教材版本不一致。", { reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+    }
+    return restored;
   }
 
   completeStudySession(id: string): Promise<StudySessionView> {
@@ -381,16 +426,8 @@ export class StudydyApiClient {
     return this.post(`/v1/study-sessions/${encodeURIComponent(id)}/assessments`, body, key, assessment);
   }
 
-  getAssessment(id: string, revision: string): Promise<AssessmentView> {
-    return this.json(`/v1/study-sessions/${encodeURIComponent(id)}/assessments/${encodeURIComponent(revision)}`, { method: "GET" }, assessment);
-  }
-
   submitAssessmentAnswer(id: string, revision: string, body: AnswerSubmissionCreate, key: string = crypto.randomUUID()): Promise<AnswerFeedbackView> {
     return this.post(`/v1/study-sessions/${encodeURIComponent(id)}/assessments/${encodeURIComponent(revision)}/submissions`, body, key, feedback);
-  }
-
-  getLearnerProgress(id: string): Promise<LearnerProgressView> {
-    return this.json(`/v1/study-sessions/${encodeURIComponent(id)}/progress`, { method: "GET" }, progress);
   }
 
   applyGuidance(id: string, body: GuidanceApply): Promise<LearnerProgressView> {

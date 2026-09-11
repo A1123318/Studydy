@@ -92,7 +92,7 @@ function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStud
         disabled={isStartingStudy}
         type="button"
         onClick={() => onStartStudy(concept.concept_id)}
-      ><Icon name="learning" />{isStartingStudy ? "正在開始…" : "從這個概念開始"}</button>
+      ><Icon name="learning" />{isStartingStudy ? "正在開始…" : "從這個概念開始新的學習"}</button>
       <section>
         <h3>教材重點</h3>
         {concept.claims.map((claim) => (
@@ -479,7 +479,7 @@ export function KnowledgeMapWorkspace({ apiClient, isStartingStudy, onReturnToRu
             <span><strong>{view.relations.length}</strong>關係</span>
           </div>
           <button className="primary-button" disabled={isStartingStudy} type="button" onClick={() => onStartStudy(initialConceptId)}>
-            <Icon name="learning" />{isStartingStudy ? "正在開始…" : "開始本次學習"}
+            <Icon name="learning" />{isStartingStudy ? "正在開始…" : "開始新的學習"}
           </button>
         </div>
       </header>

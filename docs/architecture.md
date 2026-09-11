@@ -94,3 +94,10 @@ KnowledgeStructure. Materials retain an optional uploaded display name; older ro
 recognizable date/ID label. Latest attempts and published revisions are listed independently, so a
 failed new attempt cannot hide a prior result. Reopen uses existing exact-revision GET endpoints
 and creates no learning records. There is no separate material-history store.
+
+Study resume is a read projection of the existing StudySession, exact KnowledgeStructure,
+Assessment and AnswerEvent. It uses the existing assessment/event validators, feedback projection
+and derived progress. The material library links to original sessions and revisions; question
+selection is explicit in the browser URL. Reads never create sessions/questions/answers or apply
+guidance. Completed sessions remain readable, and feedback is exposed only for a validated saved
+AnswerEvent. There is no additional history table or mastery calculation.

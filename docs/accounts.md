@@ -28,7 +28,7 @@ PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrati
 5. session 有效時沿用 idle refresh（7 天，最長 30 天）；過期需重新登入。失敗的上傳／作答
    不會自動重送，請登入後明確操作。登出失敗時私有畫面仍清空，請按「再試一次」完成登出。
 
-登入後可從[教材庫](material-library.md)找回教材；學習歷史恢復 UI 尚未提供。原有直接網址仍受後端 owner 檢查保護。
+登入後可從[教材庫](material-library.md)找回教材；可[接續原學習並查看題目與作答](learning-resume.md)。原有直接網址仍受後端 owner 檢查保護。
 不再使用未區分帳號的 localStorage 最近教材指標。切換帳號會清除頁面內私有狀態；同 origin
 其他分頁會收到身分變更通知，須重新登入後再操作。
 

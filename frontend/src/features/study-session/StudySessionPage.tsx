@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage, type StudydyApiClient } from "../../api/client";
-import type { KnowledgeStructureView, LearnerProgressView, StudySessionView } from "../../api/contracts";
+import type { AssessmentRecordView, KnowledgeStructureView, LearnerProgressView, StudySessionView } from "../../api/contracts";
 import { writeRoute, type AppRoute } from "../../app/routes";
 import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
@@ -15,6 +15,8 @@ type StudyData = {
   session: StudySessionView;
   sourceArtifactId: string;
   view: KnowledgeStructureView;
+  records: AssessmentRecordView[];
+  selectedAssessmentRevision: string | null;
 };
 
 function validBinding(route: Extract<AppRoute, { name: "study-session" }>, data: StudyData): boolean {
@@ -64,20 +66,25 @@ export function StudySessionPage({ apiClient, route }: {
   const [reload, setReload] = useState(0);
 
   const load = async () => {
-    const [view, run, session, progress] = await Promise.all([
-      apiClient.getKnowledgeStructure({ materialId: route.materialId, structureRevision: route.structureRevision }),
-      apiClient.getMaterialRun(route.runId),
-      apiClient.getStudySession(route.studySessionId),
-      apiClient.getLearnerProgress(route.studySessionId),
-    ]);
-    const next = { view, sourceArtifactId: run.source_artifact_id, session, progress };
-    if (run.material_id !== route.materialId || !validBinding(route, next)) throw new Error("STUDY_BINDING_MISMATCH");
+    const restored = await apiClient.resumeStudy(route);
+    const next = { view: restored.knowledge_structure, sourceArtifactId: restored.source_artifact_id,
+      session: restored.session, progress: restored.progress, records: restored.assessments,
+      selectedAssessmentRevision: restored.selected_assessment_revision };
+    if (!validBinding(route, next)) throw new Error("STUDY_BINDING_MISMATCH");
     return next;
   };
 
   useEffect(() => {
     let cancelled = false;
-    void load().then((next) => { if (!cancelled) { setData(next); setMessage(null); } }, (error) => { if (!cancelled) setMessage(errorMessage(error)); });
+    setData(null);
+    setMessage(null);
+    void load().then((next) => {
+      if (cancelled) return;
+      setData(next);
+      if (!route.assessmentRevision && next.selectedAssessmentRevision) {
+        writeRoute({ ...route, assessmentRevision: next.selectedAssessmentRevision }, true);
+      }
+    }, (error) => { if (!cancelled) setMessage(errorMessage(error)); });
     return () => { cancelled = true; };
   }, [apiClient, reload, route]);
 
@@ -92,10 +99,11 @@ export function StudySessionPage({ apiClient, route }: {
     structureRevision: route.structureRevision,
   });
 
-  if (message) return <StateView action={<button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button>} description={message} image="/assets/studydy/failure-confused.png" title="無法開啟本次學習" tone="failure" />;
+  if (message) return <StateView action={<><button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button><button className="secondary-button" type="button" onClick={() => writeRoute({ name: "home" })}>返回教材庫</button></>} description={message} image="/assets/studydy/failure-confused.png" title="無法開啟本次學習" tone="failure" />;
   if (!data) return <StateView description="正在復原教材結構與本次學習狀態。" live title="正在讀取本次學習" tone="loading" />;
-  if (data.session.status === "completed") return <StateView action={<button className="primary-button" type="button" onClick={back}>回到知識地圖</button>} description="進度與作答紀錄已保存。" image="/assets/studydy/success-jump.png" title="本次學習已完成" tone="success" />;
 
+  const completed = data.session.status === "completed";
+  const selectedRecord = data.records.find(record => record.assessment.assessment_revision === data.selectedAssessmentRevision) ?? null;
   const current = data.view.concepts.find((concept) => concept.concept_id === data.progress.current_concept_id);
   if (!current) return <StateView action={<button className="secondary-button" type="button" onClick={back}>回到知識地圖</button>} description="目前沒有可安全顯示的教材概念。" image="/assets/studydy/empty-disappointed.png" title="目前沒有學習內容" tone="empty" />;
 
@@ -104,7 +112,7 @@ export function StudySessionPage({ apiClient, route }: {
     setBusy(true);
     try {
       await apiClient.applyGuidance(route.studySessionId, { schema: "guidance-apply/v2", guidance_revision: data.progress.guidance_revision });
-      await refresh();
+      writeRoute({ ...route, assessmentRevision: undefined }, true);
     } catch (error) { setMessage(errorMessage(error)); }
     finally { setBusy(false); }
   };
@@ -120,8 +128,9 @@ export function StudySessionPage({ apiClient, route }: {
   return (
     <section className="study-session-page">
       <header className="study-header">
-        <div><p className="eyebrow">本次學習</p><h1>{current.label}</h1><p>指引只更新本次 Session，不會改寫教材 Map 或 Path。</p></div>
-        <button className="secondary-button" disabled={busy} type="button" onClick={() => void complete()}><Icon name="check" />完成本次學習</button>
+        <div><p className="eyebrow">本次學習</p><h1>{completed ? "本次學習已完成" : current.label}</h1><p>指引只更新本次 Session，不會改寫教材 Map 或 Path。</p></div>
+        {completed ? <button className="secondary-button" type="button" onClick={back}>回到知識地圖</button>
+          : <button className="secondary-button" disabled={busy} type="button" onClick={() => void complete()}><Icon name="check" />完成本次學習</button>}
       </header>
       <div className="study-layout">
         <SessionPath progress={data.progress} view={data.view} />
@@ -142,11 +151,24 @@ export function StudySessionPage({ apiClient, route }: {
           </article>
 
 
-          <GuidanceNextStep progress={data.progress} view={data.view} isApplying={busy} onApply={() => void apply()} />
+          {!completed && <GuidanceNextStep progress={data.progress} view={data.view} isApplying={busy} onApply={() => void apply()} />}
           <LearningInsights currentConceptId={current.concept_id} progress={data.progress} />
+          {data.records.length > 0 && <label className="surface study-record-picker">題目與作答紀錄
+            <select disabled={busy} value={data.selectedAssessmentRevision ?? ""} onChange={event => writeRoute({ ...route, assessmentRevision: event.target.value })}>
+              {!data.selectedAssessmentRevision && <option value="" disabled>選擇既有題目</option>}
+              {data.records.map((record, index) => <option key={record.assessment.assessment_revision} value={record.assessment.assessment_revision}>
+                {data.records.length - index} · {record.feedback ? "已作答" : "未作答"} · {record.assessment.prompt}
+              </option>)}
+            </select>
+            <button className="secondary-button" disabled={busy} type="button" onClick={() => writeRoute({ ...route, assessmentRevision: undefined }, true)}>回到目前學習</button>
+          </label>}
           <div id="assessment-panel">
             <AssessmentPanel
+              key={`${data.session.study_session_id}/${current.concept_id}/${selectedRecord?.assessment.assessment_revision ?? "new"}/${selectedRecord?.feedback?.answer_event_id ?? "unanswered"}`}
               apiClient={apiClient}
+              record={selectedRecord}
+              completed={completed}
+              onAssessmentCreated={assessmentRevision => writeRoute({ ...route, assessmentRevision }, true)}
               concept={current}
               recommendedClaimId={data.progress.next_action.target_concept_id === current.concept_id ? data.progress.next_action.target_claim_id : null}
               onProgressChanged={() => { void refresh(); }}

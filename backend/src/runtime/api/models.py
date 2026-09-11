@@ -89,6 +89,15 @@ class MaterialStructureLink(_Closed):
     status: Literal["succeeded", "partial"]
 
 
+class StudySessionLink(_Closed):
+    study_session_id: UUID
+    knowledge_structure_revision: str
+    run_id: UUID
+    current_concept_id: str | None
+    status: Literal["active", "no_safe", "completed"]
+    started_at: datetime
+
+
 class MaterialLibraryItem(_Closed):
     schema_: Literal["material-library-item/v1"] = Field(alias="schema")
     material_id: UUID
@@ -98,6 +107,7 @@ class MaterialLibraryItem(_Closed):
     created_at: datetime
     latest_attempt: MaterialAttemptView | None
     available_structures: list[MaterialStructureLink]
+    study_sessions: list[StudySessionLink]
 
 
 class MaterialLibraryView(_Closed):
@@ -208,6 +218,7 @@ class StudySessionView(_Closed):
     knowledge_structure_revision: str
     current_concept_id: str | None
     deferred_concept_ids: list[str]
+    no_safe_claim_ids: list[str]
     status: Literal["active", "no_safe", "completed"]
     started_at: datetime
     completed_at: datetime | None
@@ -258,6 +269,24 @@ class AnswerFeedbackView(_Closed):
     created_at: datetime
 
 
+class AssessmentRecordView(_Closed):
+    assessment: AssessmentView
+    feedback: AnswerFeedbackView | None
+    created_at: datetime
+    can_submit: bool
+
+
+class StudyResumeView(_Closed):
+    schema_: Literal["study-resume/v1"] = Field(default="study-resume/v1", alias="schema")
+    session: StudySessionView
+    run_id: UUID
+    source_artifact_id: UUID
+    knowledge_structure: KnowledgeStructureView
+    progress: LearnerProgressView
+    assessments: list[AssessmentRecordView]
+    selected_assessment_revision: str | None
+
+
 class GuidanceApply(_Closed):
     schema_: Literal["guidance-apply/v2"] = Field(alias="schema")
     guidance_revision: str
@@ -295,6 +324,7 @@ def project_study_session(session: Any) -> StudySessionView:
         "knowledge_structure_revision": session.knowledge_structure_revision,
         "current_concept_id": session.current_concept_id,
         "deferred_concept_ids": list(session.deferred_concept_ids),
+        "no_safe_claim_ids": list(session.no_safe_claim_ids),
         "status": session.status,
         "started_at": session.started_at,
         "completed_at": session.completed_at,

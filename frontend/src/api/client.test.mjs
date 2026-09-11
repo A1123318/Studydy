@@ -68,7 +68,7 @@ test("unknown relation type and leaked private answer fail closed", async () => 
     correct_option_id: `option:sha256:${"1".repeat(64)}`,
   };
   const leaked = new StudydyApiClient(async () => Response.json(assessment));
-  await assert.rejects(leaked.getAssessment(sessionId, assessment.assessment_revision), (error) => error instanceof ApiClientError && error.kind === "schema");
+  await assert.rejects(leaked.createAssessment(sessionId, { schema: "assessment-create/v2", target_claim_id: claimId }), (error) => error instanceof ApiClientError && error.kind === "schema");
 });
 
 test("session refresh is coalesced and safe API errors stay fixed", async () => {
@@ -141,7 +141,7 @@ test("responses still parsing at logout cannot publish private data", async () =
 function libraryItem() {
   return { schema: "material-library-item/v1", material_id: materialId,
     source_artifact_id: "44444444-4444-4444-8444-444444444444", display_name: "堆疊.pdf",
-    size_bytes: 120, created_at: "2026-09-11T00:00:00Z", latest_attempt: null,
+    size_bytes: 120, created_at: "2026-09-11T00:00:00Z", latest_attempt: null, study_sessions: [],
     available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
       created_at: "2026-09-11T00:01:00Z", status: "succeeded" }] };
 }
@@ -169,4 +169,63 @@ test("library rejects invalid lifecycle and uploaded filenames use UTF-8 encodin
     return Response.json({ schema: "material/v1", material_id: materialId, source_artifact_id: item.source_artifact_id, source_sha256: "a".repeat(64), size_bytes: 120 });
   });
   await client.createMaterial(new Blob(["pdf"], { type: "application/pdf" }), "upload", "陣列 & 堆疊.pdf");
+});
+
+function resumeView() {
+  const question = {
+    schema: "single-choice-assessment/v2", assessment_revision: `assessment:sha256:${"4".repeat(64)}`,
+    study_session_id: sessionId, knowledge_structure_revision: structureRevision,
+    question_id: `question:sha256:${"5".repeat(64)}`, target_concept_id: conceptId,
+    target_claim_id: claimId, source_evidence_ids: [evidenceId], question_type: "single_choice",
+    prompt: "Saved question", options: Array.from({ length: 4 }, (_, index) => ({ option_id: `option:sha256:${String(index + 1).repeat(64)}`, text: String(index) })),
+  };
+  return {
+    schema: "study-resume/v1", run_id: runId, source_artifact_id: libraryItem().source_artifact_id,
+    session: { schema: "study-session/v2", study_session_id: sessionId, material_id: materialId,
+      knowledge_structure_revision: structureRevision, current_concept_id: conceptId,
+      no_safe_claim_ids: [], deferred_concept_ids: [], status: "active", event_watermark: 0,
+      started_at: "2026-09-11T00:00:00Z", completed_at: null },
+    knowledge_structure: structureView(),
+    progress: { schema: "learner-progress/v2", study_session_id: sessionId, knowledge_structure_revision: structureRevision,
+      event_watermark: 0, current_concept_id: conceptId, deferred_concept_ids: [],
+      concept_states: [{ concept_id: conceptId, label: "Stack", status: "not_started" }], weaknesses: [],
+      next_action: { action: "assess", target_concept_id: conceptId, target_claim_id: claimId, prerequisite_concept_ids: [], reason: "current_concept" },
+      guidance_revision: `learner-guidance:sha256:${"6".repeat(64)}` },
+    assessments: [{ assessment: question, feedback: null, can_submit: true, created_at: "2026-09-11T00:01:00Z" }],
+    selected_assessment_revision: question.assessment_revision,
+  };
+}
+
+test("resume is a bound read and preserves the selected original assessment", async () => {
+  const value = resumeView();
+  const requests = [];
+  const client = new StudydyApiClient(async (path, init) => {
+    requests.push([String(path), init.method]);
+    return Response.json(value);
+  });
+  const request = { materialId, studySessionId: sessionId, runId, structureRevision, assessmentRevision: value.selected_assessment_revision };
+  assert.deepEqual(await client.resumeStudy(request), value);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0][1], "GET");
+  assert.equal(new URL(requests[0][0], "http://localhost").searchParams.get("assessment_revision"), value.selected_assessment_revision);
+  await assert.rejects(client.resumeStudy({ ...request, materialId: sessionId }), error => error.kind === "schema");
+  await assert.rejects(client.resumeStudy({ ...request, runId: sessionId }), error => error.kind === "schema");
+});
+
+test("resume rejects private answers and mixed feedback or revision bindings", async () => {
+  const request = { materialId, studySessionId: sessionId, runId, structureRevision };
+  for (const corrupt of [
+    value => { value.assessments[0].assessment.correct_option_id = "private"; },
+    value => { value.assessments[0].assessment.knowledge_structure_revision = `knowledge-structure:sha256:${"9".repeat(64)}`; },
+    value => { value.selected_assessment_revision = `assessment:sha256:${"9".repeat(64)}`; },
+    value => { value.assessments[0].feedback = { schema: "answer-feedback/v2", answer_event_id: materialId,
+      study_session_id: materialId, assessment_revision: value.selected_assessment_revision,
+      question_id: value.assessments[0].assessment.question_id, selected_option_id: value.assessments[0].assessment.options[0].option_id,
+      is_correct: true, rationale: "Saved", source_evidence_ids: [evidenceId], event_number: 1 }; },
+  ]) {
+    const value = resumeView();
+    corrupt(value);
+    const client = new StudydyApiClient(async () => Response.json(value));
+    await assert.rejects(client.resumeStudy(request), error => error.kind === "schema");
+  }
 });

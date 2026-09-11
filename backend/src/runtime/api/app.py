@@ -36,6 +36,8 @@ from .models import (
     LearnerProgressView,
     StudySessionCreate,
     StudySessionView,
+    StudyResumeView,
+    AssessmentRecordView,
     project_answer_feedback,
     project_assessment,
     project_learner_progress,
@@ -46,7 +48,7 @@ from learning_adaptation.learner_progress import (
     apply_guidance,
     derive_learner_progress,
 )
-from learning_adaptation.answer_events import submit_answer
+from learning_adaptation.answer_events import read_assessment_records, submit_answer
 from learning_adaptation.assessments import generate_assessment, read_assessment
 from learning_adaptation.study_sessions import (
     complete_study_session,
@@ -212,6 +214,7 @@ def _fixed_exception(error: Exception) -> str:
         "MATERIAL_RUN_IDEMPOTENCY_CONFLICT",
         "ANSWER_ALREADY_SUBMITTED",
         "LEARNER_GUIDANCE_STALE",
+        "LEARNER_PROGRESS_STALE",
         "ANSWER_SUBMISSION_STALE",
     }:
         return "IDEMPOTENCY_CONFLICT"
@@ -224,6 +227,7 @@ def _fixed_exception(error: Exception) -> str:
         "STUDY_SESSION_MAP_UNAVAILABLE",
         "ANSWER_STUDY_SESSION_UNAVAILABLE",
         "ANSWER_ASSESSMENT_UNAVAILABLE",
+        "ANSWER_EVENT_UNAVAILABLE",
         "ASSESSMENT_UNAVAILABLE",
         "ASSESSMENT_SESSION_UNAVAILABLE",
         "LEARNER_PROGRESS_UNAVAILABLE",
@@ -389,6 +393,8 @@ def _install_openapi(app: FastAPI) -> None:
                     response_codes.add(409)
                 if path == "/v1/session/login":
                     response_codes.add(401)
+                if path.endswith("/resume"):
+                    response_codes.add(409)
                 if path not in public_paths:
                     response_codes.add(401)
                 if method in {"post", "delete"}:
@@ -630,6 +636,49 @@ def create_app(settings: ApiSettings) -> FastAPI:
             learner.learner_id, material_id, revision=structure_revision, dsn=settings.dsn
         )
         return KnowledgeStructureView.model_validate(deepcopy(stored.view))
+
+    @app.get(
+        "/v1/materials/{material_id}/knowledge-structures/{structure_revision}/study-sessions/{study_session_id}/resume",
+        response_model=StudyResumeView, operation_id="resumeStudySession", tags=["learning"],
+    )
+    def resume_study_route(
+        request: Request, material_id: UUID, structure_revision: str, study_session_id: UUID,
+        run_id: UUID, assessment_revision: str | None = None,
+    ) -> StudyResumeView:
+        _require_query(request, {"run_id", "assessment_revision"})
+        learner = _trusted_learner(request, settings)
+        study = read_study_session(learner, study_session_id, dsn=settings.dsn)
+        if study.material_id != material_id or study.knowledge_structure_revision != structure_revision:
+            raise _ApiFailure("RESOURCE_NOT_FOUND")
+        structure = read_knowledge_structure(learner.learner_id, material_id, revision=structure_revision, dsn=settings.dsn)
+        if structure.document["run_id"] != str(run_id):
+            raise _ApiFailure("RESOURCE_NOT_FOUND")
+        run = read_material_processing_run(learner.learner_id, run_id, dsn=settings.dsn)
+        records = read_assessment_records(learner, study_session_id, dsn=settings.dsn)
+        progress = derive_learner_progress(learner, study_session_id, dsn=settings.dsn)
+        # 讀取期間若有提交或 guidance 變動，拒絕混合兩個時點的狀態，交由使用者重讀。
+        if (read_study_session(learner, study_session_id, dsn=settings.dsn) != study
+            or progress.event_watermark != study.last_event_number
+            or sum(record.feedback is not None for record in records) != study.last_event_number):
+            raise _ApiFailure("IDEMPOTENCY_CONFLICT")
+        selected = assessment_revision
+        if selected is not None and selected not in {record.assessment.assessment_revision for record in records}:
+            raise _ApiFailure("RESOURCE_NOT_FOUND")
+        if selected is None:
+            selected = next((record.assessment.assessment_revision for record in records
+                if study.status == "completed" or record.assessment.target_concept_id == study.current_concept_id), None)
+        return StudyResumeView(
+            session=project_study_session(study), run_id=run_id, source_artifact_id=run.source_artifact_id,
+            knowledge_structure=KnowledgeStructureView.model_validate(structure.view),
+            progress=project_learner_progress(progress), selected_assessment_revision=selected,
+            assessments=[AssessmentRecordView(
+                assessment=project_assessment(record.assessment),
+                feedback=project_answer_feedback(record.feedback) if record.feedback is not None else None,
+                created_at=record.created_at,
+                can_submit=(record.feedback is None and study.status in {"active", "no_safe"}
+                            and record.assessment.target_concept_id == study.current_concept_id),
+            ) for record in records],
+        )
 
     @app.post(
         "/v1/study-sessions",

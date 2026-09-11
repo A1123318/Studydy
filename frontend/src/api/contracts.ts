@@ -76,6 +76,15 @@ export type MaterialStructureLink = {
   status: "succeeded" | "partial";
 };
 
+export type StudySessionLink = {
+  study_session_id: string;
+  knowledge_structure_revision: string;
+  run_id: string;
+  current_concept_id: string | null;
+  status: "active" | "no_safe" | "completed";
+  started_at: string;
+};
+
 export type MaterialLibraryItem = {
   schema: "material-library-item/v1";
   material_id: string;
@@ -85,6 +94,7 @@ export type MaterialLibraryItem = {
   created_at: string;
   latest_attempt: MaterialAttemptView | null;
   available_structures: MaterialStructureLink[];
+  study_sessions: StudySessionLink[];
 };
 
 export type MaterialLibraryView = {
@@ -177,6 +187,7 @@ export type StudySessionView = {
   knowledge_structure_revision: string;
   current_concept_id: string | null;
   deferred_concept_ids: string[];
+  no_safe_claim_ids: string[];
   status: "active" | "no_safe" | "completed";
   started_at: string;
   completed_at: string | null;
@@ -254,3 +265,21 @@ export type LearnerProgressView = {
 };
 
 export type GuidanceApply = { schema: "guidance-apply/v2"; guidance_revision: string };
+
+export type AssessmentRecordView = {
+  assessment: AssessmentView;
+  feedback: AnswerFeedbackView | null;
+  created_at: string;
+  can_submit: boolean;
+};
+
+export type StudyResumeView = {
+  schema: "study-resume/v1";
+  session: StudySessionView;
+  run_id: string;
+  source_artifact_id: string;
+  knowledge_structure: KnowledgeStructureView;
+  progress: LearnerProgressView;
+  assessments: AssessmentRecordView[];
+  selected_assessment_revision: string | null;
+};

@@ -60,6 +60,18 @@ zero. It does not test or implement learning-history restoration.
 The standalone mocked browser suite also tests library loading/error/empty states and rejects a
 Map route whose processing run points at another revision.
 
+## Learning resume regression (local only)
+
+The runtime suite includes `test_learning_resume.py` and `test_learning_resume_browser.py`.
+The Browser test logs in from independent contexts, enters the existing session through the library,
+reloads the same unanswered and answered questions, selects older sessions, and reads completed and
+no-safe/deferred state. It forwards a real answer submission to the API, then aborts only its response;
+“查回作答結果” must retrieve the committed AnswerEvent. Re-login and same-key replay must return that
+same result. Each restore read keeps all seven product-table snapshots unchanged; the only writes
+are the explicit answer submission and its idempotent replay, which produce one new AnswerEvent.
+Backend model HTTP transport is blocked and must observe zero calls. These tests use controlled
+saved fixtures; they do not perform the later workstation shutdown/restart or model qualification.
+
 ## Runtime verification
 
 The runtime root contains only the Python 3.12 OCR environment and Unlimited-OCR model. Qwen is
