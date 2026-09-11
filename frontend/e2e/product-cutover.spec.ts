@@ -103,6 +103,12 @@ async function json(route: Route, body: unknown, status = 200) {
 async function routes(page: Page, view = structureView(), readProgress = () => progress, readRecords: () => AssessmentRecordView[] = () => []) {
   await page.route("**/v1/session", (route) => route.request().method() === "GET" ? json(route, { schema: "learner-identity/v1", learner_id: sessionId }) : route.fulfill({ status: 204 }));
   await page.route("**/v1/session/refresh", (route) => route.fulfill({ status: 204 }));
+  await page.route(`**/v1/materials/${materialId}`, route => json(route, {
+    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
+    latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
+      created_at: run.created_at, status: "succeeded" }], study_sessions: [],
+  }));
   await page.route(`**/v1/material-processing-runs/${runId}`, (route) => json(route, run));
   await page.route("**/v1/materials/*/knowledge-structures/**", (route) => json(route, view));
   await page.route("**/v1/study-sessions", (route) => json(route, session(), 201));
@@ -116,32 +122,39 @@ async function routes(page: Page, view = structureView(), readProgress = () => p
   });
 }
 
-test("Document Tree layout and typed Relation overlay are both usable", async ({ page }) => {
+test("focus, path, and chapter views lead to source-backed learning", async ({ page }) => {
   await routes(page);
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
   await expect(page.getByRole("heading", { name: "知識地圖", exact: true })).toBeVisible();
-  await expect(page.locator(".concept-flow-edge.is-structural")).toHaveCount(3);
-  await expect(page.locator(".concept-flow-edge.is-prerequisite")).toHaveCount(1);
-  await expect(page.locator(".relation-detail")).toHaveCount(0);
-  await page.locator(".concept-flow-edge.is-prerequisite .react-flow__edge-interaction").hover({ force: true });
-  await expect(page.locator(".relation-detail")).toContainText("Stack must be learned before Array traversal.");
-  await page.getByRole("button", { name: /收合 2 個概念/ }).first().click();
+  await expect(page.getByRole("tab", { name: "概念地圖" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toContainText("學習順序提供參考");
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await page.getByRole("button", { name: /展開 2 個概念/ }).first().click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  const canvas = await page.locator(".focus-graph").boundingBox();
+  expect(canvas!.x).toBeLessThan(60);
+  expect(canvas!.y).toBeLessThan(350);
+  expect(canvas!.width).toBeGreaterThan(page.viewportSize()!.width - 100);
+  const edge = page.locator(".concept-flow-edge.is-prerequisite");
+  await edge.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("Stack must be learned before Array traversal.");
+  await expect(page.getByRole("dialog", { name: "關係詳情" }).getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "學習順序" }).click();
   await expect(page.locator(".learning-path li")).toHaveCount(2);
-  await page.getByRole("button", { name: /Array/ }).click();
-  await expect(page.getByRole("tab", { name: "概念地圖" })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "教材概念：Stack" }).click();
-  await expect(page.getByText("原始教材第 1 頁")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "補充資源", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "開啟 PDF", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "從這個概念開始新的學習" }).click();
+  await expect(page.locator(".learning-path")).not.toContainText("document_order");
+  await page.locator(".learning-path").getByRole("button", { name: /Array/ }).click();
+  await expect(page.getByRole("tab", { name: "學習順序" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("dialog", { name: "概念詳情" })).toContainText("An array stores contiguous values.");
+  await page.getByRole("button", { name: "關閉概念詳情" }).click();
+  await page.getByRole("tab", { name: "總覽", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Data structures", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "探索這個段落" }).click();
+  await expect(page.getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
+  await page.getByRole("button", { name: "從這個概念開始" }).click();
   await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
 });
 
-test("large maps keep the selected concept visible without a full-page section list", async ({ page }) => {
+test("large maps show a readable focus and keep it in view after resizing", async ({ page }) => {
   const view = structureView();
   view.concepts = Array.from({ length: 30 }, (_, index) => ({
     ...view.concepts[0], concept_id: `concept:sha256:${(index + 10).toString(16).padStart(64, "0")}`,
@@ -154,7 +167,21 @@ test("large maps keep the selected concept visible without a full-page section l
   view.relations = [];
   view.initial_learning_path = view.concepts.map((concept, index) => ({ position: index + 1, concept_id: concept.concept_id, reason: "document_order" }));
   await routes(page, view);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await page.getByRole("tab", { name: "概念地圖" }).click();
+  const graph = page.locator(".focus-graph");
+  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(560);
+  const viewport = page.locator(".react-flow__viewport");
+  await expect(page.locator(".react-flow__node.is-focus")).toBeVisible();
+  const transform = await viewport.getAttribute("style");
+  await page.mouse.move(500, 440);
+  await page.mouse.wheel(0, 250);
+  await expect(viewport).not.toHaveAttribute("style", transform!);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.mouse.move(10, 440);
+  await page.mouse.wheel(0, 250);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
   const select = page.getByRole("combobox", { name: "焦點概念" });
   await select.selectOption(view.concepts[29].concept_id);
   await expect(page.getByRole("button", { name: "教材概念：Concept 30", exact: true })).toHaveClass(/is-focus/);
@@ -164,10 +191,23 @@ test("large maps keep the selected concept visible without a full-page section l
     return !!node && !!graph && node.x >= graph.x && node.x + node.width <= graph.x + graph.width
       && node.y >= graph.y && node.y + node.height <= graph.y + graph.height;
   }).toBe(true);
-  await expect(page.locator(".section-controls")).not.toHaveAttribute("open");
-  await page.getByText("展開／收合教材段落", { exact: true }).click();
-  const sections = await page.locator(".flat-group-list").boundingBox();
-  expect(sections!.height).toBeLessThanOrEqual(220);
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  await page.evaluate(() => scrollTo(0, 250));
+  await page.getByRole("button", { name: "教材概念：Concept 30", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeInViewport();
+  await expect.poll(async () => {
+    const close = await page.getByRole("button", { name: "關閉概念詳情", exact: true }).boundingBox();
+    const tabs = await page.getByRole("tablist", { name: "知識地圖檢視" }).boundingBox();
+    return !!close && !!tabs && close.y >= tabs.y + tabs.height;
+  }).toBe(true);
+  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(560);
+  await expect(page.locator(".map-view")).toHaveCSS("overflow-y", "visible");
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await expect.poll(async () => {
+    const node = await page.locator(".react-flow__node.is-focus").boundingBox();
+    const graph = await page.locator(".focus-graph").boundingBox();
+    return !!node && !!graph && node.width >= 150 && node.x >= graph.x && node.x + node.width <= graph.x + graph.width;
+  }).toBe(true);
 });
 
 test("StudySession uses source-bound assessment and server feedback", async ({ page }) => {
@@ -225,15 +265,24 @@ test("StudySession uses source-bound assessment and server feedback", async ({ p
   await expect.poll(() => requestedClaims).toEqual([firstClaim, guidedClaim]);
 });
 
-test("mobile fallback keeps canonical Relations and Evidence reachable", async ({ page }) => {
+test("mobile map has a modal detail drawer with keyboard focus and source links", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routes(page);
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
-  await expect(page.locator(".focus-graph")).toBeHidden();
-  await expect(page.getByLabel("教材概念階層清單")).toBeVisible();
-  await expect(page.getByLabel("概念關係").getByText("Stack must be learned before Array traversal.")).toBeVisible();
-  await page.getByLabel("教材概念階層清單").getByRole("button", { name: /Stack/ }).click();
-  await expect(page.getByText("原始教材第 1 頁")).toBeVisible();
+  await page.getByRole("tab", { name: "概念地圖" }).click();
+  await page.getByRole("button", { name: "查看概念與來源" }).click();
+  const dialog = page.getByRole("dialog", { name: "概念詳情" });
+  await expect(dialog).toBeInViewport();
+  await expect(dialog.getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
+  await expect.poll(() => dialog.evaluate(element => element.matches(":modal"))).toBe(true);
+  await page.keyboard.press("Tab");
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".detail-panel"))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "查看概念與來源" })).toBeFocused();
+  await page.locator(".focus-relations summary").click();
+  await page.getByRole("list", { name: "概念關係", exact: true }).getByRole("button").click();
+  await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("Stack must be learned before Array traversal.");
 });
 
 test("assessment follows the guided Claim when reopening a multi-Claim concept", async ({ page }) => {
@@ -332,6 +381,12 @@ test("library loading, read failure and empty state retain usable actions", asyn
 
 test("reopen rejects a run from a different Knowledge Structure revision", async ({ page }) => {
   await routes(page);
+  await page.route(`**/v1/materials/${materialId}`, route => json(route, {
+    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
+    latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
+      created_at: run.created_at, status: "succeeded" }], study_sessions: [],
+  }));
   await page.route(`**/v1/material-processing-runs/${runId}`, route => json(route, {
     ...run, output_binding: { ...run.output_binding, knowledge_structure_revision: `knowledge-structure:sha256:${"7".repeat(64)}` },
   }));
@@ -359,4 +414,119 @@ test("dashboard shows unavailable counts truthfully and retries its server-backe
   await page.getByRole('button', { name: '前往我的教材', exact: true }).click();
   await expect(page).toHaveURL(/\/materials$/);
   await expect(page.getByRole('region', { name: '空教材引導' })).toBeVisible();
+});
+
+test("map errors can be retried and an empty map has an actionable explanation", async ({ page }) => {
+  await routes(page);
+  let failed = true;
+  const empty = structureView();
+  empty.concepts = [];
+  empty.relations = [];
+  empty.initial_learning_path = [];
+  empty.document_tree.sections = [];
+  await page.route("**/v1/materials/*/knowledge-structures/**", route => failed
+    ? json(route, { schema: "api-error/v1", request_id: materialId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, 503)
+    : json(route, empty));
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await expect(page.getByRole("heading", { name: "無法讀取知識地圖", exact: true })).toBeVisible();
+  failed = false;
+  await page.getByRole("button", { name: "重新讀取", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "知識地圖目前是空的", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "查看處理狀態", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/runs/${runId}$`));
+});
+
+test("parallel relations retain separate labels, paths and details in both directions", async ({ page }) => {
+  const view = structureView();
+  view.relations = ["prerequisite", "part_of", "application", "example", "contrast"].map((type, index) => ({
+    ...view.relations[0], type,
+    relation_id: `relation:sha256:${(index + 20).toString(16).padStart(64, "0")}`,
+    source_concept_id: index % 2 ? secondConcept : firstConcept,
+    target_concept_id: index % 2 ? firstConcept : secondConcept,
+    learner_reason: `Distinct grounded explanation for ${type}.`,
+  }));
+  await routes(page, view);
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  const assertSeparate = async () => {
+    await expect(page.locator(".concept-flow-edge")).toHaveCount(5);
+    await expect.poll(() => page.locator(".concept-flow-edge .react-flow__edge-path").evaluateAll((paths) => new Set(paths.map((path) => path.getAttribute("d"))).size)).toBe(5);
+    await expect.poll(() => page.locator(".concept-flow-edge .react-flow__edge-textbg").evaluateAll((labels) => {
+      const boxes = labels.map((label) => label.getBoundingClientRect());
+      return boxes.length === 5 && boxes.every((a, i) => boxes.every((b, j) => i === j || a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top));
+    })).toBe(true);
+  };
+  await assertSeparate();
+  for (const relation of view.relations) {
+    await page.locator(`.concept-flow-edge.is-${relation.type} .react-flow__edge-textbg`).click();
+    await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText(relation.learner_reason);
+    await assertSeparate();
+    await page.keyboard.press("Escape");
+  }
+  await page.getByRole("combobox", { name: "焦點概念" }).selectOption(secondConcept);
+  await assertSeparate();
+  await page.setViewportSize({ width: 900, height: 800 });
+  await assertSeparate();
+  await page.locator(".concept-flow-edge.is-application").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("Distinct grounded explanation for application.");
+});
+
+test("dense focus fans avoid crossing edges and unrelated cards", async ({ page }) => {
+  const view = structureView();
+  const focal = view.concepts[0];
+  const neighbours = Array.from({ length: 8 }, (_, i) => ({ ...view.concepts[1], concept_id: `concept:sha256:${(i + 40).toString(16).padStart(64, "0")}`, label: `Neighbour ${i + 1}` }));
+  view.concepts = [focal, ...neighbours];
+  view.document_tree.sections[0].concept_ids = view.concepts.map(node => node.concept_id);
+  view.initial_learning_path = view.concepts.map((node, index) => ({ position: index + 1, concept_id: node.concept_id, reason: "document_order" }));
+  view.relations = neighbours.flatMap((node, i) => ["example", "application", "part_of"].map((type, j) => ({
+    ...view.relations[0], type,
+    relation_id: `relation:sha256:${(100 + i * 3 + j).toString(16).padStart(64, "0")}`,
+    source_concept_id: i < 4 && j % 2 === 0 ? node.concept_id : focal.concept_id,
+    target_concept_id: i < 4 && j % 2 === 0 ? focal.concept_id : node.concept_id,
+  })));
+  await routes(page, view);
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await expect(page.locator(".react-flow__edge-path")).toHaveCount(24);
+  await expect.poll(() => page.evaluate(() => {
+    const paths = [...document.querySelectorAll<SVGPathElement>(".react-flow__edge-path")];
+    const samples = paths.map(path => Array.from({ length: 81 }, (_, i) => {
+      const point = path.getPointAtLength(path.getTotalLength() * i / 80);
+      return { x: point.x, y: point.y };
+    }));
+    const cross = (a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    for (let i = 0; i < samples.length; i++) for (let j = i + 1; j < samples.length; j++) {
+      for (let a = 1; a < samples[i].length; a++) for (let b = 1; b < samples[j].length; b++) {
+        const p = samples[i][a - 1], q = samples[i][a], r = samples[j][b - 1], s = samples[j][b];
+        if (cross(p, q, r) * cross(p, q, s) < -0.0001 && cross(r, s, p) * cross(r, s, q) < -0.0001) return false;
+      }
+    }
+    const cards = [...document.querySelectorAll(".react-flow__node")].map(node => node.getBoundingClientRect());
+    return paths.every((path, i) => samples[i].slice(1, -1).every(point => {
+      const screen = new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM()!);
+      return cards.every(card => screen.x <= card.left + 1 || screen.x >= card.right - 1 || screen.y <= card.top + 1 || screen.y >= card.bottom - 1);
+    }));
+  })).toBe(true);
+});
+
+test("recovered map reads owned progress and continues the same session without creating learning", async ({ page }) => {
+  await routes(page);
+  await page.route(`**/v1/materials/${materialId}`, route => json(route, {
+    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
+    latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
+      created_at: run.created_at, status: "succeeded" }], study_sessions: [
+      { ...session(), run_id: runId, knowledge_structure_revision: `knowledge-structure:sha256:${"9".repeat(64)}`, started_at: "2026-09-06T00:00:00Z" },
+      { ...session(), run_id: runId },
+    ],
+  }));
+  let creates = 0;
+  await page.route("**/v1/study-sessions", route => { creates += 1; return json(route, session(), 201); });
+  const path = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
+  await page.goto(path);
+  await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+  await page.reload();
+  await page.getByRole("button", { name: "繼續本次學習", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
+  await expect(page.getByRole("button", { name: "開始評量", exact: true })).toBeVisible();
+  expect(creates).toBe(0);
 });

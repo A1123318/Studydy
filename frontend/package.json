@@ -7,12 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "e2e:install": "playwright install chromium",
-    "test": "node --test src/api/client.test.mjs src/app/routes.test.mjs src/features/material-flow/material-flow.test.mjs src/features/knowledge-map/knowledge-map.test.mjs",
+    "test": "node --test src/api/client.test.mjs src/app/routes.test.mjs src/features/material-flow/material-flow.test.mjs src/features/knowledge-map/knowledge-map.test.mjs src/ui/claim-text.test.mjs",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dagrejs/dagre": "3.1.1",
     "@xyflow/react": "12.11.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"
