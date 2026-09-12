@@ -69,13 +69,21 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         } else {
           await expect(upload.getByRole("alert")).toContainText("資料服務暫時無法使用"); await expect(submit).toBeEnabled();
           await expect(upload.locator(".chosen-file strong")).toHaveText(pdf.name);
+          await expect(upload.locator(".chosen-file")).toContainText("準備上傳");
+          await expect(upload.locator(".chosen-file")).not.toContainText("需要修正");
+          await expect(upload.locator("#upload-submit-error")).toHaveAttribute("role", "alert");
+          await expect(upload.locator("#upload-file-error")).toHaveCount(0);
+          expect(await input.getAttribute("aria-invalid")).toBeNull();
+          expect(await input.getAttribute("aria-describedby")).toBeNull();
           await expect(page).toHaveURL(/\/upload$/);
         }
       }
       if (state === "invalid" || state === "oversized") {
         await expect(upload.getByRole("alert")).toContainText(state === "invalid" ? "不是可用的 PDF" : "不可超過 100 MiB");
+        await expect(upload.locator("#upload-file-error")).toHaveAttribute("role", "alert");
+        await expect(upload.locator("#upload-submit-error")).toHaveCount(0);
         await expect(input).toHaveAttribute("aria-invalid", "true");
-        await expect(input).toHaveAttribute("aria-describedby", "upload-error");
+        await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
         await expect(upload.locator(".chosen-file")).toHaveCount(0); await expect(submit).toBeDisabled();
         expect(await input.inputValue()).toBe("");
       }
@@ -113,6 +121,10 @@ test("selection, invalid replacements, accessible picker, drag/drop and removal 
   ]) {
     await input.setInputFiles(invalid); await expect(page.getByRole("alert")).toBeVisible();
     await expect(chosen).toHaveCount(0); await expect(submit).toBeDisabled();
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
+    await expect(page.locator("#upload-file-error")).toHaveAttribute("role", "alert");
+    await expect(page.locator("#upload-submit-error")).toHaveCount(0);
   }
   const valid = await transfer(page, [{ name: "dropped.pdf", type: "application/pdf" }]);
   await drop.dispatchEvent("dragenter", { dataTransfer: valid }); await expect(drop).toHaveClass(/is-dragging/);
@@ -124,6 +136,10 @@ test("selection, invalid replacements, accessible picker, drag/drop and removal 
     const invalid = await transfer(page, files); await drop.dispatchEvent("drop", { dataTransfer: invalid }); await invalid.dispose();
     await expect(page.getByRole("alert")).toContainText(files.length === 2 ? "一次只能處理一份 PDF" : "不是可用的 PDF");
     await expect(chosen).toHaveCount(0); await expect(submit).toBeDisabled();
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
+    await expect(page.locator("#upload-file-error")).toHaveAttribute("role", "alert");
+    await expect(page.locator("#upload-submit-error")).toHaveCount(0);
   }
   await input.setInputFiles(pdf); await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "移除", exact: true }).click();
@@ -173,7 +189,13 @@ for (const stage of ["material", "run"] as const) {
     await submit.click(); await expect(page.getByRole("alert")).toContainText("資料服務暫時無法使用");
     await expect(page).toHaveURL(/\/upload$/); await expect(submit).toBeEnabled();
     await expect(page.locator(".chosen-file strong")).toHaveText(pdf.name);
-    await expect(page.getByLabel("選擇 PDF 教材", { exact: true })).toHaveAttribute("aria-describedby", "upload-error");
+    await expect(page.locator(".chosen-file")).toContainText("準備上傳");
+    await expect(page.locator(".chosen-file")).not.toContainText("需要修正");
+    await expect(page.locator("#upload-submit-error")).toHaveAttribute("role", "alert");
+    await expect(page.locator("#upload-file-error")).toHaveCount(0);
+    const input = page.getByLabel("選擇 PDF 教材", { exact: true });
+    expect(await input.getAttribute("aria-invalid")).toBeNull();
+    expect(await input.getAttribute("aria-describedby")).toBeNull();
     if (stage === "material") expect(runs).toHaveLength(0);
     fail = false; await submit.click();
     await expect(page).toHaveURL(new RegExp(`/materials/${materialId}/runs/${runId}$`));
@@ -190,12 +212,37 @@ test("remove and replacement reset both keys without retaining old selection err
   await page.route("**/v1/material-processing-runs", route => { runs.push(route.request().headers()["idempotency-key"]); return failure(route); });
   await page.goto("/upload"); const input = page.getByLabel("選擇 PDF 教材", { exact: true });
   for (let index = 0; index < 3; index++) {
-    if (index === 1) { await page.getByRole("button", { name: "移除", exact: true }).click(); await expect(page.locator(".upload-card .full-button")).toBeDisabled(); }
+    if (index === 1) {
+      await page.getByRole("button", { name: "移除", exact: true }).click();
+      await expect(page.locator(".chosen-file")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.locator(".upload-card .full-button")).toBeDisabled();
+      expect(await input.inputValue()).toBe("");
+      expect(await input.getAttribute("aria-invalid")).toBeNull();
+      expect(await input.getAttribute("aria-describedby")).toBeNull();
+    }
     await input.setInputFiles({ ...pdf, name: index === 2 ? "replacement.pdf" : pdf.name });
     await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator(".chosen-file strong")).toHaveText(index === 2 ? "replacement.pdf" : pdf.name);
+    expect(await input.getAttribute("aria-invalid")).toBeNull();
+    expect(await input.getAttribute("aria-describedby")).toBeNull();
+    await expect(page.locator(".upload-card .full-button")).toBeEnabled();
     await page.locator(".upload-card .full-button").click(); await expect(page.getByRole("alert")).toBeVisible();
   }
   expect(new Set(uploads).size).toBe(3); expect(new Set(runs).size).toBe(3);
+  await input.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("notes") });
+  await expect(page.locator("#upload-submit-error")).toHaveCount(0);
+  await expect(page.locator("#upload-file-error")).toBeVisible();
+  await expect(input).toHaveAttribute("aria-invalid", "true");
+  await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
+  await expect(page.locator(".chosen-file")).toHaveCount(0);
+  await expect(page.locator(".upload-card .full-button")).toBeDisabled();
+  await input.setInputFiles(pdf);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".chosen-file")).toContainText("準備上傳");
+  expect(await input.getAttribute("aria-invalid")).toBeNull();
+  expect(await input.getAttribute("aria-describedby")).toBeNull();
+  await expect(page.locator(".upload-card .full-button")).toBeEnabled();
 });
 
 test("task supporting rail stacks before the main upload area becomes cramped", async ({ page }) => {

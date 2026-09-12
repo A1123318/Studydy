@@ -11,7 +11,8 @@ import {
 
 export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
   const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitting = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -25,7 +26,8 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
     const selection = validatePdfSelection(files);
     const selectedFile = selection.message === null ? selection.file : null;
     setFile(selectedFile);
-    setMessage(selection.message);
+    setFileError(selection.message);
+    setSubmitError(null);
     if (selectedFile === null && fileInput.current) fileInput.current.value = "";
   };
 
@@ -33,12 +35,14 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
     if (submitting.current) return;
     const validation = validatePdfFile(file);
     if (validation || !file) {
-      setMessage(file === null ? message ?? validation : validation);
+      setFileError(file === null ? fileError ?? validation : validation);
+      setSubmitError(null);
       return;
     }
     submitting.current = true;
     setIsSubmitting(true);
-    setMessage(null);
+    setFileError(null);
+    setSubmitError(null);
     try {
       const material = await apiClient.createMaterial(file, uploadKey.current, file.name);
       const run = await apiClient.createMaterialRun({
@@ -48,7 +52,7 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
       }, runKey.current);
       writeRoute({ name: "material-run", materialId: run.material_id, runId: run.run_id });
     } catch (error) {
-      setMessage(errorMessage(error));
+      setSubmitError(errorMessage(error));
       submitting.current = false;
       setIsSubmitting(false);
     }
@@ -96,8 +100,8 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
               type="file"
               accept="application/pdf"
               aria-label="選擇 PDF 教材"
-              aria-describedby={message ? "upload-error" : undefined}
-              aria-invalid={message ? true : undefined}
+              aria-describedby={fileError ? "upload-file-error" : undefined}
+              aria-invalid={fileError ? true : undefined}
               disabled={isSubmitting}
               onChange={(event) => chooseFiles(event.currentTarget.files)}
             />
@@ -111,7 +115,7 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
               <span className="file-kind"><Icon name="file" /></span>
               <div>
                 <strong>{file.name}</strong>
-                <small>{formatFileSize(file.size)} · {message ? "需要修正" : "準備上傳"}</small>
+                <small>{formatFileSize(file.size)} · 準備上傳</small>
               </div>
               <button
                 className="text-button"
@@ -119,7 +123,8 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
                 type="button"
                 onClick={() => {
                   setFile(null);
-                  setMessage(null);
+                  setFileError(null);
+                  setSubmitError(null);
                   if (fileInput.current) fileInput.current.value = "";
                   uploadKey.current = crypto.randomUUID();
                   runKey.current = crypto.randomUUID();
@@ -128,7 +133,8 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
             </div>
           )}
 
-          {message && <p className="form-error" id="upload-error" role="alert">{message}</p>}
+          {fileError && <p className="form-error" id="upload-file-error" role="alert">{fileError}</p>}
+          {submitError && <p className="form-error" id="upload-submit-error" role="alert">{submitError}</p>}
           <button className="primary-button full-button" type="button" disabled={!file || isSubmitting} onClick={submit}>
             <Icon name="upload" size={18} />
             {isSubmitting ? "正在上傳並建立分析…" : "上傳並開始分析"}
