@@ -374,7 +374,7 @@ test("library loading, read failure and empty state retain usable actions", asyn
   failRead = false;
   await page.getByRole("button", { name: "重新讀取", exact: true }).click();
   await expect(page.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "上傳教材", exact: true }).click();
+  await page.getByRole("button", { name: "上傳第一份教材", exact: true }).click();
   await expect(page).toHaveURL(/\/upload$/);
   await expect(page.locator('input[type="file"]')).toHaveCount(1);
 });
@@ -548,8 +548,8 @@ test("shared shell density keeps standard pages and map workspace bounded", asyn
       else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       expect((await page.locator(".app-header").boundingBox())!.height).toBe(name === "map" ? 56 : viewport.width > 900 ? 74 : 72);
       if (name === "map") await expect(page.locator(".app-sidebar")).toHaveCount(0);
-      else if (name !== "home" && viewport.width > 900) await expect(page.locator(".sidebar-helper")).toBeVisible();
-      if (["materials", "upload"].includes(name)) expect(await page.locator(".app-main > *").first().evaluate(element => getComputedStyle(element).maxWidth)).toBe("1018px");
+      else if (!["home", "materials"].includes(name) && viewport.width > 900) await expect(page.locator(".sidebar-helper")).toBeVisible();
+      if (["materials", "upload"].includes(name)) expect(await page.locator(".app-main > *").first().evaluate(element => getComputedStyle(element).maxWidth)).toBe(name === "materials" ? "1260px" : "1018px");
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       await page.screenshot({ path: `/tmp/studydy-dashboard/shell-${name}-${viewport.width}.png`, fullPage: true });
     }

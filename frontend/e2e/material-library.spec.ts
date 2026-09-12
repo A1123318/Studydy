@@ -19,6 +19,9 @@ test("fresh profiles discover their own materials and reopen both exact publishe
   await login(page, "learner_test@example.com");
   const first = page.getByRole("article", { name: "堆疊講義.pdf", exact: true });
   await expect(first).toContainText("最新處理：處理失敗");
+  await expect(first.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
+  await expect(page.getByRole("article", { name: "處理中的筆記.pdf", exact: true }).getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("primary-button");
+  await expect(page.getByRole("article", { name: "尚未處理.pdf", exact: true }).locator(".primary-button")).toHaveCount(0);
   await expect(first).toContainText("先前已發布的知識地圖仍可開啟");
   await expect(page.getByRole("article", { name: "尚未處理.pdf", exact: true })).toContainText("尚未開始處理");
   await expect(page.getByRole("article", { name: "處理中的筆記.pdf", exact: true })).toContainText("正在分析完整教材");

@@ -40,29 +40,30 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [apiClient, materialId, reload]);
 
-  const libraryClass = `material-library${mapsOnly ? " is-maps-only" : ""}`;
+  const isCollection = !materialId;
+  const libraryClass = `material-library${isCollection ? " is-collection" : ""}${mapsOnly ? " is-maps-only" : ""}`;
   if (message || items === null) {
     const state = message ? <StateView title="無法讀取教材" description={message} tone="failure" action={<>
       <button className="primary-button" type="button" onClick={() => { setMessage(null); setItems(null); setReload(value => value + 1); }}>重新讀取</button>
       <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回教材庫</button>
     </>} /> : <StateView title="正在讀取教材庫" description="正在載入你的教材與已發布結果。" tone="loading" live />;
-    return mapsOnly ? <section className={libraryClass}>{state}</section> : state;
+    return isCollection ? <section className={libraryClass}>{state}</section> : state;
   }
   const visibleItems = mapsOnly ? items.filter(item => item.available_structures.length > 0) : items;
   const noPublishedMaps = mapsOnly && items.length > 0 && visibleItems.length === 0;
   return <section className={libraryClass}>
     <header className="library-header">
-      <div><h1>{materialId ? "教材詳情" : mapsOnly ? "知識地圖" : "我的教材"}</h1><p className="library-subtitle">{materialId ? "查看已保存的教材、地圖與學習紀錄。" : mapsOnly ? "從已發布的教材地圖開始探索。" : `已保存 ${items.length} 份教材，隨時接續你的學習。`}</p></div>
+      <div><h1>{materialId ? "教材詳情" : mapsOnly ? "知識地圖" : "我的教材"}</h1><p className="library-subtitle">{materialId ? "查看已保存的教材、地圖與學習紀錄。" : mapsOnly ? "從已發布的教材地圖開始探索。" : items.length === 0 ? "上傳教材後，可在這裡查看處理結果並接續學習。" : `已保存 ${items.length} 份教材，隨時接續你的學習。`}</p></div>
       <div className="state-actions">
         {materialId && <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回教材庫</button>}
         <button className="secondary-button" type="button" onClick={() => setReload(value => value + 1)}>重新整理</button>
-        {(!mapsOnly || visibleItems.length > 0) && <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}>上傳教材</button>}
+        {(!isCollection || visibleItems.length > 0) && <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}>上傳教材</button>}
       </div>
     </header>
     {visibleItems.length === 0 && <section className="library-empty surface" aria-label={mapsOnly ? "知識地圖引導" : "空教材引導"}>
       <div className="library-empty-illustration"><img src="/assets/Studydy_角色素材/空資料/empty_disappointed.png" alt="Studydy 坐在打開的空箱子旁" /></div>
       <h2>{mapsOnly ? noPublishedMaps ? "尚無可開啟的知識地圖" : "尚未建立知識地圖" : "尚未有學習教材"}</h2>
-      <p>{mapsOnly ? noPublishedMaps ? "已有教材，但目前還沒有已發布的知識地圖。前往我的教材查看處理狀態。" : "先上傳第一份 PDF，Studydy 會協助你整理知識點並建立知識地圖。" : "請上傳您的第一份 PDF，讓 Studydy 陪你展開學習。"}</p>
+      <p>{mapsOnly ? noPublishedMaps ? "已有教材，但目前還沒有已發布的知識地圖。前往我的教材查看處理狀態。" : "先上傳第一份 PDF，Studydy 會協助你整理知識點並建立知識地圖。" : "先上傳第一份 PDF，讓 Studydy 陪你展開學習。"}</p>
       <button className="primary-button" type="button" onClick={() => writeRoute({ name: noPublishedMaps ? "materials" : "upload" })}>
         <Icon name={noPublishedMaps ? "book" : "upload"} size={18} />{noPublishedMaps ? "前往我的教材" : "上傳第一份教材"}
       </button>
@@ -71,6 +72,8 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
     {visibleItems.map(item => {
       const latest = item.latest_attempt;
       const available = item.available_structures;
+      const processingPrimary = isCollection && !mapsOnly && !item.study_sessions[0] && !available[0];
+      const unpublishedNote = available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>;
       const studyAction = item.study_sessions[0] && <button className={mapsOnly ? "secondary-button" : "primary-button"} type="button" onClick={() => openStudy(item, item.study_sessions[0])}>{item.study_sessions[0].status === "completed" ? "查看上次學習" : "接續上次學習"}</button>;
       const mapAction = available[0] && <button className={mapsOnly || !item.study_sessions[0] ? "primary-button" : "secondary-button"} type="button" onClick={() => openStructure(item, available[0])}>開啟知識地圖</button>;
       return <article className="surface library-item" key={item.material_id} aria-label={item.display_name}>
@@ -80,13 +83,14 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
         <p className={`library-state is-${latest?.status ?? "uploaded"}`}>最新處理：{latest ? materialRunLabel(latest.status) : "已上傳，尚未開始處理"}</p>
         {latest && (latest.status === "running" || latest.status === "pending") && <p>{materialProgressStageLabel(latest.progress_stage)} · 已完成 {latest.completed_pages} 頁{latest.total_pages !== null && `／共 ${latest.total_pages} 頁`}</p>}
         {latest?.status === "failed" && <p>{materialFailureMessage(latest.error_code ?? "")}{available.length > 0 && " 先前已發布的知識地圖仍可開啟。"}</p>}
+        {isCollection && unpublishedNote}
         <div className="state-actions">
           {mapsOnly ? mapAction : studyAction}
           {mapsOnly ? studyAction : mapAction}
-          {latest && <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
+          {latest && <button className={processingPrimary ? "primary-button" : "secondary-button"} type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
           {materialId && <a className="secondary-button" href={apiClient.sourceArtifactUrl(item.source_artifact_id)} target="_blank" rel="noreferrer">開啟原始 PDF</a>}
         </div>
-        {available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>}
+        {!isCollection && unpublishedNote}
         {materialId && item.study_sessions.length > 0 && <section aria-label="學習紀錄">
           <h3>既有學習紀錄</h3>
           <ul>{item.study_sessions.map((session, index) => <li key={session.study_session_id}>
