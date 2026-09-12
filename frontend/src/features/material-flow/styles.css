@@ -1,23 +1,26 @@
-.upload-page,
 .processing-page {
   width: 100%;
 }
 
 .upload-hero {
   display: flex;
-  min-height: 150px;
+  min-height: 124px;
   align-items: center;
   gap: var(--space-5);
   padding: 0 var(--space-2) var(--space-5);
 }
 
 .upload-hero > img {
-  width: 155px;
-  height: 130px;
+  width: 124px;
+  height: 104px;
   object-fit: contain;
 }
 
-.upload-hero h1,
+.upload-hero h1 {
+  margin: 0 0 var(--space-2);
+  font-size: 32px;
+}
+
 .processing-hero h1 {
   margin: 0 0 var(--space-2);
   font-size: clamp(1.9rem, 4vw, 2.15rem);
@@ -33,7 +36,7 @@
 
 .upload-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: var(--space-6);
   align-items: start;
 }
@@ -60,19 +63,6 @@
   margin-top: var(--space-1);
   color: var(--text-secondary);
   font-size: .9rem;
-}
-
-.step-number {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  color: #fff;
-  background: var(--studydy-blue);
-  font-size: .85rem;
-  font-weight: 700;
 }
 
 .file-drop {
@@ -181,17 +171,14 @@
 }
 
 .upload-aside {
-  display: grid;
-  gap: var(--space-5);
+  min-width: 0;
 }
 
-.guide-card,
-.requirements-card {
+.guide-card {
   padding: var(--space-6);
 }
 
 .guide-card h2,
-.requirements-card h2,
 .processing-card h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -199,22 +186,22 @@
 
 .guide-card ol {
   display: grid;
-  gap: var(--space-5);
-  margin: var(--space-6) 0 0;
+  gap: var(--space-4);
+  margin: var(--space-5) 0 0;
   padding: 0;
   list-style: none;
 }
 
 .guide-card li {
   display: grid;
-  grid-template-columns: 32px 1fr;
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: var(--space-3);
 }
 
 .guide-card li > span {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border-radius: 50%;
   color: #fff;
@@ -238,27 +225,11 @@
   line-height: 1.5;
 }
 
-.guide-card > img {
-  display: block;
-  width: 180px;
-  height: 150px;
-  margin: var(--space-4) auto calc(var(--space-6) * -1);
-  object-fit: contain;
-}
+.guide-card li strong { font-size: 14px; }
 
-.requirements-card p {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: 0;
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-secondary);
-}
-
-.requirements-card p:last-child {
-  border-bottom: 0;
-}
+.upload-requirements { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border-light); }
+.upload-requirements h3 { margin: 0 0 var(--space-2); font-size: 14px; }
+.upload-requirements p { margin: 0; color: var(--text-secondary); font-size: 13px; }
 
 .processing-page {
   padding-top: var(--space-2);
@@ -567,15 +538,15 @@
   text-align: center;
 }
 
+@media (max-width: 1200px) {
+  .upload-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 920px) {
-  .upload-layout,
   .processing-grid {
     grid-template-columns: 1fr;
   }
 
-  .upload-aside {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 620px) {
@@ -590,7 +561,6 @@
 
   .upload-card,
   .guide-card,
-  .requirements-card,
   .processing-card {
     padding: var(--space-5);
   }
@@ -599,7 +569,6 @@
     grid-template-columns: 1fr;
   }
 
-  .upload-aside,
   .result-summary {
     grid-template-columns: 1fr;
   }
