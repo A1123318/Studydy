@@ -69,8 +69,9 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       else if (state === "failure") await expect(library.getByRole("alert")).toContainText("無法讀取教材");
       else {
         await expect(library.getByRole("heading", { name: "我的教材", exact: true, level: 1 })).toBeVisible();
-        await expect(library.getByRole("button", { name: "重新整理", exact: true })).toBeVisible();
+        await expect(library.getByRole("button", { name: "重新整理", exact: true })).toHaveCount(0);
         if (state === "empty") {
+          await expect(library.locator(".library-header .state-actions")).toHaveCount(0);
           await expect(library.locator(".library-subtitle")).toHaveText("上傳教材後，可在這裡查看處理結果並接續學習。");
           await expect(library.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
           await expect(library.getByRole("button", { name: "上傳教材", exact: true })).toHaveCount(0);
@@ -107,6 +108,11 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       expect(await library.locator("button, h1, h2, p").evaluateAll(elements => elements.filter(element => element.scrollWidth > element.clientWidth + 1).map(element => element.tagName))).toEqual([]);
       await page.screenshot({ path: `/tmp/studydy-material-collection/${viewport.width}-${state}.png`, fullPage: true });
       if (state === "loading" || state === "failure") {
+        if (state === "failure") {
+          const failedAgain = page.waitForResponse(response => response.url().endsWith("/v1/materials") && response.status() === 503);
+          await library.getByRole("button", { name: "重新讀取", exact: true }).click(); await failedAgain;
+          await expect(library.getByRole("alert")).toContainText("無法讀取教材");
+        }
         fail = false; release();
         if (state === "failure") await library.getByRole("button", { name: "重新讀取", exact: true }).click();
         await expect(library.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
@@ -130,20 +136,28 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
   }
 }
 
-test("materials polling and manual reload keep exact timing and stop after unmount", async ({ page }) => {
+test("materials polling updates pending/running, stops at terminal and cancels on unmount", async ({ page }) => {
   await page.clock.install(); await page.clock.pauseAt(new Date()); await signedIn(page);
   let reads = 0;
-  await page.route("**/v1/materials", route => { reads++; return route.fulfill({ json: { schema: "material-library/v1", materials: [material(reads === 1 ? "pending" : "running")] } }); });
+  let running = false;
+  await page.route("**/v1/materials", route => {
+    reads++;
+    return route.fulfill({ json: { schema: "material-library/v1", materials: [material(running ? "running" : reads === 1 ? "pending" : reads === 2 ? "running" : "map")] } });
+  });
   await page.goto("/materials");
   await expect(page.getByRole("article")).toBeVisible();
   await page.clock.runFor(2999); expect(reads).toBe(1);
   const refresh = page.waitForResponse("**/v1/materials"); await page.clock.runFor(1); await refresh;
   await expect(page.getByRole("article")).toContainText("正在分析完整教材"); expect(reads).toBe(2);
-  const manual = page.waitForResponse("**/v1/materials"); await page.getByRole("button", { name: "重新整理", exact: true }).click(); await manual;
-  expect(reads).toBe(3);
+  const terminal = page.waitForResponse("**/v1/materials"); await page.clock.runFor(3000); await terminal;
+  await expect(page.getByRole("article").locator(".primary-button")).toHaveText("開啟知識地圖"); expect(reads).toBe(3);
+  await page.clock.runFor(9001); expect(reads).toBe(3);
+  running = true;
+  await page.goto("/materials");
+  await expect(page.getByRole("article")).toContainText("正在分析完整教材"); expect(reads).toBe(4);
   await page.getByRole("button", { name: "上傳教材", exact: true }).click();
   await expect(page).toHaveURL(/\/upload$/);
-  await page.clock.runFor(9001); expect(reads).toBe(3);
+  await page.clock.runFor(9001); expect(reads).toBe(4);
 });
 
 test("no-safe studies and unpublished completed runs keep collection-only action priority", async ({ page }) => {
@@ -157,6 +171,9 @@ test("no-safe studies and unpublished completed runs keep collection-only action
     await page.goto("/materials"); await expect(page.getByRole("article").locator(".primary-button")).toHaveText("查看最新處理");
     await page.goto(`/materials/${materialId}`);
     await expect(page.locator(".material-library")).not.toHaveClass(/is-collection/);
+    await expect(page.locator(".library-header button")).toHaveText(["返回教材庫", "重新整理", "上傳教材"]);
+    const reloaded = page.waitForResponse(`**/v1/materials/${materialId}`);
+    await page.getByRole("button", { name: "重新整理", exact: true }).click(); await reloaded;
     await expect(page.getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("secondary-button");
     await expect(page.locator(".sidebar-helper")).toBeVisible();
     await page.screenshot({ path: `/tmp/studydy-material-collection/detail-${status}.png`, fullPage: true });

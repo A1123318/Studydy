@@ -67,8 +67,10 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(library.getByRole("button", { name: "重新讀取", exact: true })).toBeVisible();
       } else {
         await expect(library.getByRole("heading", { name: "知識地圖", exact: true, level: 1 })).toBeVisible();
+        await expect(library.getByRole("button", { name: "重新整理", exact: true })).toHaveCount(0);
         await expect(library.locator(".library-subtitle")).toHaveText("從已發布的教材地圖開始探索。");
         if (state === "empty" || state === "unpublished") {
+          await expect(library.locator(".library-header .state-actions")).toHaveCount(0);
           const empty = library.getByRole("region", { name: "知識地圖引導" });
           await expect(empty.getByRole("heading", { level: 2 })).toHaveText(state === "empty" ? "尚未建立知識地圖" : "尚無可開啟的知識地圖");
           await expect(library.locator(".primary-button")).toHaveCount(1);
@@ -84,6 +86,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
           }
           await expect.poll(() => empty.locator("img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
         } else {
+          await expect(library.locator(".library-header button")).toHaveText(["上傳教材"]);
           const cards = library.getByRole("article");
           await expect(cards).toHaveCount(state === "multiple" ? 3 : 1);
           await expect(cards.first()).toContainText("先前已發布的知識地圖仍可開啟");

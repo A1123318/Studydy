@@ -54,11 +54,11 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
   return <section className={libraryClass}>
     <header className="library-header">
       <div><h1>{materialId ? "教材詳情" : mapsOnly ? "知識地圖" : "我的教材"}</h1><p className="library-subtitle">{materialId ? "查看已保存的教材、地圖與學習紀錄。" : mapsOnly ? "從已發布的教材地圖開始探索。" : items.length === 0 ? "上傳教材後，可在這裡查看處理結果並接續學習。" : `已保存 ${items.length} 份教材，隨時接續你的學習。`}</p></div>
-      <div className="state-actions">
+      {(!isCollection || visibleItems.length > 0) && <div className="state-actions">
         {materialId && <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回教材庫</button>}
-        <button className="secondary-button" type="button" onClick={() => setReload(value => value + 1)}>重新整理</button>
-        {(!isCollection || visibleItems.length > 0) && <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}>上傳教材</button>}
-      </div>
+        {!isCollection && <button className="secondary-button" type="button" onClick={() => setReload(value => value + 1)}>重新整理</button>}
+        <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}>上傳教材</button>
+      </div>}
     </header>
     {visibleItems.length === 0 && <section className="library-empty surface" aria-label={mapsOnly ? "知識地圖引導" : "空教材引導"}>
       <div className="library-empty-illustration"><img src="/assets/Studydy_角色素材/空資料/empty_disappointed.png" alt="Studydy 坐在打開的空箱子旁" /></div>
