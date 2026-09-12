@@ -122,7 +122,7 @@ export default function App() {
       setSession({ status: "ready", identity, api });
     }} />;
     return <AccountFrame mode={mode}>{session.status === "starting"
-      ? <StateView description="正在確認帳號狀態，請稍候。" live title="連線中" tone="loading" />
+      ? <StateView description="正在確認帳戶狀態，請稍候。" live title="連線中" tone="loading" />
       : <StateView action={<button className="primary-button" type="button" onClick={() => session.logoutPending ? void logout() : startSession()}>再試一次</button>}
           description={session.message} title="暫時無法完成" tone="failure" />}</AccountFrame>;
   }

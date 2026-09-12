@@ -246,8 +246,8 @@ test("authentication sends only Email/password and retains safe error boundaries
   ]);
   for (const [reason, status, message] of [
     ["INVALID_EMAIL", 400, "請輸入有效的 Email 格式。"],
-    ["INVALID_CREDENTIALS", 401, "Email 或密碼錯誤。"],
-    ["ACCOUNT_UNAVAILABLE", 409, "這個 Email 已被使用，請使用其他 Email 或登入。"],
+    ["INVALID_CREDENTIALS", 401, "Email 或密碼不正確。"],
+    ["ACCOUNT_UNAVAILABLE", 409, "這個 Email 已被使用，請使用其他 Email。"],
     ["STORAGE_UNAVAILABLE", 503, "資料服務暫時無法使用，請稍後再試。"],
   ]) {
     const failed = new StudydyApiClient(async () => Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: reason, retryable: status === 503, message: "Request could not be completed." }, { status }));

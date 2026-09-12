@@ -23,7 +23,7 @@ test("real accounts survive new browser profiles; logout and back never reveal a
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
   await login(page, "learner_test@example.com", "Wrong synthetic password");
-  await expect(page.getByRole("alert")).toHaveText("Email 或密碼錯誤。");
+  await expect(page.getByRole("alert")).toHaveText("Email 或密碼不正確。");
   await login(page, "learner_test@example.com");
   await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
   expect((await (await a.request.get(`${origin}/v1/session`)).json()).learner_id).toBe(learnerId);
@@ -129,6 +129,17 @@ for (const mode of ["login", "register"] as const) {
     const form = page.locator("form.auth-form");
     const email = page.getByLabel("Email", { exact: true });
     const secret = page.getByLabel("密碼", { exact: true });
+    await expect(page.getByRole("heading", { name: mode === "login" ? "登入您的帳戶" : "建立新帳戶", exact: true })).toBeVisible();
+    await expect(email).toHaveAttribute("placeholder", "請輸入 Email");
+    await expect(secret).toHaveAttribute("placeholder", mode === "login" ? "請輸入密碼" : "請設定密碼");
+    await expect(secret).toHaveAttribute("minlength", "15");
+    await expect(secret).toHaveAttribute("maxlength", "128");
+    await expect(page.locator(".auth-switch")).toHaveText(mode === "login" ? "還沒有帳戶？ 立即註冊" : "已經有帳戶？ 立即登入");
+    await expect(page.locator(".auth-card")).not.toContainText(/帳號|電子郵件|信箱|請填寫|可包含空格/);
+    if (mode === "register") {
+      await expect(page.locator("#password-hint")).toHaveText("密碼至少 15 個字元");
+      await expect(page.locator("#confirm-password")).toHaveAttribute("placeholder", "請再次輸入密碼");
+    }
     await expect(email).toHaveAttribute("type", "email");
     await expect(email).toHaveAttribute("id", "email");
     await expect(email).toHaveAttribute("name", "email");
@@ -162,7 +173,7 @@ for (const mode of ["login", "register"] as const) {
     await expect(page.locator("#email-error")).toHaveCount(0);
     await expect(email).not.toHaveAttribute("aria-invalid", "true");
     await secret.fill("short");
-    await expect(page.locator("#password-error")).toHaveText("密碼需為 15–128 個字元，可包含空格。");
+    await expect(page.locator("#password-error")).toHaveText("密碼至少 15 個字元。");
     await secret.fill(password);
     await expect(page.locator("#password-error")).toHaveCount(0);
     if (mode === "register") {
@@ -206,7 +217,7 @@ test("busy submit is disabled and never duplicates the authentication request", 
   await expect(page.getByRole("button", { name: "顯示密碼", exact: true })).toBeDisabled();
   await expect.poll(() => calls).toBe(1);
   release();
-  await expect(page.getByRole("alert")).toHaveText("Email 或密碼錯誤。");
+  await expect(page.getByRole("alert")).toHaveText("Email 或密碼不正確。");
   await expect(page.getByRole("button", { name: "登入", exact: true })).toBeEnabled();
   await expect(page.locator('[aria-invalid="true"]')).toHaveCount(0);
   expect(calls).toBe(1);
@@ -226,9 +237,9 @@ for (const failure of ["duplicate", "storage", "network"] as const) {
     await page.getByRole("button", { name: "註冊", exact: true }).click();
     const alert = page.getByRole("alert");
     await expect(alert).toBeVisible();
-    if (failure === "duplicate") await expect(alert).toHaveText("這個 Email 已被使用，請使用其他 Email 或登入。");
+    if (failure === "duplicate") await expect(alert).toHaveText("這個 Email 已被使用，請使用其他 Email。");
     if (failure === "storage") await expect(alert).toHaveText("資料服務暫時無法使用，請稍後再試。");
-    await expect(alert).not.toHaveText("Email 或密碼錯誤。");
+    await expect(alert).not.toHaveText("Email 或密碼不正確。");
     await expect(page.getByRole("button", { name: "註冊", exact: true })).toBeEnabled();
   });
 }

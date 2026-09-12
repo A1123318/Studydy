@@ -42,7 +42,7 @@ function validateFields(form: HTMLFormElement, register: boolean, rejectedEmail:
   else if (email.validity.typeMismatch || email.value.length > email.maxLength || email.value.trim() === rejectedEmail) errors.email = "請輸入有效的 Email 格式。";
   if (!password.value) errors.password = "請輸入密碼。";
   else if (password.value.length < password.minLength || password.value.length > password.maxLength) {
-    errors.password = "密碼需為 15–128 個字元，可包含空格。";
+    errors.password = password.value.length < password.minLength ? "密碼至少 15 個字元。" : "密碼不可超過 128 個字元。";
   }
   if (register) {
     const confirm = field(form, "confirm-password");
@@ -68,7 +68,7 @@ function PasswordField({ name, label, placeholder, confirm = false, register, di
       <button type="button" className="auth-eye" aria-label={`${visible ? "隱藏" : "顯示"}${confirm ? "確認密碼" : "密碼"}`}
         aria-pressed={visible} disabled={disabled} onClick={() => setVisible(value => !value)}><Icon name={visible ? "eye-off" : "eye"} size={18} /></button>
     </div>
-    {register && !confirm && <small id="password-hint">請使用 15–128 個字元，可包含空格。</small>}
+    {register && !confirm && <small id="password-hint">密碼至少 15 個字元</small>}
     {error && <p className="auth-field-error" id={`${name}-error`}>{error}</p>}
   </div>;
 }
@@ -124,6 +124,6 @@ export function AccountPage({ mode, authenticate, sessionNotice }: {
       {message && <p className="auth-error" role="alert">{message}</p>}
       <button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? "處理中…" : register ? "註冊" : "登入"}</button>
     </form>
-    <p className="auth-switch">{register ? "已經有帳戶了？" : "還沒有帳戶？"}{" "}<a href={register ? "/login" : "/register"}>{register ? "立即登入" : "立即註冊"}</a></p>
+    <p className="auth-switch">{register ? "已經有帳戶？" : "還沒有帳戶？"}{" "}<a href={register ? "/login" : "/register"}>{register ? "立即登入" : "立即註冊"}</a></p>
   </AccountFrame>;
 }

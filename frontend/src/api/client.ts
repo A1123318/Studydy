@@ -245,8 +245,8 @@ function apiError(value: unknown): value is ApiErrorView {
 function safeMessage(reason: ApiReasonCode): string {
   if (reason === "INVALID_EMAIL") return "請輸入有效的 Email 格式。";
   if (reason === "SESSION_REQUIRED") return "工作階段已失效，請重新登入。";
-  if (reason === "INVALID_CREDENTIALS") return "Email 或密碼錯誤。";
-  if (reason === "ACCOUNT_UNAVAILABLE") return "這個 Email 已被使用，請使用其他 Email 或登入。";
+  if (reason === "INVALID_CREDENTIALS") return "Email 或密碼不正確。";
+  if (reason === "ACCOUNT_UNAVAILABLE") return "這個 Email 已被使用，請使用其他 Email。";
   if (reason === "RESOURCE_NOT_FOUND") return "找不到這筆資料，或你沒有權限讀取。";
   if (reason === "NO_SAFE_ASSESSMENT") return "目前沒有可安全提供的新題目。";
   if (reason === "MATERIAL_TOO_LARGE") return "PDF 不可超過 100 MiB。";
