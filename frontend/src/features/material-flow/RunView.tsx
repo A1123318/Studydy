@@ -97,26 +97,26 @@ export function RunView({ apiClient, route }: {
         <div className="processing-grid">
           <section className="surface processing-card">
             <div className="processing-status" aria-live="polite">
-              <div className="progress-heading"><h2>整體進度（估計）</h2><strong>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
+              <div className="progress-heading"><h2>整體流程進度（估計）</h2><strong>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
               <progress className="processing-progress" max={100} value={overallPercent ?? undefined}
-                aria-label={overallPercent === null ? "整體進度（估計），尚無可估計資料" : `整體進度（估計） ${overallPercent}%`} />
-              <p className="progress-estimate-note">依頁面與階段完成度估算，並非耗時比例。</p>
-              <h3>目前階段</h3>
+                aria-label={overallPercent === null ? "整體流程進度（估計），尚無可估計資料" : `整體流程進度（估計） ${overallPercent}%`} />
+              <p className="progress-estimate-note">依已完成的處理階段與頁數估算，代表流程完成度，不代表剩餘時間。</p>
+              <h3>本階段進度</h3>
               <div className="progress-heading"><strong className="stage-label">{stageLabel}</strong><strong>{currentPercent === null ? stageActivity : `${currentPercent}%`}</strong></div>
               {currentPercent === null
-                ? <div className="indeterminate-progress" role="progressbar" aria-label={`目前階段：${stageLabel}，${stageActivity}`}><span /></div>
+                ? <div className="indeterminate-progress" role="progressbar" aria-label={`本階段進度：${stageLabel}，${stageActivity}`}><span /></div>
                 : <progress className="processing-progress" max={100} value={currentPercent}
-                    aria-label={`目前階段進度 ${currentPercent}%，已完成 ${run.completed_pages} / ${run.total_pages} 頁`} />}
-              {currentPercent !== null && <p>目前階段已完成 {run.completed_pages} / {run.total_pages} 頁。</p>}
+                    aria-label={`本階段進度 ${currentPercent}%，已完成 ${run.completed_pages} / ${run.total_pages} 頁`} />}
+              {currentPercent !== null && <p>已完成 {run.completed_pages} / {run.total_pages} 頁</p>}
             </div>
             <dl className="processing-times">
-              <div><dt>已經過</dt><dd>{materialElapsedLabel(run.created_at, now)}</dd></div>
+              <div><dt>已耗時</dt><dd>{materialElapsedLabel(run.created_at, now)}</dd></div>
               <div><dt>最近更新</dt><dd><time dateTime={run.updated_at}>{new Date(run.updated_at).toLocaleTimeString("zh-TW")}</time></dd></div>
             </dl>
             <p>你可以離開此頁，處理進度會自動保存，可稍後從「我的教材」返回查看。</p>
           </section>
           <section className="surface processing-card">
-            <h2>實際處理階段</h2>
+            <h2>處理流程</h2>
             <ol className="status-timeline">
               {materialProgressStages.slice(0, -1).map((stage, index) => (
                 <li className={index < currentStageIndex ? "is-complete" : index === currentStageIndex ? "is-active" : undefined} key={stage}>

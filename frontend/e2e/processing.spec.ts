@@ -24,6 +24,7 @@ const cases: Record<string, MaterialProcessingRunView> = {
   "evidence-full": { ...base, completed_pages: 45 },
   "semantics-zero": { ...base, progress_stage: "semantics", completed_pages: 0 },
   semantics: { ...base, progress_stage: "semantics", completed_pages: 20 },
+  "semantics-36": { ...base, progress_stage: "semantics", completed_pages: 36 },
   "semantics-full": { ...base, progress_stage: "semantics", completed_pages: 45 },
   publishing: { ...base, progress_stage: "publishing", completed_pages: 45 },
   succeeded: completed("succeeded"), partial: completed("partial"),
@@ -34,7 +35,7 @@ const cases: Record<string, MaterialProcessingRunView> = {
 };
 const percentages: Record<string, [number, number | null]> = {
   pending: [0, null], evidence: [3, 7], "evidence-full": [49, 100], "semantics-zero": [49, 0], semantics: [71, 44],
-  "semantics-full": [99, 100], publishing: [99, null], "long-elapsed": [3, 7], "unknown-total": [0, null],
+  "semantics-36": [89, 80], "semantics-full": [99, 100], publishing: [99, null], "long-elapsed": [3, 7], "unknown-total": [0, null],
 };
 async function session(page: Page) {
   await page.route("**/v1/session/refresh", route => route.fulfill({ status: 204 }));
@@ -56,7 +57,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       const processing = page.locator(".processing-page.task-page");
       await expect(processing).toBeVisible();
       await expect(page.locator(".sidebar-helper")).toHaveCount(0);
-      await expect(processing).not.toContainText(/剩餘時間|Material Processing|Processing complete|Claim|三種概念連結|開啟複核地圖|發布可複核結果/);
+      await expect(processing).not.toContainText(/Material Processing|Processing complete|Claim|三種概念連結|開啟複核地圖|發布可複核結果/);
       await expect(processing.getByRole("button", { name: /取消|重新分析/ })).toHaveCount(0);
       expect(await processing.evaluate(element => getComputedStyle(element).maxWidth)).toBe("1180px");
       if (name === "loading") await expect(processing).toHaveAttribute("aria-live", "polite");
@@ -74,19 +75,27 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(processing.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
         await expect(processing).toContainText("可回查的概念與學習重點");
       } else {
+        await expect(processing.getByRole("heading", { name: "整體流程進度（估計）", exact: true })).toBeVisible();
+        await expect(processing.getByRole("heading", { name: "本階段進度", exact: true })).toBeVisible();
+        await expect(processing.getByRole("heading", { name: "處理流程", exact: true })).toBeVisible();
+        await expect(processing.locator(".progress-estimate-note")).toHaveText("依已完成的處理階段與頁數估算，代表流程完成度，不代表剩餘時間。");
+        for (const oldText of ["整體進度（估計）", "目前階段", "實際處理階段", "已經過", "剩餘時間"]) {
+          await expect(processing.getByText(oldText, { exact: true })).toHaveCount(0);
+        }
         const [overall, current] = percentages[name];
-        await expect(processing.getByRole("progressbar", { name: `整體進度（估計） ${overall}%`, exact: true })).toHaveAttribute("value", String(overall));
+        await expect(processing.getByRole("progressbar", { name: `整體流程進度（估計） ${overall}%`, exact: true })).toHaveAttribute("value", String(overall));
         if (current !== null) {
-          await expect(processing.getByRole("progressbar", { name: `目前階段進度 ${current}%，已完成 ${run.completed_pages} / 45 頁`, exact: true })).toHaveAttribute("value", String(current));
-          await expect(processing).toContainText(`目前階段已完成 ${run.completed_pages} / 45 頁`);
+          await expect(processing.getByRole("progressbar", { name: `本階段進度 ${current}%，已完成 ${run.completed_pages} / 45 頁`, exact: true })).toHaveAttribute("value", String(current));
+          await expect(processing.getByText(`已完成 ${run.completed_pages} / 45 頁`, { exact: true })).toBeVisible();
         } else {
-          const indicator = processing.getByRole("progressbar", { name: /目前階段：/ });
+          const indicator = processing.getByRole("progressbar", { name: /本階段進度：/ });
           expect(await indicator.getAttribute("aria-valuenow")).toBeNull();
+          await expect(indicator).toHaveAttribute("aria-label", name === "publishing" ? "本階段進度：發布知識地圖，發布中" : "本階段進度：等待處理資源，等待開始");
           await expect(processing.locator(".processing-status")).toContainText(name === "publishing" ? "發布中" : "等待開始");
           if (name === "publishing") await expect(processing.locator(".processing-status")).not.toContainText("100%");
         }
         if (name === "long-elapsed") await expect(processing.locator(".processing-times")).toContainText("120 分 0 秒");
-        await expect(processing.locator(".processing-times dt")).toHaveText(["已經過", "最近更新"]);
+        await expect(processing.locator(".processing-times dt")).toHaveText(["已耗時", "最近更新"]);
         await expect(processing).toContainText("可稍後從「我的教材」返回查看");
       }
       if (viewport.width > 620 && name !== "failed" && name !== "api-failure") {
@@ -118,20 +127,20 @@ test("processing polling uses backend values only, stops at terminal, and clears
   await page.clock.install({ time: clockTime }); await page.clock.pauseAt(clockTime); await session(page);
   let server = { ...base }; let reads = 0;
   await page.route(`**/v1/material-processing-runs/${runId}`, route => { reads++; return route.fulfill({ json: server }); });
-  await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible();
+  await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toBeVisible();
   await page.clock.runFor(1000); expect(reads).toBe(1);
-  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
+  await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
   await expect(page.locator(".processing-times")).toContainText("3 秒");
   let response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(500); await response; expect(reads).toBe(2);
-  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
+  await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
   server = cases.semantics;
   response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(1500); await response;
-  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 71%", exact: true })).toHaveAttribute("value", "71");
+  await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 71%", exact: true })).toHaveAttribute("value", "71");
   server = completed("succeeded");
   response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(1500); await response;
   await expect(page.getByRole("heading", { name: "教材整理完成", exact: true })).toBeVisible(); expect(reads).toBe(4);
   await page.clock.runFor(6001); expect(reads).toBe(4);
-  server = base; await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible(); expect(reads).toBe(5);
+  server = base; await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toBeVisible(); expect(reads).toBe(5);
   await page.getByRole("button", { name: "教材庫", exact: true }).click(); await expect(page).toHaveURL(/\/materials$/);
   await page.clock.runFor(6001); expect(reads).toBe(5);
 });
@@ -145,6 +154,6 @@ test("read failure retry only reads the original run and never creates work", as
     : route.fulfill({ json: base }));
   await page.goto(path); await expect(page.getByRole("heading", { name: "無法讀取處理狀態", exact: true })).toBeVisible();
   failed = false; await page.getByRole("button", { name: "重新讀取", exact: true }).click();
-  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(path + "$")); expect(writes).toEqual([]);
 });
