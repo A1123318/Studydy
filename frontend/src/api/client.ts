@@ -31,6 +31,7 @@ const knownReasons = new Set<KnownApiReasonCode>([
 ]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const sha = /^[0-9a-f]{64}$/;
+const authTimeoutMs = 10_000;
 const maximumPdfBytes = 100 * 1024 * 1024;
 
 function origin(): string {
@@ -308,7 +309,7 @@ export class StudydyApiClient {
   async ensureSession(): Promise<LearnerIdentity> {
     this.requireActive();
     if (!this.sessionReady) {
-      this.sessionReady = this.request("/v1/session/refresh", { method: "POST", headers: { Origin: origin() } })
+      this.sessionReady = this.request("/v1/session/refresh", { method: "POST", headers: { Origin: origin() } }, authTimeoutMs)
         .then(() => this.currentIdentity())
         .finally(() => { this.sessionReady = null; });
     }
@@ -316,52 +317,82 @@ export class StudydyApiClient {
   }
 
   currentIdentity(): Promise<LearnerIdentity> {
-    return this.json("/v1/session", { method: "GET" }, identity);
+    return this.json("/v1/session", { method: "GET" }, identity, authTimeoutMs);
   }
 
   authenticate(mode: "login" | "register", email: string, password: string): Promise<LearnerIdentity> {
     return this.json(mode === "register" ? "/v1/accounts" : "/v1/session/login", {
       method: "POST", headers: { "Content-Type": "application/json", Origin: origin() },
       body: JSON.stringify({ email, password }),
-    }, identity);
+    }, identity, authTimeoutMs);
   }
 
   async logout(): Promise<void> {
-    await this.request("/v1/session", { method: "DELETE", headers: { Origin: origin() } });
+    await this.request("/v1/session", { method: "DELETE", headers: { Origin: origin() } }, authTimeoutMs);
   }
 
-  private async request(path: string, init: RequestInit): Promise<Response> {
+  private async request(path: string, init: RequestInit, timeoutMs?: number): Promise<{ status: number; value: unknown }> {
     this.requireActive();
     const controller = new AbortController();
     this.pending.add(controller);
-    let response: Response;
+    let timedOut = false;
+    const cancellationError = () => timedOut
+      ? new ApiClientError("network", "連線逾時，請再試一次。", { reasonCode: "REQUEST_TIMEOUT", retryable: true })
+      : new ApiClientError("api", "工作階段已結束，請重新登入。", { reasonCode: "SESSION_REQUIRED" });
+    let onAbort!: () => void;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(cancellationError());
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    const timer = timeoutMs === undefined ? undefined : setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    const checkActive = () => {
+      this.requireActive();
+      if (controller.signal.aborted) throw cancellationError();
+    };
+    const read = async () => {
+      let response: Response;
+      try {
+        response = await this.fetchRequest(path, { ...init, credentials: "same-origin", cache: "no-store", signal: controller.signal });
+      } catch {
+        checkActive();
+        throw new ApiClientError("network", "無法連線到 Studydy。", { reasonCode: "NETWORK_ERROR", retryable: true });
+      }
+      checkActive();
+      let value: unknown = null;
+      if (response.status !== 204) {
+        try { value = await response.json(); } catch { /* 依 HTTP 狀態區分格式錯誤與服務故障。 */ }
+      }
+      checkActive();
+      if (response.ok) return { status: response.status, value };
+      if (!apiError(value)) {
+        if (response.status >= 500) throw new ApiClientError("network", "Studydy 服務暫時無法使用，請稍後再試。", { status: response.status, reasonCode: "SERVICE_UNAVAILABLE", retryable: true });
+        throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status: response.status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+      }
+      if (response.status === 401 && value.reason_code === "SESSION_REQUIRED") {
+        // 取消其他請求，保留這次回應的正式錯誤資訊。
+        this.pending.delete(controller);
+        this.invalidate();
+        this.onSessionExpired?.();
+      }
+      const reason = knownReasons.has(value.reason_code as KnownApiReasonCode) ? value.reason_code as KnownApiReasonCode : "UNKNOWN_API_ERROR";
+      throw new ApiClientError("api", safeMessage(reason), { status: response.status, reasonCode: reason, requestId: value.request_id, retryable: value.retryable });
+    };
     try {
-      response = await this.fetchRequest(path, { ...init, credentials: "same-origin", cache: "no-store", signal: controller.signal });
-    } catch {
-      throw new ApiClientError("network", "無法連線到 Studydy。", { reasonCode: "NETWORK_ERROR", retryable: true });
+      return await Promise.race([read(), cancelled]);
     } finally {
+      clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
       this.pending.delete(controller);
     }
-    this.requireActive();
-    if (response.ok) return response;
-    let body: unknown;
-    try { body = await response.json(); } catch { body = null; }
-    this.requireActive();
-    if (response.status === 401 && apiError(body) && body.reason_code === "SESSION_REQUIRED") {
-      this.invalidate();
-      this.onSessionExpired?.();
-    }
-    if (!apiError(body)) throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status: response.status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
-    const reason = knownReasons.has(body.reason_code as KnownApiReasonCode) ? body.reason_code as KnownApiReasonCode : "UNKNOWN_API_ERROR";
-    throw new ApiClientError("api", safeMessage(reason), { status: response.status, reasonCode: reason, requestId: body.request_id, retryable: body.retryable });
   }
 
-  private async json<T>(path: string, init: RequestInit, guard: (value: unknown) => value is T): Promise<T> {
-    const response = await this.request(path, init);
-    let value: unknown;
-    try { value = await response.json(); } catch { value = null; }
+  private async json<T>(path: string, init: RequestInit, guard: (value: unknown) => value is T, timeoutMs?: number): Promise<T> {
+    const { status, value } = await this.request(path, init, timeoutMs);
     this.requireActive();
-    if (!guard(value)) throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status: response.status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+    if (!guard(value)) throw new ApiClientError("schema", "伺服器回應格式無法辨識。", { status, reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
     return value;
   }
 

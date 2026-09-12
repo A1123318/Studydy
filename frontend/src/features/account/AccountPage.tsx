@@ -73,7 +73,8 @@ function PasswordField({ name, label, placeholder, confirm = false, register, di
   </div>;
 }
 
-export function AccountPage({ mode, authenticate }: {
+export function AccountPage({ mode, authenticate, sessionNotice }: {
+  sessionNotice?: React.ReactNode;
   mode: Mode; authenticate: (mode: Mode, email: string, password: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -85,6 +86,7 @@ export function AccountPage({ mode, authenticate }: {
   const register = mode === "register";
   return <AccountFrame mode={mode}>
     <h1>{register ? "建立新帳戶" : "登入您的帳戶"}</h1>
+    {sessionNotice}
     <form className="auth-form" noValidate onInput={event => {
       if (attempted) setErrors(validateFields(event.currentTarget, register, rejectedEmail.current));
       setMessage("");

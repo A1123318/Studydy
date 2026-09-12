@@ -59,10 +59,13 @@ export default function App() {
     clearPrivateView();
     setSession({ status: "starting" });
     channel.current?.postMessage("identity-changed");
+    const api = newClient();
     try {
-      await new StudydyApiClient().logout();
+      await api.logout();
+      if (currentClient.current !== api) return;
       setSession({ status: "signed-out" });
     } catch (error) {
+      if (currentClient.current !== api) return;
       setSession({ status: "failed", message: `登出尚未完成。${errorMessage(error)}`, logoutPending: true });
     }
   };
@@ -84,7 +87,7 @@ export default function App() {
     if (session.status !== "ready") return;
     const refresh = () => {
       void session.api.ensureSession().then((identity) => {
-        if (identity.learner_id !== session.identity.learner_id) clearPrivateView();
+        if (currentClient.current === session.api && identity.learner_id !== session.identity.learner_id) clearPrivateView();
       }).catch(() => { /* 401 由 client 清除畫面；暫時連線失敗不重送產品寫入。 */ });
     };
     const timer = window.setInterval(refresh, 60 * 60 * 1000);
@@ -106,9 +109,13 @@ export default function App() {
 
   if (session.status !== "ready") {
     const mode = window.location.pathname === "/register" ? "register" : "login";
-    if (session.status === "signed-out") return <AccountPage key={mode} mode={mode} authenticate={async (action, email, password) => {
+    if (["/login", "/register"].includes(window.location.pathname) || session.status === "signed-out") return <AccountPage key={mode} mode={mode}
+      sessionNotice={session.status === "failed" && session.logoutPending ? <div role="alert"><p>{session.message}</p><button type="button" onClick={() => void logout()}>再試一次</button></div> : undefined}
+      authenticate={async (action, email, password) => {
       const api = newClient();
-      const identity = await api.authenticate(action, email, password);
+      let identity: LearnerIdentity;
+      try { identity = await api.authenticate(action, email, password); }
+      catch (error) { if (currentClient.current !== api) return; throw error; }
       if (currentClient.current !== api) return;
       writeRoute({ name: "home" }, true);
       channel.current?.postMessage("identity-changed");

@@ -254,3 +254,82 @@ test("authentication sends only Email/password and retains safe error boundaries
     await assert.rejects(failed.authenticate("login", "learner@example.com", "Synthetic password 42"), error => error instanceof ApiClientError && error.reasonCode === reason && error.message === message);
   }
 });
+
+for (const operation of ["refresh", "identity", "login", "register", "logout"]) {
+  test(`${operation} has a bounded deadline and can retry without late abort`, async t => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const signals = [];
+    let hang = true;
+    const client = new StudydyApiClient(async (path, init) => {
+      signals.push(init.signal);
+      if (hang) return new Promise(() => {});
+      return path.endsWith("refresh") || init.method === "DELETE" ? new Response(null, { status: 204 })
+        : Response.json({ schema: "learner-identity/v1", learner_id: sessionId });
+    });
+    const invoke = () => operation === "refresh" ? client.ensureSession() : operation === "identity" ? client.currentIdentity()
+      : operation === "logout" ? client.logout() : client.authenticate(operation, "learner@example.com", "Synthetic password 42");
+    const rejected = assert.rejects(invoke(), e => e.reasonCode === "REQUEST_TIMEOUT" && e.retryable);
+    t.mock.timers.tick(10_000);
+    await rejected;
+    assert.equal(signals[0].aborted, true);
+    hang = false;
+    await invoke();
+    t.mock.timers.tick(100_000);
+    client.invalidate();
+    assert.ok(signals.slice(1).every(signal => !signal.aborted));
+  });
+}
+
+test("deadline covers body parsing and late 401 cannot retire a recovered client", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let finish;
+  let parsing;
+  let first = true;
+  const started = new Promise(resolve => { parsing = resolve; });
+  const client = new StudydyApiClient(async () => {
+    if (!first) return Response.json({ schema: "learner-identity/v1", learner_id: sessionId });
+    first = false;
+    return { ok: false, status: 401, json: () => { parsing(); return new Promise(resolve => { finish = resolve; }); } };
+  });
+  let expired = 0;
+  client.onSessionExpired = () => expired++;
+  const rejected = assert.rejects(client.currentIdentity(), e => e.reasonCode === "REQUEST_TIMEOUT");
+  await started;
+  t.mock.timers.tick(10_000);
+  await rejected;
+  await client.currentIdentity();
+  finish({ schema: "api-error/v1", request_id: sessionId, reason_code: "SESSION_REQUIRED", retryable: false, message: "Request could not be completed." });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(expired, 0);
+  await client.currentIdentity();
+});
+
+test("intentional cancellation settles hanging auth without a timeout error", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const client = new StudydyApiClient(async () => new Promise(() => {}));
+  const rejected = assert.rejects(client.currentIdentity(), e => e.reasonCode === "SESSION_REQUIRED" && !e.retryable);
+  client.invalidate();
+  await rejected;
+  t.mock.timers.tick(100_000);
+});
+
+test("long product reads do not inherit auth deadline", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let finish;
+  let signal;
+  const client = new StudydyApiClient(async (_path, init) => { signal = init.signal; return new Promise(resolve => { finish = resolve; }); });
+  const pending = client.getMaterialRun(runId);
+  t.mock.timers.tick(100_000);
+  assert.equal(signal.aborted, false);
+  finish(Response.json(runView()));
+  await pending;
+});
+
+test("malformed gateway errors remain distinct from successful schema errors and credentials", async () => {
+  for (const status of [200, 400, 401, 502, 503]) {
+    const client = new StudydyApiClient(async () => new Response("<html>upstream</html>", { status }));
+    await assert.rejects(client.authenticate("login", "learner@example.com", "Synthetic password 42"), e =>
+      status >= 500 ? e.reasonCode === "SERVICE_UNAVAILABLE" && e.retryable && e.message.includes("暫時無法使用")
+        : e.reasonCode === "RESPONSE_SCHEMA_MISMATCH");
+  }
+});

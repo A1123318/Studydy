@@ -50,7 +50,9 @@ test("real accounts survive new browser profiles; logout and back never reveal a
   await expect(page.getByText(/登出尚未完成/)).toBeVisible();
   await expect(page.getByText("Stack", { exact: true })).toHaveCount(0);
   await expect(otherTab.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
+  const loggedOut = page.waitForResponse(response => response.url().endsWith("/v1/session") && response.request().method() === "DELETE" && response.status() === 204);
   await page.getByRole("button", { name: "再試一次", exact: true }).click();
+  await loggedOut;
   await expect(page.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
   await otherTab.close();
   expect((await a.request.get(`${origin}/v1/session`)).status()).toBe(401);
@@ -273,4 +275,112 @@ test("server Email syntax rejection remains an inline field error", async ({ pag
   await expect(page.locator("#email-error")).toBeVisible();
   await email.fill("valid@example.com");
   await expect(page.locator("#email-error")).toHaveCount(0);
+});
+
+for (const mode of ["login", "register"] as const) {
+  for (const outage of ["network", "gateway", "pending"] as const) {
+    test(`${mode} form works during ${outage} bootstrap and recovers without reload`, async ({ page }) => {
+      await page.clock.install();
+      await page.clock.pauseAt(new Date());
+      await page.route("**/v1/session/refresh", route => outage === "network" ? route.abort("connectionrefused")
+        : outage === "gateway" ? route.fulfill({ status: 502, contentType: "text/html", body: "<html>Bad gateway</html>" }) : undefined);
+      await page.goto(`/${mode}`);
+      const submit = page.getByRole("button", { name: mode === "login" ? "登入" : "註冊", exact: true });
+      await expect(submit).toBeVisible();
+      await submit.click();
+      await expect(page.locator("#email-error")).toBeVisible();
+      await page.getByRole("button", { name: "顯示密碼", exact: true }).click();
+      await expect(page.locator("#password")).toHaveAttribute("type", "text");
+      await expect(page.getByRole("link", { name: mode === "login" ? "立即註冊" : "立即登入" })).toBeVisible();
+      await page.clock.runFor(10_001);
+      await expect(submit).toBeEnabled();
+      await expect(page.getByText("暫時無法完成", { exact: true })).toHaveCount(0);
+      await page.unroute("**/v1/session/refresh");
+      await page.locator("#email").fill(mode === "login" ? "learner_test@example.com" : `recovery_${outage}@example.com`);
+      await page.locator("#password").fill(password);
+      if (mode === "register") await page.locator("#confirm-password").fill(password);
+      await submit.click();
+      await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
+    });
+  }
+
+  test(`existing session redirects from ${mode}`, async ({ page }) => {
+    await page.request.post(`${origin}/v1/session/login`, { headers: { Origin: origin }, data: { email: "learner_test@example.com", password } });
+    await page.goto(`/${mode}`);
+    await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(`${origin}/`);
+  });
+
+  test(`${mode} submit gateway and timeout release busy and allow retry`, async ({ page }) => {
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    await page.goto(`/${mode}`);
+    const endpoint = mode === "login" ? "**/v1/session/login" : "**/v1/accounts";
+    await page.locator("#email").fill(mode === "login" ? "learner_test@example.com" : "submit_recovery@example.com");
+    await page.locator("#password").fill(password);
+    if (mode === "register") await page.locator("#confirm-password").fill(password);
+    const submit = page.getByRole("button", { name: mode === "login" ? "登入" : "註冊", exact: true });
+    for (const outage of ["network", "gateway", "pending"]) {
+      await page.route(endpoint, route => outage === "network" ? route.abort("connectionrefused")
+        : outage === "gateway" ? route.fulfill({ status: 502, body: "<html>Bad gateway</html>" }) : undefined);
+      const sent = page.waitForRequest(request => request.method() === "POST" && /\/v1\/(accounts|session\/login)$/.test(request.url()));
+      await submit.click();
+      await sent;
+      if (outage === "pending") await page.clock.runFor(10_001);
+      await expect(page.getByRole("alert")).toContainText(outage === "gateway" ? "服務暫時無法使用" : outage === "pending" ? "逾時" : "無法連線");
+      await expect(submit).toBeEnabled();
+      await page.unroute(endpoint);
+    }
+    await submit.click();
+    await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
+  });
+}
+
+for (const result of ["success", "expired", "network"] as const) {
+  test(`late bootstrap ${result} cannot overwrite successful login`, async ({ page }) => {
+    await page.addInitScript(({ result }) => {
+      const original = window.fetch.bind(window);
+      let first = true;
+      Object.assign(window, { bootstrapStarted: false });
+      window.fetch = (input, init) => {
+        if (String(input) === "/v1/session/refresh" && first) {
+          first = false;
+          Object.assign(window, { bootstrapStarted: true });
+          return new Promise((resolve, reject) => Object.assign(window, { releaseBootstrap: () => {
+            if (result === "network") reject(new TypeError("offline"));
+            else if (result === "success") resolve(new Response(null, { status: 204 }));
+            else resolve(Response.json({ schema: "api-error/v1", request_id: "11111111-1111-4111-8111-111111111111", reason_code: "SESSION_REQUIRED", retryable: false, message: "Request could not be completed." }, { status: 401 }));
+          } }));
+        }
+        return original(input, init);
+      };
+    }, { result });
+    await page.goto("/login");
+    await expect.poll(() => page.evaluate(() => (window as any).bootstrapStarted)).toBe(true);
+    await login(page, "learner_test@example.com");
+    await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
+    await page.evaluate(async () => { (window as any).releaseBootstrap(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await expect(page.getByRole("navigation", { name: "主要導覽", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(`${origin}/`);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+}
+
+test("private routes reject unknown/offline sessions and redirect expired sessions", async ({ page }) => {
+  await page.route("**/v1/session/refresh", route => route.abort("connectionrefused"));
+  await page.goto("/materials");
+  await expect(page.getByText("暫時無法完成", { exact: true })).toBeVisible();
+  await expect(page.locator(".app-header")).toHaveCount(0);
+  await expect(page.locator("form.auth-form")).toHaveCount(0);
+  await page.unroute("**/v1/session/refresh");
+  await page.getByRole("button", { name: "再試一次", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.locator("form.auth-form")).toBeVisible();
+  await login(page, "learner_test@example.com");
+  await expect(page.getByRole("button", { name: "登出", exact: true })).toBeVisible();
+  await page.route("**/v1/session/refresh", route => route.abort("connectionrefused"));
+  const refresh = page.waitForRequest("**/v1/session/refresh");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refresh;
+  await expect(page.getByRole("navigation", { name: "主要導覽", exact: true })).toBeVisible();
 });
