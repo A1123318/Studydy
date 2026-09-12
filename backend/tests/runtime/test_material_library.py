@@ -104,7 +104,7 @@ def test_library_owns_all_materials_and_keeps_prior_versions(library_materials, 
     empty = register_account("empty_library@example.com", "Synthetic test password 42", dsn=dsn)
     client.cookies.clear()
     client.cookies.set("studydy_session", empty.raw_token)
-    assert client.get("/v1/materials").json() == {"schema": "material-library/v1", "materials": []}
+    assert client.get("/v1/materials").json() == {"schema": "material-library/v2", "materials": []}
     def unavailable(*_args, **_kwargs):
         raise SQLAlchemyError("synthetic-storage-detail-not-for-response")
     monkeypatch.setattr(material_storage, "database_session", unavailable)
@@ -156,7 +156,7 @@ def test_material_name_migration_preserves_accepted_schema(clean_database_dsn, m
         connection.execute("INSERT INTO materials VALUES (%s,%s,%s,%s,%s,now())", (material_id, learner.learner_id, artifact_id, hashlib.sha256(b"old-upload").digest(), fingerprint))
         connection.execute("INSERT INTO artifacts VALUES (%s,%s,%s,'source_pdf','application/pdf',%s,%s,now())", (artifact_id, learner.learner_id, material_id, digest, len(content)))
         previous = connection.execute("SELECT * FROM materials").fetchone()
-    assert run_migrations(clean_database_dsn) == (3, 4)
+    assert run_migrations(clean_database_dsn) == (3, 4, 5)
     assert run_migrations(clean_database_dsn) == ()
     with psycopg.connect(clean_database_dsn) as connection:
         assert connection.execute("SELECT material_id,learner_id,source_artifact_id,upload_idempotency_key_sha256,upload_request_fingerprint,created_at FROM materials").fetchone() == previous

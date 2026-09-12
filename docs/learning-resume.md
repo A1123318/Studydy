@@ -36,7 +36,7 @@ GET /v1/materials/{material_id}/knowledge-structures/{structure_revision}/study-
 錯 owner／binding／不屬於該 session 的題目回 404；無 session 回 401；讀取期間學習狀態
 改變回 409，讓前端重讀。新入口沿用 private/no-store，拒絕 client 指定 learner。
 
-既有 `material-library-item/v1` 增加 `study_sessions`，提供原 session/revision/run 的唯讀連結；
+`material-library-item/v2` 的 `study_sessions` 提供原 session/revision/run 的唯讀連結；
 既有 `study-session/v2` 增加已保存的 `no_safe_claim_ids`。其餘 scoring、mastery、stale、
 idempotency 與 guidance authority 不變。沒有 migration、新資料表、新 dependency 或模型改動。
 

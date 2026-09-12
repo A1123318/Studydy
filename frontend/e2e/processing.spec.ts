@@ -8,7 +8,7 @@ const revision = `knowledge-structure:sha256:${"a".repeat(64)}`;
 const path = `/materials/${materialId}/runs/${runId}`;
 const clockTime = new Date("2026-09-12T12:00:00Z");
 const base: MaterialProcessingRunView = {
-  schema: "material-processing-run/v4", material_id: materialId, run_id: runId, source_artifact_id: artifactId,
+  schema: "material-processing-run/v5", cancel_requested_at: null, material_id: materialId, run_id: runId, source_artifact_id: artifactId,
   status: "running", progress_stage: "evidence", completed_pages: 3, total_pages: 45,
   created_at: "2026-09-12T11:59:58Z", updated_at: "2026-09-12T11:59:59Z", completed_at: null, error_code: null, output_binding: null,
 };
@@ -58,7 +58,9 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await expect(processing).toBeVisible();
       await expect(page.locator(".sidebar-helper")).toHaveCount(0);
       await expect(processing).not.toContainText(/Material Processing|Processing complete|Claim|三種概念連結|開啟複核地圖|發布可複核結果/);
-      await expect(processing.getByRole("button", { name: /取消|重新分析/ })).toHaveCount(0);
+      await expect(processing.getByRole("button", { name: "取消處理", exact: true })).toHaveCount(
+        name !== "loading" && name !== "api-failure" && (run.status === "pending" || run.status === "running") && run.progress_stage !== "publishing" ? 1 : 0);
+      await expect(processing.getByRole("button", { name: "重新分析", exact: true })).toHaveCount(0);
       expect(await processing.evaluate(element => getComputedStyle(element).maxWidth)).toBe("1180px");
       if (name === "loading") await expect(processing).toHaveAttribute("aria-live", "polite");
       else if (name === "api-failure") {

@@ -14,7 +14,7 @@ const blockId = `block:sha256:${"e".repeat(64)}`;
 
 function runView() {
   return {
-    schema: "material-processing-run/v4", run_id: runId, material_id: materialId,
+    schema: "material-processing-run/v5", cancel_requested_at: null, run_id: runId, material_id: materialId,
     source_artifact_id: "44444444-4444-4444-8444-444444444444", status: "succeeded",
     progress_stage: "completed", completed_pages: 1, total_pages: 1, error_code: null,
     created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:01Z", completed_at: "2026-09-05T00:00:01Z",
@@ -139,7 +139,7 @@ test("responses still parsing at logout cannot publish private data", async () =
 });
 
 function libraryItem() {
-  return { schema: "material-library-item/v1", material_id: materialId,
+  return { schema: "material-library-item/v2", material_id: materialId,
     source_artifact_id: "44444444-4444-4444-8444-444444444444", display_name: "堆疊.pdf",
     size_bytes: 120, created_at: "2026-09-11T00:00:00Z", latest_attempt: null, study_sessions: [],
     available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
@@ -151,7 +151,7 @@ test("material library reads use server identity and carry exact published revis
   const item = libraryItem();
   const client = new StudydyApiClient(async (path, init) => {
     requests.push([path, init.method]);
-    return Response.json(path === "/v1/materials" ? { schema: "material-library/v1", materials: [item] } : item);
+    return Response.json(path === "/v1/materials" ? { schema: "material-library/v2", materials: [item] } : item);
   });
   assert.equal((await client.listMaterials()).materials[0].available_structures[0].knowledge_structure_revision, structureRevision);
   assert.deepEqual(await client.getMaterial(materialId), item);
@@ -162,7 +162,7 @@ test("material library reads use server identity and carry exact published revis
 test("library rejects invalid lifecycle and uploaded filenames use UTF-8 encoding", async () => {
   const item = libraryItem();
   item.available_structures[0].status = "failed";
-  const invalid = new StudydyApiClient(async () => Response.json({ schema: "material-library/v1", materials: [item] }));
+  const invalid = new StudydyApiClient(async () => Response.json({ schema: "material-library/v2", materials: [item] }));
   await assert.rejects(invalid.listMaterials(), error => error.kind === "schema");
   const client = new StudydyApiClient(async (_path, init) => {
     assert.equal(init.headers["X-Material-Name"], encodeURIComponent("陣列 & 堆疊.pdf"));
@@ -331,5 +331,77 @@ test("malformed gateway errors remain distinct from successful schema errors and
     await assert.rejects(client.authenticate("login", "learner@example.com", "Synthetic password 42"), e =>
       status >= 500 ? e.reasonCode === "SERVICE_UNAVAILABLE" && e.retryable && e.message.includes("暫時無法使用")
         : e.reasonCode === "RESPONSE_SCHEMA_MISMATCH");
+  }
+});
+
+function cancellationView(status) {
+  const view = runView();
+  view.status = status;
+  if (status === "succeeded" || status === "partial") {
+    view.output_binding.processing = status;
+    return view;
+  }
+  view.progress_stage = status === "pending" ? "queued" : "evidence";
+  view.completed_pages = status === "pending" ? 0 : 1;
+  view.total_pages = status === "pending" ? null : 2;
+  view.output_binding = null;
+  view.completed_at = status === "failed" || status === "cancelled" ? "2026-09-05T00:00:02Z" : null;
+  view.cancel_requested_at = status === "cancelled" ? "2026-09-05T00:00:01Z" : null;
+  view.error_code = status === "failed" ? "NO_USABLE_EVIDENCE" : null;
+  return view;
+}
+
+test("v5 run guards accept canonical cancellation states and reject invalid lifecycle/timestamps", async () => {
+  for (const status of ["pending", "running", "cancelled", "failed", "succeeded", "partial"]) {
+    const value = cancellationView(status);
+    const client = new StudydyApiClient(async () => Response.json(value));
+    assert.equal((await client.getMaterialRun(runId)).status, status);
+  }
+  const accepted = { ...cancellationView("running"), cancel_requested_at: "2026-09-05T00:00:01Z" };
+  assert.deepEqual(await new StudydyApiClient(async () => Response.json(accepted)).getMaterialRun(runId), accepted);
+  for (const [status, corrupt] of [
+    ["cancelled", v => { v.cancel_requested_at = null; }],
+    ["cancelled", v => { v.completed_at = null; }],
+    ["cancelled", v => { v.output_binding = runView().output_binding; }],
+    ["cancelled", v => { v.error_code = "FAILED"; }],
+    ["succeeded", v => { v.cancel_requested_at = "2026-09-05T00:00:01Z"; }],
+    ["running", v => { v.progress_stage = "publishing"; v.cancel_requested_at = "2026-09-05T00:00:01Z"; }],
+    ["running", v => { v.completed_at = "2026-09-05T00:00:01Z"; }],
+    ["pending", v => { v.cancel_requested_at = "2026-09-05T00:00:01Z"; }],
+    ["failed", v => { v.cancel_requested_at = "2026-09-05T00:00:01Z"; }],
+    ["cancelled", v => { v.cancel_requested_at = "not-a-date"; }],
+    ["cancelled", v => { v.cancel_requested_at = "2026-02-30T00:00:00Z"; }],
+    ["cancelled", v => { v.cancel_requested_at = "2026-09-05T24:00:00Z"; }],
+    ["running", v => { delete v.cancel_requested_at; }],
+    ["running", v => { v.updated_at = "invalid"; }],
+    ["running", v => { v.schema = "material-processing-run/v4"; }],
+  ]) {
+    const value = cancellationView(status); corrupt(value);
+    await assert.rejects(new StudydyApiClient(async () => Response.json(value)).getMaterialRun(runId), e => e.kind === "schema");
+  }
+});
+
+test("cancelMaterialRun posts an empty Origin-bound request with no idempotency header", async () => {
+  const client = new StudydyApiClient(async (path, init) => {
+    assert.equal(path, `/v1/material-processing-runs/${runId}/cancel`);
+    assert.equal(init.method, "POST");
+    assert.equal(init.headers.Origin, "http://127.0.0.1:4173");
+    assert.equal(init.headers["Idempotency-Key"], undefined);
+    assert.equal(init.body, undefined);
+    return Response.json(cancellationView("cancelled"));
+  });
+  assert.equal((await client.cancelMaterialRun(runId)).status, "cancelled");
+});
+
+test("v2 library attempts preserve cancellation intent while older published maps remain usable", async () => {
+  for (const status of ["running", "cancelled"]) {
+    const item = libraryItem();
+    const value = cancellationView(status);
+    if (status === "running") value.cancel_requested_at = "2026-09-05T00:00:01Z";
+    item.latest_attempt = Object.fromEntries(["run_id", "status", "progress_stage", "completed_pages", "total_pages", "error_code", "created_at", "cancel_requested_at"].map(key => [key, value[key]]));
+    const client = new StudydyApiClient(async () => Response.json({ schema: "material-library/v2", materials: [item] }));
+    assert.equal((await client.listMaterials()).materials[0].available_structures.length, 1);
+    item.latest_attempt.cancel_requested_at = "invalid";
+    await assert.rejects(client.listMaterials(), e => e.kind === "schema");
   }
 });

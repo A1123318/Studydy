@@ -52,11 +52,12 @@ export type MaterialOutputBinding = {
 };
 
 export type MaterialProcessingRunView = {
-  schema: "material-processing-run/v4";
+  schema: "material-processing-run/v5";
+  cancel_requested_at: string | null;
   run_id: string;
   material_id: string;
   source_artifact_id: string;
-  status: "pending" | "running" | "succeeded" | "partial" | "failed";
+  status: "pending" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
   progress_stage: "queued" | "evidence" | "semantics" | "publishing" | "completed";
   completed_pages: number;
   total_pages: number | null;
@@ -68,7 +69,7 @@ export type MaterialProcessingRunView = {
 };
 
 export type MaterialAttemptView = Pick<MaterialProcessingRunView,
-  "run_id" | "status" | "progress_stage" | "completed_pages" | "total_pages" | "error_code" | "created_at">;
+  "run_id" | "status" | "progress_stage" | "completed_pages" | "total_pages" | "error_code" | "created_at" | "cancel_requested_at">;
 
 export type MaterialStructureLink = {
   run_id: string;
@@ -87,7 +88,7 @@ export type StudySessionLink = {
 };
 
 export type MaterialLibraryItem = {
-  schema: "material-library-item/v1";
+  schema: "material-library-item/v2";
   material_id: string;
   source_artifact_id: string;
   display_name: string;
@@ -99,7 +100,7 @@ export type MaterialLibraryItem = {
 };
 
 export type MaterialLibraryView = {
-  schema: "material-library/v1";
+  schema: "material-library/v2";
   materials: MaterialLibraryItem[];
 };
 

@@ -5,7 +5,7 @@ const id = "11111111-1111-4111-8111-111111111111";
 const revision = `knowledge-structure:sha256:${"a".repeat(64)}`;
 const longName = "資料結構與演算法：堆疊、佇列、遞迴與樹狀結構的概念整理及練習講義_" + "LongMaterialFilename".repeat(5) + ".pdf";
 const material: MaterialLibraryItem = {
-  schema: "material-library-item/v1", material_id: id, source_artifact_id: id, display_name: longName,
+  schema: "material-library-item/v2", material_id: id, source_artifact_id: id, display_name: longName,
   size_bytes: 100, created_at: "2026-09-12T00:00:00Z", latest_attempt: null,
   available_structures: [{ run_id: id, knowledge_structure_revision: revision, created_at: "2026-09-12T00:00:00Z", status: "succeeded" }],
   study_sessions: [],
@@ -31,7 +31,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         if (responseState === "failure") return route.fulfill({ status: 503, json: {
           schema: "api-error/v1", request_id: id, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed.",
         } });
-        return route.fulfill({ json: { schema: "material-library/v1", materials: responseState === "materials" ? [material]
+        return route.fulfill({ json: { schema: "material-library/v2", materials: responseState === "materials" ? [material]
           : responseState === "recent" ? [{ ...material, study_sessions: [active] }] : [] } });
       });
       await page.goto("/");
@@ -113,7 +113,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
 test("dashboard resume retains active/completed routes and overview destinations", async ({ page }) => {
   await signedIn(page);
   let status: "active" | "completed" = "active";
-  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v1",
+  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2",
     materials: [{ ...material, study_sessions: [{ ...active, status }] }] } }));
   for (const value of ["active", "completed"] as const) {
     status = value;

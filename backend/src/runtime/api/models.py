@@ -57,16 +57,17 @@ class MaterialOutputBindingView(_Closed):
 
 
 class MaterialProcessingRunView(_Closed):
-    schema_: Literal["material-processing-run/v4"] = Field(alias="schema")
+    schema_: Literal["material-processing-run/v5"] = Field(alias="schema")
     run_id: UUID
     material_id: UUID
     source_artifact_id: UUID
-    status: Literal["pending", "running", "succeeded", "partial", "failed"]
+    status: Literal["pending", "running", "succeeded", "partial", "failed", "cancelled"]
     progress_stage: Literal["queued", "evidence", "semantics", "publishing", "completed"]
     completed_pages: int
     total_pages: int | None
     output_binding: MaterialOutputBindingView | None
     error_code: str | None
+    cancel_requested_at: datetime | None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
@@ -74,11 +75,12 @@ class MaterialProcessingRunView(_Closed):
 
 class MaterialAttemptView(_Closed):
     run_id: UUID
-    status: Literal["pending", "running", "succeeded", "partial", "failed"]
+    status: Literal["pending", "running", "succeeded", "partial", "failed", "cancelled"]
     progress_stage: Literal["queued", "evidence", "semantics", "publishing", "completed"]
     completed_pages: int
     total_pages: int | None
     error_code: str | None
+    cancel_requested_at: datetime | None
     created_at: datetime
 
 
@@ -99,7 +101,7 @@ class StudySessionLink(_Closed):
 
 
 class MaterialLibraryItem(_Closed):
-    schema_: Literal["material-library-item/v1"] = Field(alias="schema")
+    schema_: Literal["material-library-item/v2"] = Field(alias="schema")
     material_id: UUID
     source_artifact_id: UUID
     display_name: str
@@ -111,7 +113,7 @@ class MaterialLibraryItem(_Closed):
 
 
 class MaterialLibraryView(_Closed):
-    schema_: Literal["material-library/v1"] = Field(default="material-library/v1", alias="schema")
+    schema_: Literal["material-library/v2"] = Field(default="material-library/v2", alias="schema")
     materials: list[MaterialLibraryItem]
 
 
@@ -307,10 +309,10 @@ class LearnerProgressView(_Closed):
 
 def project_material_run(run: Any) -> MaterialProcessingRunView:
     return MaterialProcessingRunView.model_validate({
-        "schema": "material-processing-run/v4",
+        "schema": "material-processing-run/v5",
         **{name: getattr(run, name) for name in (
             "run_id", "material_id", "source_artifact_id", "status", "progress_stage",
-            "completed_pages", "total_pages", "output_binding", "error_code",
+            "completed_pages", "total_pages", "output_binding", "error_code", "cancel_requested_at",
             "created_at", "updated_at", "completed_at",
         )},
     })

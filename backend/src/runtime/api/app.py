@@ -70,6 +70,7 @@ from ..material_processing import (
     create_material_processing_run,
     runtime_preflight,
     read_material_processing_run,
+    request_material_processing_cancellation,
 )
 from ..storage.artifacts import (
     open_verified_source_pdf,
@@ -614,6 +615,17 @@ def create_app(settings: ApiSettings) -> FastAPI:
                 dsn=settings.dsn,
             )
         )
+
+    @app.post(
+        "/v1/material-processing-runs/{run_id}/cancel",
+        response_model=MaterialProcessingRunView, response_model_by_alias=True,
+        operation_id="cancelMaterialProcessingRun", tags=["material-processing"],
+    )
+    async def cancel_material_run_route(request: Request, run_id: UUID) -> MaterialProcessingRunView:
+        _require_query(request, set())
+        await _require_empty_body(request)
+        learner = _trusted_learner(request, settings)
+        return project_material_run(request_material_processing_cancellation(learner.learner_id, run_id, dsn=settings.dsn))
 
     @app.get(
         "/v1/material-processing-runs/{run_id}",

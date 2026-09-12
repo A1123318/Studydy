@@ -206,6 +206,7 @@ def _page_evidence(
     settings: dict[str, Any],
     produced_at: str,
     report: Progress,
+    cancellation_check: Callable[[], None],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     pages: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
@@ -214,6 +215,7 @@ def _page_evidence(
     document = pymupdf.open(source_path)
     try:
         for completed, page_number in enumerate(page_numbers, start=1):
+            cancellation_check()
             page = extract_page(document, source_sha256, page_number)
             try:
                 route = route_page(page)
@@ -274,6 +276,7 @@ def analyze_material(
     run_id: str | None = None,
     produced_at: str | None = None,
     progress_callback: Progress | None = None,
+    cancellation_check: Callable[[], None] | None = None,
     client: httpx.Client | None = None,
     semantic_call: Callable[..., dict[str, Any]] = request_semantics,
 ) -> dict[str, Any]:
@@ -283,8 +286,10 @@ def analyze_material(
     resolved_run = run_id or str(uuid4())
     resolved_time = produced_at or datetime.now(UTC).isoformat()
     report = progress_callback or (lambda _stage, _completed, _total: None)
+    check_cancel = cancellation_check or (lambda: None)
     runtime_root = Path(settings["private_runtime_root"])
     with material_analysis_lock(runtime_root):
+        check_cancel()
         evidence_started = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="studydy-source-") as directory:
             snapshot = Path(directory) / "source.pdf"
@@ -297,8 +302,10 @@ def analyze_material(
                 settings,
                 resolved_time,
                 report,
+                check_cancel,
             )
         evidence_duration_ms = round((time.monotonic() - evidence_started) * 1000)
+        check_cancel()
         context = build_document_context(
             pages, page_count=len(page_numbers), excluded_pages=excluded
         )
@@ -308,13 +315,20 @@ def analyze_material(
         owned_client = client is None
         http = semantic_client() if client is None else client
         try:
-            for bundle in build_semantic_bundles(
+            bundles = iter(build_semantic_bundles(
                 context, state=state,
                 fits=lambda request: material_request_fits(http, lock, request),
-            ):
+            ))
+            while True:
+                check_cancel()
+                try:
+                    bundle = next(bundles)
+                except StopIteration:
+                    break
                 request_document = semantic_request(context, bundle, state)
                 last_error: Exception | None = None
                 for _attempt in range(lock["material_semantics"]["retry_attempts"]):
+                    check_cancel()
                     candidate_state = deepcopy(state)
                     try:
                         semantic_calls += 1

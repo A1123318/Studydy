@@ -8,9 +8,9 @@ const studyId = "44444444-4444-4444-8444-444444444444";
 const revision = `knowledge-structure:sha256:${"a".repeat(64)}`;
 const longName = "資料結構與演算法_" + "VeryLongUnbrokenMaterialFilename".repeat(5) + ".pdf";
 const published: MaterialLibraryItem = {
-  schema: "material-library-item/v1", material_id: materialId, source_artifact_id: materialId,
+  schema: "material-library-item/v2", material_id: materialId, source_artifact_id: materialId,
   display_name: "資料結構講義.pdf", size_bytes: 1200, created_at: "2026-09-12T00:00:00Z",
-  latest_attempt: { run_id: latestRun, status: "failed", progress_stage: "completed", completed_pages: 0,
+  latest_attempt: { cancel_requested_at: null, run_id: latestRun, status: "failed", progress_stage: "semantics", completed_pages: 0,
     total_pages: 2, error_code: "STORAGE_UNAVAILABLE", created_at: "2026-09-12T02:00:00Z" },
   available_structures: [{ run_id: publishedRun, knowledge_structure_revision: revision, status: "succeeded", created_at: "2026-09-12T01:00:00Z" }],
   study_sessions: [],
@@ -49,7 +49,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         if (state === "loading") await pending;
         if (fail) return route.fulfill({ status: 503, json: { schema: "api-error/v1", request_id: materialId,
           reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." } });
-        return route.fulfill({ json: { schema: "material-library/v1", materials: itemsFor(state) } });
+        return route.fulfill({ json: { schema: "material-library/v2", materials: itemsFor(state) } });
       });
       await page.goto("/knowledge-maps");
       const library = page.locator(".material-library.is-maps-only");
@@ -130,7 +130,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
 
 test("map, study and processing actions preserve distinct bindings; ordinary library/detail keep their hierarchy", async ({ page }) => {
   await session(page);
-  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v1", materials: [withStudy] } }));
+  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [withStudy] } }));
   await page.route(`**/v1/materials/${materialId}`, route => route.fulfill({ json: withStudy }));
   for (const [name, path] of [["開啟知識地圖", mapPath], ["接續上次學習", `${mapPath}/study-sessions/${studyId}`], ["查看最新處理", `/materials/${materialId}/runs/${latestRun}`]]) {
     await page.goto("/knowledge-maps");
@@ -161,9 +161,9 @@ test("unpublished processing states remain truthful and pending polling still di
   let reads = 0;
   await page.route("**/v1/materials", route => {
     reads++;
-    return route.fulfill({ json: { schema: "material-library/v1", materials: reads === 1 ? [
+    return route.fulfill({ json: { schema: "material-library/v2", materials: reads === 1 ? [
       unpublished,
-      { ...unpublished, material_id: studyId, latest_attempt: { ...published.latest_attempt!, status: "running", progress_stage: "evidence" } },
+      { ...unpublished, material_id: studyId, latest_attempt: { cancel_requested_at: null, ...published.latest_attempt!, status: "running", progress_stage: "evidence", error_code: null } },
       { ...unpublished, material_id: latestRun, latest_attempt: published.latest_attempt },
     ] : [published] } });
   });

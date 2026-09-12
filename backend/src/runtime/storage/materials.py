@@ -35,7 +35,7 @@ def read_material_library(
                 MaterialProcessingRun.material_id, MaterialProcessingRun.run_id,
                 MaterialProcessingRun.status, MaterialProcessingRun.progress_stage,
                 MaterialProcessingRun.completed_pages, MaterialProcessingRun.total_pages,
-                MaterialProcessingRun.error_code, MaterialProcessingRun.created_at,
+                MaterialProcessingRun.error_code, MaterialProcessingRun.created_at, MaterialProcessingRun.cancel_requested_at,
             ).where(
                 MaterialProcessingRun.learner_id == learner_id,
                 MaterialProcessingRun.material_id.in_(ids),
@@ -79,7 +79,7 @@ def read_material_library(
     for row in studies:
         sessions[row["material_id"]].append({key: value for key, value in row.items() if key != "material_id"})
     return [{
-        "schema": "material-library-item/v1",
+        "schema": "material-library-item/v2",
         **row,
         "display_name": row["display_name"] or f"教材 {row['created_at']:%Y-%m-%d} · {str(row['material_id'])[:8]}",
         "latest_attempt": latest.get(row["material_id"]),

@@ -14,7 +14,7 @@ import tempfile
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 
 from pdf_evidence.material_pipeline import MaterialAnalysisError, analyze_material, validate_runtime_lock
 from pdf_evidence.ocr_page_evidence import canonical_sha256
@@ -41,6 +41,10 @@ class MaterialProcessingError(RuntimeError):
         self.reason = reason if reason in _RUNTIME_REASONS else None
 
 
+class MaterialProcessingCancelled(RuntimeError):
+    """此 run 已在安全 checkpoint 完成取消，正常離開 worker。"""
+
+
 def _runtime_error(component: str, reason: str) -> MaterialProcessingError:
     return MaterialProcessingError("MATERIAL_CONFIGURATION_INVALID", component=component, reason=reason)
 
@@ -61,6 +65,7 @@ class MaterialProcessingRun:
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    cancel_requested_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -76,7 +81,14 @@ def _row(row: RunRow) -> MaterialProcessingRun:
     if row.status in {"pending", "running"}:
         valid_lifecycle = (
             output is None and row.error_code is None and row.completed_at is None
-            and (row.status != "pending" or row.progress_stage == "queued")
+            and row.progress_stage != "completed"
+            and (row.status != "pending" or (row.progress_stage == "queued" and row.cancel_requested_at is None))
+            and (row.cancel_requested_at is None or row.progress_stage in {"queued", "evidence", "semantics"})
+        )
+    elif row.status == "cancelled":
+        valid_lifecycle = (
+            output is None and row.error_code is None and row.completed_at is not None
+            and row.cancel_requested_at is not None and row.progress_stage != "completed"
         )
     elif row.status == "failed":
         valid_lifecycle = (
@@ -85,6 +97,7 @@ def _row(row: RunRow) -> MaterialProcessingRun:
             and re.fullmatch(r"[A-Z][A-Z0-9_]{0,99}", row.error_code) is not None
             and row.completed_at is not None
             and row.progress_stage != "completed"
+            and row.cancel_requested_at is None
         )
     else:
         fields = {
@@ -123,6 +136,7 @@ def _row(row: RunRow) -> MaterialProcessingRun:
             and row.completed_pages == row.total_pages == output["page_count"]
             and row.error_code is None
             and row.completed_at is not None
+            and row.cancel_requested_at is None
         )
     if (
         not valid_lifecycle
@@ -136,7 +150,7 @@ def _row(row: RunRow) -> MaterialProcessingRun:
         row.run_id, row.learner_id, row.material_id, row.source_artifact_id,
         deepcopy(row.runtime_binding), row.status, row.progress_stage,
         row.completed_pages, row.total_pages, row.error_code,
-        deepcopy(row.output_binding), row.created_at, row.updated_at, row.completed_at,
+        deepcopy(row.output_binding), row.created_at, row.updated_at, row.completed_at, row.cancel_requested_at,
     )
 
 
@@ -320,13 +334,66 @@ def read_material_processing_run(learner_id: UUID, run_id: UUID, *, dsn: str | N
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
 
+def request_material_processing_cancellation(learner_id: UUID, run_id: UUID, *, dsn: str | None = None) -> MaterialProcessingRun:
+    """與 claim／publishing 共用 row lock；重複取消不改寫原時間。"""
+    try:
+        with database_session(dsn) as session:
+            row = session.scalar(select(RunRow).where(RunRow.learner_id == learner_id, RunRow.run_id == run_id).with_for_update())
+            if row is None:
+                raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
+            if row.status == "pending" or (row.status == "running" and row.progress_stage in {"queued", "evidence", "semantics"} and row.cancel_requested_at is None):
+                now = session.scalar(select(func.clock_timestamp()))
+                row.cancel_requested_at = now
+                row.updated_at = now
+                if row.status == "pending":
+                    row.status = "cancelled"
+                    row.completed_at = now
+                session.flush()
+            return _row(row)
+    except MaterialProcessingError:
+        raise
+    except Exception:
+        raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
+
+
+def _honor_cancellation(row: RunRow, session: Any) -> bool:
+    """只在持有 row lock 的 transaction 內使用，保留最後已保存進度。"""
+    if row.status == "cancelled":
+        return True
+    if row.status == "running" and row.cancel_requested_at is not None:
+        now = session.scalar(select(func.clock_timestamp()))
+        row.status = "cancelled"
+        row.completed_at = row.updated_at = now
+        row.error_code = None
+        row.output_binding = None
+        return True
+    return False
+
+
+def _check_cancellation(run_id: UUID, *, dsn: str | None) -> None:
+    try:
+        with database_session(dsn) as session:
+            row = session.scalar(select(RunRow).where(RunRow.run_id == run_id).with_for_update())
+            if row is None:
+                raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
+            cancelled = _honor_cancellation(row, session)
+        # 必須先 commit terminal cancellation，再 unwind；不能讓例外 rollback 它。
+        if cancelled:
+            raise MaterialProcessingCancelled()
+    except (MaterialProcessingCancelled, MaterialProcessingError):
+        raise
+    except Exception:
+        raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
+
+
 def recover_interrupted_material_runs(*, dsn: str | None = None) -> int:
     try:
         with database_session(dsn) as session:
             rows = session.execute(
                 update(RunRow).where(RunRow.status == "running").values(
-                    status="failed", error_code="RESTART_INTERRUPTED",
-                    completed_at=func.clock_timestamp(), updated_at=func.clock_timestamp(),
+                    status=case((RunRow.cancel_requested_at.is_not(None), "cancelled"), else_="failed"),
+                    error_code=case((RunRow.cancel_requested_at.is_not(None), None), else_="RESTART_INTERRUPTED"),
+                    completed_at=func.statement_timestamp(), updated_at=func.statement_timestamp(),
                 ).returning(RunRow.run_id)
             ).all()
         return len(rows)
@@ -356,19 +423,25 @@ def _record_progress(run_id: UUID, stage: str, completed: int, total: int, *, ds
         raise MaterialProcessingError("MATERIAL_RUN_INVALID")
     try:
         with database_session(dsn) as session:
-            row = session.scalar(select(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").with_for_update())
-            if row is None or (row.total_pages is not None and row.total_pages != total):
+            row = session.scalar(select(RunRow).where(RunRow.run_id == run_id).with_for_update())
+            if row is None:
                 raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-            if row.progress_stage == stage:
-                if completed < row.completed_pages:
+            cancelled = _honor_cancellation(row, session)
+            if not cancelled:
+                if row.status != "running" or (row.total_pages is not None and row.total_pages != total):
                     raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-            elif _NEXT_STAGE.get(row.progress_stage) != stage:
-                raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-            elif row.progress_stage != "queued" and row.completed_pages != total:
-                raise MaterialProcessingError("MATERIAL_RUN_INVALID")
-            row.progress_stage, row.completed_pages, row.total_pages = stage, completed, total
-            row.updated_at = session.scalar(select(func.clock_timestamp()))
-    except MaterialProcessingError:
+                if row.progress_stage == stage:
+                    if completed < row.completed_pages:
+                        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+                elif _NEXT_STAGE.get(row.progress_stage) != stage:
+                    raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+                elif row.progress_stage != "queued" and row.completed_pages != total:
+                    raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+                row.progress_stage, row.completed_pages, row.total_pages = stage, completed, total
+                row.updated_at = session.scalar(select(func.clock_timestamp()))
+        if cancelled:
+            raise MaterialProcessingCancelled()
+    except (MaterialProcessingCancelled, MaterialProcessingError):
         raise
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
@@ -378,9 +451,11 @@ def _record_failure(run_id: UUID, reason: str, *, dsn: str | None) -> None:
     safe = reason if isinstance(reason, str) and 1 <= len(reason) <= 100 and all(character.isupper() or character.isdigit() or character == "_" for character in reason) else "MATERIAL_ANALYSIS_FAILED"
     try:
         with database_session(dsn) as session:
-            session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(
-                status="failed", error_code=safe, completed_at=func.clock_timestamp(), updated_at=func.clock_timestamp(),
-            ))
+            row = session.scalar(select(RunRow).where(RunRow.run_id == run_id).with_for_update())
+            if row is not None and row.status == "running" and not _honor_cancellation(row, session):
+                now = session.scalar(select(func.clock_timestamp()))
+                row.status, row.error_code = "failed", safe
+                row.completed_at = row.updated_at = now
     except Exception:
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
@@ -395,8 +470,10 @@ def execute_claimed_material_processing_run(
         raise MaterialProcessingError("MATERIAL_RUN_CLAIM_INVALID")
     run = claim.run
     try:
+        _check_cancellation(run.run_id, dsn=dsn)
         if runtime_preflight(local_config) != run.runtime_binding:
             raise MaterialProcessingError("MATERIAL_CONFIGURATION_INVALID")
+        _check_cancellation(run.run_id, dsn=dsn)
         with tempfile.TemporaryDirectory(prefix="studydy-material-") as directory:
             source_path = Path(directory) / "source.pdf"
             with open_verified_source_pdf(run.learner_id, run.source_artifact_id, dsn=dsn) as source:
@@ -411,11 +488,14 @@ def execute_claimed_material_processing_run(
                 deepcopy(local_config),
                 run_id=str(run.run_id),
                 progress_callback=lambda stage, completed, total: _record_progress(run.run_id, stage, completed, total, dsn=dsn),
+                cancellation_check=lambda: _check_cancellation(run.run_id, dsn=dsn),
             )
         if structure["status"]["processing"] == "failed":
             raise MaterialProcessingError("NO_CANONICAL_CONCEPT")
         _record_progress(run.run_id, "publishing", structure["page_count"], structure["page_count"], dsn=dsn)
         publish_knowledge_structure(run.learner_id, run.material_id, run.run_id, structure, dsn=dsn)
+    except MaterialProcessingCancelled:
+        pass
     except (KnowledgeStructureStoreError, MaterialAnalysisError, MaterialProcessingError) as error:
         _record_failure(run.run_id, getattr(error, "reason_code", None) or str(error), dsn=dsn)
     except Exception:

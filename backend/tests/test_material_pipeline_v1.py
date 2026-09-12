@@ -126,3 +126,60 @@ def test_ocr_failure_excludes_only_scan_and_semantics_still_runs(tmp_path, monke
         "reason_code": "CHILD_EXITED",
     }]
     assert {item[1] for section in calls[0]["sections"] for item in section["evidence"]} == {2}
+
+
+def test_cancellation_before_semantics_never_opens_a_model_request(tmp_path, monkeypatch):
+    import pytest
+    source = tmp_path / "cancel.pdf"; _pdf(source, 2)
+    class Cancelled(RuntimeError): pass
+    requested = False
+    def report(stage, done, total):
+        nonlocal requested
+        if stage == "evidence" and done == total: requested = True
+    def check():
+        if requested: raise Cancelled()
+    monkeypatch.setattr(pipeline, "semantic_client", lambda: (_ for _ in ()).throw(AssertionError("no model client after cancellation")))
+    with pytest.raises(Cancelled):
+        pipeline.analyze_material(_request(source), _settings(tmp_path), progress_callback=report, cancellation_check=check)
+
+
+def test_cancellation_stops_semantic_retries_and_next_bundles(tmp_path, monkeypatch):
+    import pytest
+    source = tmp_path / "cancel.pdf"; _pdf(source, 3)
+    class Cancelled(RuntimeError): pass
+    for fail_first in (True, False):
+        requested = False; calls = []
+        def check():
+            if requested: raise Cancelled()
+        def semantic(client, **arguments):
+            nonlocal requested
+            requested = True
+            if fail_first:
+                calls.append(arguments)
+                raise ValueError("synthetic invalid model response")
+            return _semantic(calls)(client, **arguments)
+        original_bundles = pipeline.build_semantic_bundles
+        def two_bundles(*args, **kwargs):
+            first = next(iter(original_bundles(*args, **kwargs)))
+            yield first
+            yield first
+        with monkeypatch.context() as patch:
+            patch.setattr(pipeline, "build_semantic_bundles", two_bundles)
+            with pytest.raises(Cancelled):
+                pipeline.analyze_material(_request(source), _settings(tmp_path), client=Client(), semantic_call=semantic, cancellation_check=check)
+        assert len(calls) == 1
+
+
+def test_cancellation_at_evidence_checkpoint_does_not_start_the_next_page(tmp_path, monkeypatch):
+    import pytest
+    source = tmp_path / "cancel.pdf"; _pdf(source, 3)
+    class Cancelled(RuntimeError): pass
+    pages = []
+    original = pipeline.extract_page
+    def extract(*args):
+        pages.append(args[-1]); return original(*args)
+    monkeypatch.setattr(pipeline, "extract_page", extract)
+    def report(*_args): raise Cancelled()
+    with pytest.raises(Cancelled):
+        pipeline.analyze_material(_request(source), _settings(tmp_path), client=Client(), progress_callback=report)
+    assert pages == [1]

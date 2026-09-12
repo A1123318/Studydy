@@ -5,7 +5,7 @@ const runId = "22222222-2222-4222-8222-222222222222";
 const artifactId = "33333333-3333-4333-8333-333333333333";
 const pdf = { name: "課程講義.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\nSynthetic upload fixture\n%%EOF") };
 const material = { schema: "material/v1", material_id: materialId, source_artifact_id: artifactId, source_sha256: "a".repeat(64), size_bytes: pdf.buffer.length };
-const run = { schema: "material-processing-run/v4", run_id: runId, material_id: materialId, source_artifact_id: artifactId,
+const run = { schema: "material-processing-run/v5", cancel_requested_at: null, run_id: runId, material_id: materialId, source_artifact_id: artifactId,
   status: "pending", progress_stage: "queued", completed_pages: 0, total_pages: null, output_binding: null, error_code: null,
   created_at: "2026-09-12T00:00:00Z", updated_at: "2026-09-12T00:00:00Z", completed_at: null };
 

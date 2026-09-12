@@ -58,29 +58,52 @@ function material(value: unknown): value is MaterialView {
     && Number.isInteger(item.size_bytes) && Number(item.size_bytes) > 0;
 }
 
+function timestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) return false;
+  const date = value.slice(0, 10);
+  return new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
+    && Number(value.slice(11, 13)) < 24 && Number(value.slice(14, 16)) < 60 && Number(value.slice(17, 19)) < 60;
+}
+
+function materialAttempt(value: unknown): boolean {
+  const item = object(value);
+  if (!item || typeof item.run_id !== "string" || !uuid.test(item.run_id)
+    || !["queued", "evidence", "semantics", "publishing", "completed"].includes(String(item.progress_stage))
+    || !Number.isInteger(item.completed_pages) || Number(item.completed_pages) < 0
+    || !(item.total_pages === null || (Number.isInteger(item.total_pages) && Number(item.total_pages) > 0))
+    || !(item.cancel_requested_at === null || timestamp(item.cancel_requested_at)) || !timestamp(item.created_at)) return false;
+  if (item.status === "pending") return item.progress_stage === "queued" && item.error_code === null && item.cancel_requested_at === null;
+  if (item.status === "running") return item.progress_stage !== "completed" && item.error_code === null
+    && (item.cancel_requested_at === null || ["queued", "evidence", "semantics"].includes(String(item.progress_stage)));
+  if (item.status === "cancelled") return item.progress_stage !== "completed" && item.cancel_requested_at !== null && item.error_code === null;
+  if (item.status === "failed") return item.progress_stage !== "completed" && item.cancel_requested_at === null
+    && typeof item.error_code === "string" && /^[A-Z][A-Z0-9_]{0,99}$/.test(item.error_code);
+  return ["succeeded", "partial"].includes(String(item.status)) && item.progress_stage === "completed"
+    && item.cancel_requested_at === null && item.error_code === null && item.total_pages !== null && item.completed_pages === item.total_pages;
+}
+
 function materialRun(value: unknown): value is MaterialProcessingRunView {
   const item = object(value);
-  if (!item || item.schema !== "material-processing-run/v4" || typeof item.run_id !== "string" || !uuid.test(item.run_id)) return false;
+  if (!item || item.schema !== "material-processing-run/v5" || !materialAttempt(item)) return false;
   if (typeof item.material_id !== "string" || !uuid.test(item.material_id) || typeof item.source_artifact_id !== "string" || !uuid.test(item.source_artifact_id)) return false;
-  const statuses = ["pending", "running", "succeeded", "partial", "failed"];
-  const stages = ["queued", "evidence", "semantics", "publishing", "completed"];
-  if (!statuses.includes(String(item.status)) || !stages.includes(String(item.progress_stage)) || !Number.isInteger(item.completed_pages)) return false;
-  if (!(item.total_pages === null || Number.isInteger(item.total_pages)) || !(item.error_code === null || typeof item.error_code === "string")) return false;
+  if (!timestamp(item.updated_at) || !(item.completed_at === null || timestamp(item.completed_at))) return false;
   if (item.status === "succeeded" || item.status === "partial") {
     const binding = object(item.output_binding);
     return !!binding && binding.schema === "material-run-output-binding/v4"
       && revision(binding.knowledge_structure_revision, "knowledge-structure")
       && typeof binding.runtime_lock_sha256 === "string" && sha.test(binding.runtime_lock_sha256)
-      && Number.isInteger(binding.page_count) && Number(binding.page_count) >= 1
-      && Number.isInteger(binding.ocr_calls) && Number.isInteger(binding.semantic_calls)
-      && item.progress_stage === "completed" && typeof item.completed_at === "string";
+      && Number.isInteger(binding.page_count) && binding.page_count === item.total_pages
+      && binding.processing === item.status && ["accepted", "needs_review"].includes(String(binding.quality))
+      && ["retain", "review"].includes(String(binding.decision)) && strings(binding.reason_codes)
+      && Number.isInteger(binding.ocr_calls) && Number(binding.ocr_calls) >= 0 && Number(binding.ocr_calls) <= Number(binding.page_count)
+      && Number.isInteger(binding.semantic_calls) && Number(binding.semantic_calls) >= 1 && item.completed_at !== null;
   }
-  return item.output_binding === null;
+  return item.output_binding === null && (["pending", "running"].includes(String(item.status)) ? item.completed_at === null : item.completed_at !== null);
 }
 
 function libraryItem(value: unknown): value is MaterialLibraryItem {
   const item = object(value);
-  if (!item || item.schema !== "material-library-item/v1"
+  if (!item || item.schema !== "material-library-item/v2"
     || typeof item.material_id !== "string" || !uuid.test(item.material_id)
     || typeof item.source_artifact_id !== "string" || !uuid.test(item.source_artifact_id)
     || typeof item.display_name !== "string" || !item.display_name.trim()
@@ -96,15 +119,7 @@ function libraryItem(value: unknown): value is MaterialLibraryItem {
       && typeof study.started_at === "string"
       && (study.current_concept_id === null || revision(study.current_concept_id, "concept"));
   })) return false;
-  const attempt = object(item.latest_attempt);
-  if (item.latest_attempt !== null && (!attempt
-    || typeof attempt.run_id !== "string" || !uuid.test(attempt.run_id)
-    || !["pending", "running", "succeeded", "partial", "failed"].includes(String(attempt.status))
-    || !["queued", "evidence", "semantics", "publishing", "completed"].includes(String(attempt.progress_stage))
-    || !Number.isInteger(attempt.completed_pages)
-    || !(attempt.total_pages === null || Number.isInteger(attempt.total_pages))
-    || !(attempt.error_code === null || typeof attempt.error_code === "string")
-    || typeof attempt.created_at !== "string")) return false;
+  if (item.latest_attempt !== null && !materialAttempt(item.latest_attempt)) return false;
   return item.available_structures.every((value) => {
     const link = object(value);
     return !!link && typeof link.run_id === "string" && uuid.test(link.run_id)
@@ -116,7 +131,7 @@ function libraryItem(value: unknown): value is MaterialLibraryItem {
 
 function library(value: unknown): value is MaterialLibraryView {
   const item = object(value);
-  return !!item && item.schema === "material-library/v1" && Array.isArray(item.materials) && item.materials.every(libraryItem);
+  return !!item && item.schema === "material-library/v2" && Array.isArray(item.materials) && item.materials.every(libraryItem);
 }
 
 function locator(value: unknown): boolean {
@@ -427,6 +442,14 @@ export class StudydyApiClient {
 
   getMaterialRun(runId: string): Promise<MaterialProcessingRunView> {
     return this.json(`/v1/material-processing-runs/${encodeURIComponent(runId)}`, { method: "GET" }, materialRun);
+  }
+
+  async cancelMaterialRun(runId: string): Promise<MaterialProcessingRunView> {
+    const view = await this.json(`/v1/material-processing-runs/${encodeURIComponent(runId)}/cancel`, {
+      method: "POST", headers: { Origin: origin() },
+    }, materialRun, 10_000);
+    if (view.run_id !== runId) throw new ApiClientError("schema", "處理作業身分不一致。", { reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+    return view;
   }
 
   async getKnowledgeStructure(request: KnowledgeStructureRequest): Promise<KnowledgeStructureView> {

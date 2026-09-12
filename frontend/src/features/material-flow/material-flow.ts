@@ -21,6 +21,7 @@ export function materialProgressStageLabel(stage: MaterialProcessingRunView["pro
 type ProcessingProgress = Pick<MaterialProcessingRunView, "status" | "progress_stage" | "completed_pages" | "total_pages">;
 
 export function materialCurrentStagePercent(run: ProcessingProgress): number | null {
+  if (run.status === "cancelled") return null;
   if (run.progress_stage === "completed" && (run.status === "succeeded" || run.status === "partial")) return 100;
   if (run.progress_stage !== "evidence" && run.progress_stage !== "semantics") return null;
   const total = run.total_pages;
@@ -29,6 +30,7 @@ export function materialCurrentStagePercent(run: ProcessingProgress): number | n
 }
 
 export function materialOverallProgressPercent(run: ProcessingProgress): number | null {
+  if (run.status === "cancelled") return null;
   if (run.progress_stage === "completed" && (run.status === "succeeded" || run.status === "partial")) return 100;
   if (run.progress_stage === "queued") return 0;
   const total = run.total_pages;
@@ -80,7 +82,9 @@ export function formatFileSize(sizeBytes: number): string {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-export function materialRunLabel(status: MaterialProcessingRunView["status"]): string {
+export function materialRunLabel(status: MaterialProcessingRunView["status"], cancelRequestedAt: string | null): string {
+  if (status === "cancelled") return "已取消處理";
+  if (status === "running" && cancelRequestedAt !== null) return "正在取消處理";
   if (status === "pending") return "等待開始處理";
   if (status === "running") return "正在分析完整教材";
   if (status === "succeeded") return "處理完成，等待複核";

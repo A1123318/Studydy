@@ -64,7 +64,7 @@ function structureView() {
 }
 
 const run = {
-  schema: "material-processing-run/v4", run_id: runId, material_id: materialId,
+  schema: "material-processing-run/v5", cancel_requested_at: null, run_id: runId, material_id: materialId,
   source_artifact_id: artifactId, status: "succeeded", progress_stage: "completed",
   completed_pages: 2, total_pages: 2, error_code: null,
   created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:01:00Z", completed_at: "2026-09-05T00:01:00Z",
@@ -104,7 +104,7 @@ async function routes(page: Page, view = structureView(), readProgress = () => p
   await page.route("**/v1/session", (route) => route.request().method() === "GET" ? json(route, { schema: "learner-identity/v1", learner_id: sessionId }) : route.fulfill({ status: 204 }));
   await page.route("**/v1/session/refresh", (route) => route.fulfill({ status: 204 }));
   await page.route(`**/v1/materials/${materialId}`, route => json(route, {
-    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
     display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
     latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
       created_at: run.created_at, status: "succeeded" }], study_sessions: [],
@@ -365,7 +365,7 @@ test("library loading, read failure and empty state retain usable actions", asyn
       await ready;
       return json(route, { schema: "api-error/v1", request_id: sessionId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, 503);
     }
-    return json(route, { schema: "material-library/v1", materials: [] });
+    return json(route, { schema: "material-library/v2", materials: [] });
   });
   await page.goto("/materials");
   await expect(page.getByRole("heading", { name: "正在讀取教材庫", exact: true })).toBeVisible();
@@ -382,7 +382,7 @@ test("library loading, read failure and empty state retain usable actions", asyn
 test("reopen rejects a run from a different Knowledge Structure revision", async ({ page }) => {
   await routes(page);
   await page.route(`**/v1/materials/${materialId}`, route => json(route, {
-    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
     display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
     latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
       created_at: run.created_at, status: "succeeded" }], study_sessions: [],
@@ -390,7 +390,7 @@ test("reopen rejects a run from a different Knowledge Structure revision", async
   await page.route(`**/v1/material-processing-runs/${runId}`, route => json(route, {
     ...run, output_binding: { ...run.output_binding, knowledge_structure_revision: `knowledge-structure:sha256:${"7".repeat(64)}` },
   }));
-  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v1", materials: [] }));
+  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v2", materials: [] }));
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
   await expect(page.getByRole("heading", { name: "無法讀取知識地圖", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "開始新的學習", exact: true })).toHaveCount(0);
@@ -403,7 +403,7 @@ test("dashboard shows unavailable counts truthfully and retries its server-backe
   let unavailable = true;
   await page.route('**/v1/materials', route => unavailable
     ? json(route, { schema: 'api-error/v1', request_id: sessionId, reason_code: 'STORAGE_UNAVAILABLE', retryable: true, message: 'Request could not be completed.' }, 503)
-    : json(route, { schema: 'material-library/v1', materials: [] }));
+    : json(route, { schema: 'material-library/v2', materials: [] }));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '歡迎回來！', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('資料服務暫時無法使用');
@@ -511,7 +511,7 @@ test("dense focus fans avoid crossing edges and unrelated cards", async ({ page 
 test("recovered map reads owned progress and continues the same session without creating learning", async ({ page }) => {
   await routes(page);
   await page.route(`**/v1/materials/${materialId}`, route => json(route, {
-    schema: "material-library-item/v1", material_id: materialId, source_artifact_id: artifactId,
+    schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
     display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at,
     latest_attempt: run, available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision,
       created_at: run.created_at, status: "succeeded" }], study_sessions: [
@@ -533,7 +533,7 @@ test("recovered map reads owned progress and continues the same session without 
 
 test("shared shell density keeps standard pages and map workspace bounded", async ({ page }) => {
   await routes(page);
-  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v1", materials: [] }));
+  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v2", materials: [] }));
   const map = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
   for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);

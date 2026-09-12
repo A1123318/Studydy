@@ -7,8 +7,8 @@
 - 每份教材顯示名稱、上傳時間、大小和最新處理狀態；只有完成上傳、尚未開始處理的教材也會列出。
 - 「開啟知識地圖」讀取最近已發布的 exact Knowledge Structure，Map 中可切換「學習順序」。
 - 點教材名稱進入詳情，可開啟原始 PDF、查看最新處理，或選擇先前已發布的版本。
-- 最近處理若失敗，先前成功或 partial 的已發布版本仍保留，兩種狀態分開顯示。
-- 處理中自動更新狀態；其他狀況可按「重新整理」。錯誤有重新讀取與返回教材庫的出口。
+- 最近處理若失敗或取消，先前成功或 partial 的已發布版本仍保留，兩種狀態分開顯示。
+- 處理中與正在取消時自動更新狀態；錯誤有重新讀取與返回教材庫的出口。正常 collection 不提供手動重新整理。
 
 重新開啟只讀取既有 Material、Artifact、ProcessingRun 和 KnowledgeStructure，不呼叫模型、
 不新增紀錄。有既有學習時，「接續上次學習」會讀回原 session、題目、回饋與 progress；
@@ -18,11 +18,11 @@
 
 | 入口 | 行為 |
 |---|---|
-| `GET /v1/materials` | `material-library/v1`，列出目前 learner 的全部教材 |
-| `GET /v1/materials/{material_id}` | `material-library-item/v1`，只允許 owner 讀取詳情 |
+| `GET /v1/materials` | `material-library/v2`，列出目前 learner 的全部教材 |
+| `GET /v1/materials/{material_id}` | `material-library-item/v2`，只允許 owner 讀取詳情 |
 | `POST /v1/materials` | 沿用 raw PDF body；選填 `X-Material-Name`，URI-encoded UTF-8 名稱 |
 
-列表與詳情包含 `latest_attempt` 和 `available_structures`。後者每筆包含 exact `run_id`、
+列表與詳情包含 `latest_attempt` 和 `available_structures`。`latest_attempt.cancel_requested_at` 與 status 區分「正在取消處理」和 terminal「已取消處理」；取消只影響該次 run，見[取消處理契約](material-processing-cancellation.md)。後者每筆包含 exact `run_id`、
 `knowledge_structure_revision`、發布時間及 succeeded／partial 狀態，不以最新失敗作業
 代替已發布結果。Map、處理作業與 PDF 仍使用既有 GET 入口及 server owner 檢查。
 新入口沿用 session cookie 和 `private, no-store`，不接受 client 指定 learner。
@@ -39,8 +39,7 @@
 PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrations import run_migrations; print(run_migrations())'
 ```
 
-accepted 單元 A schema 回傳 `(3, 4)`，空 DB 回傳 `(1, 2, 3, 4)`，重跑回傳 `()`；第 4 版的 Email credential cutover 見 [帳號 migration](accounts.md#migration)。
-本次沒有對正式資料庫執行 migration。
+已套用 0004 的資料庫只會新增 `(5,)`，空 DB 回傳 `(1, 2, 3, 4, 5)`，重跑回傳 `()`；第 4 版的 Email credential cutover 見 [帳號 migration](accounts.md#migration)。
 
 ## 本地驗證
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { errorMessage, type StudydyApiClient } from "../../api/client";
 import type { MaterialProcessingRunView } from "../../api/contracts";
@@ -16,6 +16,15 @@ import {
   materialOverallProgressPercent,
 } from "./material-flow";
 
+function activeRun(run: MaterialProcessingRunView | null): boolean {
+  return run?.status === "pending" || run?.status === "running";
+}
+
+function canRequestCancellation(run: MaterialProcessingRunView | null): boolean {
+  return !!run && activeRun(run) && run.cancel_requested_at === null
+    && ["queued", "evidence", "semantics"].includes(run.progress_stage);
+}
+
 export function RunView({ apiClient, route }: {
   apiClient: StudydyApiClient;
   route: Extract<AppRoute, { name: "material-run" }>;
@@ -25,33 +34,79 @@ export function RunView({ apiClient, route }: {
   const [reload, setReload] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
+  const currentRun = useRef<MaterialProcessingRunView | null>(null);
+  const cancelVersion = useRef(0);
+  const mounted = useRef(true);
+  const cancelInFlight = useRef(false);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const continueButton = useRef<HTMLButtonElement>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
+
+  const applyRun = useCallback((next: MaterialProcessingRunView) => {
+    const previous = currentRun.current;
+    // 已保存的取消意圖與 terminal 狀態不可被較舊的 GET/POST 回應撤回。
+    if (previous?.cancel_requested_at && next.cancel_requested_at === null) return previous;
+    if (previous && !activeRun(previous) && activeRun(next)) return previous;
+    currentRun.current = next;
+    setRun(next);
+    if (next.cancel_requested_at !== null || !activeRun(next)) { setCancelError(null); setConfirmingCancel(false); }
+    return next;
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (confirmingCancel) continueButton.current?.focus();
+    else cancelButton.current?.focus();
+  }, [confirmingCancel]);
+
   useEffect(() => {
     let cancelled = false;
     let timer: number | null = null;
     const poll = async () => {
+      if (currentRun.current && !activeRun(currentRun.current)) return;
+      const version = cancelVersion.current;
       try {
         const next = await apiClient.getMaterialRun(route.runId);
         if (cancelled) return;
-        if (next.material_id !== route.materialId) {
-          throw new Error("RUN_MATERIAL_MISMATCH");
-        }
-        setRun(next);
-        setMessage(null);
-        if (next.status === "pending" || next.status === "running") {
-          timer = window.setTimeout(poll, automaticPollIntervalMs);
-        }
+        if (next.material_id !== route.materialId || next.run_id !== route.runId) throw new Error("RUN_MATERIAL_MISMATCH");
+        if (version === cancelVersion.current) { applyRun(next); setMessage(null); }
       } catch (error) {
-        if (!cancelled) {
-          setMessage(errorMessage(error));
-        }
+        if (cancelled) return;
+        if (version === cancelVersion.current) { setMessage(errorMessage(error)); return; }
       }
+      if (!cancelled && activeRun(currentRun.current)) timer = window.setTimeout(poll, automaticPollIntervalMs);
     };
     void poll();
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [apiClient, reload, route.materialId, route.runId]);
+    return () => { cancelled = true; if (timer !== null) window.clearTimeout(timer); };
+  }, [apiClient, reload, route.materialId, route.runId, applyRun]);
+
+  const sendCancellation = async () => {
+    if (cancelInFlight.current || !canRequestCancellation(currentRun.current)) return;
+    cancelInFlight.current = true;
+    setCancelBusy(true); setCancelError(null);
+    try {
+      const next = await apiClient.cancelMaterialRun(route.runId);
+      if (!mounted.current) return;
+      if (next.material_id !== route.materialId) throw new Error("RUN_MATERIAL_MISMATCH");
+      cancelVersion.current++;
+      const accepted = applyRun(next);
+      setMessage(null); setConfirmingCancel(false);
+      setCancelNotice(accepted.status === "running" && accepted.progress_stage === "publishing" && accepted.cancel_requested_at === null
+        ? "已進入知識地圖發布階段，這個階段無法再取消。" : null);
+    } catch (error) {
+      if (mounted.current && canRequestCancellation(currentRun.current)) setCancelError(`無法送出取消要求。${errorMessage(error)}`);
+    } finally {
+      cancelInFlight.current = false;
+      if (mounted.current) setCancelBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!run || (run.status !== "pending" && run.status !== "running")) return;
@@ -82,6 +137,7 @@ export function RunView({ apiClient, route }: {
   );
 
   if (run.status === "pending" || run.status === "running") {
+    const cancellationRequested = run.cancel_requested_at !== null;
     const currentStageIndex = materialProgressStages.indexOf(run.progress_stage);
     const currentPercent = materialCurrentStagePercent(run);
     const overallPercent = materialOverallProgressPercent(run);
@@ -91,8 +147,8 @@ export function RunView({ apiClient, route }: {
       <section className="processing-page task-page">
         <header className="processing-hero">
           <img src="/assets/studydy/processing-laptop.png" alt="" />
-          <div><p className="eyebrow">教材處理</p><h1>{run.status === "pending" ? "等待開始處理" : "正在分析教材"}</h1>
-            <p>Studydy 正在整理教材內容並建立知識地圖，進度會自動保存。</p></div>
+          <div><p className="eyebrow">教材處理</p><h1>{cancellationRequested ? "正在取消處理" : run.status === "pending" ? "等待開始處理" : "正在分析教材"}</h1>
+            <p>{cancellationRequested ? "已收到取消要求，會在目前進行中的步驟完成後安全停止。" : "Studydy 正在整理教材內容並建立知識地圖，進度會自動保存。"}</p></div>
         </header>
         <div className="processing-grid">
           <section className="surface processing-card">
@@ -114,6 +170,23 @@ export function RunView({ apiClient, route }: {
               <div><dt>最近更新</dt><dd><time dateTime={run.updated_at}>{new Date(run.updated_at).toLocaleTimeString("zh-TW")}</time></dd></div>
             </dl>
             <p>你可以離開此頁，處理進度會自動保存，可稍後從「我的教材」返回查看。</p>
+            {canRequestCancellation(run) && <div className="processing-cancel">
+              {confirmingCancel ? <section aria-labelledby="cancel-confirm-title" className="cancel-confirmation" onKeyDown={event => {
+                if (event.key === "Escape" && !cancelBusy) { setConfirmingCancel(false); setCancelError(null); }
+              }}>
+                <h3 id="cancel-confirm-title">確定要取消這次教材處理嗎？</h3>
+                <p>已上傳的教材仍會保留在「我的教材」。</p>
+                <div className="state-actions">
+                  <button ref={continueButton} className="secondary-button" type="button" disabled={cancelBusy} onClick={() => {
+                    setConfirmingCancel(false); setCancelError(null);
+                  }}>繼續處理</button>
+                  <button className="secondary-button cancel-confirm-button" type="button" disabled={cancelBusy} onClick={() => void sendCancellation()}>確認取消</button>
+                </div>
+              </section> : <button ref={cancelButton} className="secondary-button" type="button" onClick={() => { setCancelError(null); setConfirmingCancel(true); }}>取消處理</button>}
+            </div>}
+            {cancelBusy && <p role="status">正在送出取消要求…</p>}
+            {cancelError && <p className="form-error" role="alert">{cancelError}</p>}
+            {cancelNotice && <p role="status">{cancelNotice}</p>}
           </section>
           <section className="surface processing-card">
             <h2>處理流程</h2>
@@ -130,6 +203,14 @@ export function RunView({ apiClient, route }: {
       </section>
     );
   }
+
+  if (run.status === "cancelled") return (
+    <section className="processing-page task-page is-cancelled">
+      <StateView title="已取消教材處理" description="這次分析已停止，已上傳的教材仍保留在「我的教材」。" icon="book" tone="empty" live
+        action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回我的教材</button>} />
+      <p className="failure-progress">停止於：{materialProgressStageLabel(run.progress_stage)}{run.total_pages !== null && `，已處理 ${run.completed_pages} / ${run.total_pages} 頁`}</p>
+    </section>
+  );
 
   if (run.status === "failed") return (
     <section className="processing-page task-page terminal-failure">

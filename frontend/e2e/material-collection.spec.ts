@@ -7,9 +7,9 @@ const latestRun = "33333333-3333-4333-8333-333333333333";
 const studyId = "44444444-4444-4444-8444-444444444444";
 const revision = `knowledge-structure:sha256:${"a".repeat(64)}`;
 const mapPath = `/materials/${materialId}/runs/${publishedRun}/knowledge-structures/${encodeURIComponent(revision)}`;
-const base: MaterialLibraryItem = { schema: "material-library-item/v1", material_id: materialId, source_artifact_id: materialId,
+const base: MaterialLibraryItem = { schema: "material-library-item/v2", material_id: materialId, source_artifact_id: materialId,
   display_name: "資料結構講義.pdf", size_bytes: 1200, created_at: "2026-09-12T00:00:00Z", latest_attempt: null, available_structures: [], study_sessions: [] };
-const run: MaterialAttemptView = { run_id: latestRun, status: "running", progress_stage: "semantics", completed_pages: 2, total_pages: 8,
+const run: MaterialAttemptView = { cancel_requested_at: null, run_id: latestRun, status: "running", progress_stage: "semantics", completed_pages: 2, total_pages: 8,
   error_code: null, created_at: "2026-09-12T01:00:00Z" };
 const published = { run_id: publishedRun, knowledge_structure_revision: revision, status: "succeeded" as const, created_at: "2026-09-12T00:30:00Z" };
 const active: StudySessionLink = { study_session_id: studyId, run_id: publishedRun, knowledge_structure_revision: revision,
@@ -54,7 +54,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         if (state === "loading") await pending;
         if (fail) return route.fulfill({ status: 503, json: { schema: "api-error/v1", request_id: materialId, reason_code: "STORAGE_UNAVAILABLE",
           retryable: true, message: "Request could not be completed." } });
-        return route.fulfill({ json: { schema: "material-library/v1", materials: items } });
+        return route.fulfill({ json: { schema: "material-library/v2", materials: items } });
       });
       await page.goto("/materials");
       const library = page.locator(".material-library.is-collection");
@@ -142,7 +142,7 @@ test("materials polling updates pending/running, stops at terminal and cancels o
   let running = false;
   await page.route("**/v1/materials", route => {
     reads++;
-    return route.fulfill({ json: { schema: "material-library/v1", materials: [material(running ? "running" : reads === 1 ? "pending" : reads === 2 ? "running" : "map")] } });
+    return route.fulfill({ json: { schema: "material-library/v2", materials: [material(running ? "running" : reads === 1 ? "pending" : reads === 2 ? "running" : "map")] } });
   });
   await page.goto("/materials");
   await expect(page.getByRole("article")).toBeVisible();
@@ -163,11 +163,11 @@ test("materials polling updates pending/running, stops at terminal and cancels o
 test("no-safe studies and unpublished completed runs keep collection-only action priority", async ({ page }) => {
   await signedIn(page);
   let item = { ...material("active"), study_sessions: [{ ...active, status: "no_safe" as const }] } as MaterialLibraryItem;
-  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v1", materials: [item] } }));
+  await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
   await page.route(`**/v1/materials/${materialId}`, route => route.fulfill({ json: item }));
   await page.goto("/materials"); await expect(page.getByRole("article").locator(".primary-button")).toHaveText("接續上次學習");
   for (const status of ["succeeded", "partial"] as const) {
-    item = { ...base, latest_attempt: { ...run, status, progress_stage: "completed" } };
+    item = { ...base, latest_attempt: { cancel_requested_at: null, ...run, status, progress_stage: "completed", completed_pages: 8 } };
     await page.goto("/materials"); await expect(page.getByRole("article").locator(".primary-button")).toHaveText("查看最新處理");
     await page.goto(`/materials/${materialId}`);
     await expect(page.locator(".material-library")).not.toHaveClass(/is-collection/);

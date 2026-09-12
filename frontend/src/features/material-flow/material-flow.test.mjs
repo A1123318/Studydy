@@ -80,3 +80,11 @@ test("legal lifecycle projections never decrease as stage page counts reset", ()
     assert.ok(values.every((value, index) => index === 0 || value >= values[index - 1]));
   }
 });
+
+
+test("cancelled is never projected as successful 100 percent completion", () => {
+  for (const stage of ["queued", "evidence", "semantics", "publishing", "completed"]) {
+    assert.equal(materialCurrentStagePercent(processing(stage, 45, 45, "cancelled")), null);
+    assert.equal(materialOverallProgressPercent(processing(stage, 45, 45, "cancelled")), null);
+  }
+});
