@@ -564,7 +564,8 @@
 .library-title:hover { color: var(--studydy-blue); text-decoration: underline; }
 .library-file-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 10px; color: var(--studydy-blue); background: var(--studydy-blue-soft); }
 .library-item .state-actions { flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.library-item .state-actions > * { font-size: 13px; min-height: 40px; padding-left: 12px; padding-right: 12px; }
+.library-item .state-actions > button,
+.library-item .state-actions > a { font-size: 13px; min-height: 40px; padding-left: 12px; padding-right: 12px; }
 .library-item .library-state { display: inline-flex; border-radius: 6px; padding: 5px 8px; color: var(--text-secondary); background: var(--page-cool); font-size: 12px; }
 .library-state.is-succeeded { color: #08764c; background: var(--success-soft); }
 .library-state.is-partial { color: #795400; background: var(--warning-soft); }
@@ -601,6 +602,9 @@
 
 .processing-cancel { margin-top: var(--space-5); }
 .material-remove-control { margin-top: var(--space-4); }
+.is-collection .library-item > .state-actions > .cancel-confirmation,
+.is-collection .library-item > .state-actions > .material-remove-message { flex-basis: 100%; width: 100%; }
+.is-collection .library-item > .state-actions > .cancel-confirmation { margin-top: 8px; }
 .cancel-confirmation { padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .cancel-confirmation h3 { margin: 0; font-size: 16px; }
 .cancel-confirmation p { color: var(--text-secondary); font-size: 14px; }

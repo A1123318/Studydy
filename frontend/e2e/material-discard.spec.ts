@@ -36,14 +36,35 @@ for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844
       await page.goto("/materials");
       const card = page.getByRole("article", { name: target.display_name, exact: true });
       await expect(page.locator(".library-subtitle")).toContainText("3 份教材");
+      const actions = card.locator(":scope > .state-actions");
+      const trigger = actions.locator(":scope > button").filter({ hasText: /^移除教材$/ });
+      await expect(trigger).toHaveClass("secondary-button");
+      if (state !== "no-run") {
+        const latest = actions.locator(":scope > button").filter({ hasText: /^查看最新處理$/ });
+        await latest.focus(); await page.keyboard.press("Tab"); await expect(trigger).toBeFocused();
+        const first = (await latest.boundingBox())!; const second = (await trigger.boundingBox())!;
+        expect(Math.abs(first.height - second.height)).toBeLessThan(2);
+        if (viewport.width === 1536) expect(Math.abs(first.y + first.height / 2 - second.y - second.height / 2)).toBeLessThan(first.height / 5);
+        const styles = await actions.locator(":scope > button").evaluateAll(buttons => buttons.map(button => {
+          const style = getComputedStyle(button);
+          return [style.fontSize, style.paddingLeft, style.paddingRight, style.borderRadius];
+        }));
+        expect(styles[0]).toEqual(styles[1]);
+      }
+      await page.screenshot({ path: `/tmp/studydy-action-layout/${viewport.width}-${state}-row.png`, fullPage: true });
       await card.getByRole("button", { name: "移除教材", exact: true }).click();
       expect(deletes).toBe(0);
       await expect(card.getByRole("button", { name: "保留教材", exact: true })).toBeFocused();
+      const rowBox = (await actions.boundingBox())!;
+      const confirmation = (await actions.locator(":scope > .cancel-confirmation").boundingBox())!;
+      const triggerBox = (await trigger.boundingBox())!;
+      expect(Math.abs(confirmation.width - rowBox.width)).toBeLessThan(4);
+      expect(confirmation.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height);
       await card.getByRole("button", { name: "保留教材", exact: true }).click();
       await expect(card.getByRole("button", { name: "移除教材", exact: true })).toBeFocused();
       await card.getByRole("button", { name: "移除教材", exact: true }).click();
       await page.keyboard.press("Tab"); await expect(card.getByRole("button", { name: "確認移除", exact: true })).toBeFocused();
-      await page.screenshot({ path: `/tmp/studydy-discard/${viewport.width}-${state}-card-confirm.png`, fullPage: true });
+      await page.screenshot({ path: `/tmp/studydy-action-layout/${viewport.width}-${state}-confirm.png`, fullPage: true });
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       await page.keyboard.press("Escape");
       await expect(card.getByRole("button", { name: "移除教材", exact: true })).toBeFocused();
@@ -51,6 +72,7 @@ for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844
       await card.getByRole("button", { name: "確認移除", exact: true }).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
       await expect(card.getByRole("button", { name: "確認移除", exact: true })).toBeDisabled();
       await expect(card.getByText("正在移除…", { exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       await expect.poll(() => deletes).toBe(1);
       release();
       await expect(card).toHaveCount(0);
@@ -78,9 +100,13 @@ test("library protects all maps/sessions and keeps active runs on the processing
   await page.goto("/materials");
   await page.getByRole("article").nth(6).getByRole("button", { name: "查看最新處理", exact: true }).click();
   expect(new URL(page.url()).pathname).toBe(`/materials/${id(7)}/runs/${id(207)}`);
+  await page.goto("/knowledge-maps");
+  await expect(page.getByRole("button", { name: "移除教材", exact: true })).toHaveCount(0);
 });
 
-test("failed removal preserves the card and supports retry with a safe error", async ({ page }) => {
+for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844 }]) {
+test(`failed removal preserves the card and supports retry at ${viewport.width}px`, async ({ page }) => {
+  await page.setViewportSize(viewport);
   await setup(page);
   const target = item(1, "failed"); let fail = true; let present = true;
   await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: present ? [target] : [] } }));
@@ -94,10 +120,13 @@ test("failed removal preserves the card and supports retry with a safe error", a
   await card.getByRole("button", { name: "確認移除", exact: true }).click();
   await expect(card).toBeVisible(); await expect(card.getByRole("alert")).toContainText("無法移除教材");
   await expect(card.getByRole("button", { name: "確認移除", exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+  await page.screenshot({ path: `/tmp/studydy-action-layout/${viewport.width}-error.png`, fullPage: true });
   fail = false; await card.getByRole("button", { name: "確認移除", exact: true }).click();
   await expect(card).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "尚未有學習教材", exact: true })).toBeVisible();
 });
+}
 
 test("accepted card removal keeps polling even when latest attempt is already terminal", async ({ page }) => {
   await setup(page);

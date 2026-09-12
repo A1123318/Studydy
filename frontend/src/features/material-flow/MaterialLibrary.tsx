@@ -84,6 +84,15 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
       const unpublishedNote = available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>;
       const studyAction = item.study_sessions[0] && <button className={mapsOnly ? "secondary-button" : "primary-button"} type="button" onClick={() => openStudy(item, item.study_sessions[0])}>{item.study_sessions[0].status === "completed" ? "查看上次學習" : "接續上次學習"}</button>;
       const mapAction = available[0] && <button className={mapsOnly || !item.study_sessions[0] ? "primary-button" : "secondary-button"} type="button" onClick={() => openStructure(item, available[0])}>開啟知識地圖</button>;
+      const removeControl = !mapsOnly && available.length === 0 && item.study_sessions.length === 0 && (!latest || latest.status === "failed" || latest.status === "cancelled") &&
+          <MaterialRemoveControl inActionRow={isCollection} apiClient={apiClient} materialId={item.material_id} onAccepted={state => {
+            if (state === "removed") {
+              pendingRemovals.current.delete(item.material_id);
+              if (materialId) writeRoute({ name: "materials" });
+              else setItems(previous => previous?.filter(saved => saved.material_id !== item.material_id) ?? null);
+            } else pendingRemovals.current.add(item.material_id);
+            setReload(value => value + 1);
+          }} />;
       return <article className="surface library-item" key={item.material_id} aria-label={item.display_name}>
         <span className="library-file-icon" aria-hidden="true"><Icon name={mapsOnly ? "map" : "file"} size={25} /></span>
         <h2>{materialId ? item.display_name : <button className="library-title" type="button" onClick={() => writeRoute({ name: "material-detail", materialId: item.material_id })}>{item.display_name}</button>}</h2>
@@ -96,17 +105,10 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
           {mapsOnly ? mapAction : studyAction}
           {mapsOnly ? studyAction : mapAction}
           {latest && <button className={processingPrimary ? "primary-button" : "secondary-button"} type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
+          {isCollection && removeControl}
           {materialId && <a className="secondary-button" href={apiClient.sourceArtifactUrl(item.source_artifact_id)} target="_blank" rel="noreferrer">開啟原始 PDF</a>}
         </div>
-        {!mapsOnly && available.length === 0 && item.study_sessions.length === 0 && (!latest || latest.status === "failed" || latest.status === "cancelled") &&
-          <MaterialRemoveControl apiClient={apiClient} materialId={item.material_id} onAccepted={state => {
-            if (state === "removed") {
-              pendingRemovals.current.delete(item.material_id);
-              if (materialId) writeRoute({ name: "materials" });
-              else setItems(previous => previous?.filter(saved => saved.material_id !== item.material_id) ?? null);
-            } else pendingRemovals.current.add(item.material_id);
-            setReload(value => value + 1);
-          }} />}
+        {!isCollection && removeControl}
         {!isCollection && unpublishedNote}
         {materialId && item.study_sessions.length > 0 && <section aria-label="學習紀錄">
           <h3>既有學習紀錄</h3>
