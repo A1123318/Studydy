@@ -106,9 +106,9 @@ export default function App() {
 
   if (session.status !== "ready") {
     const mode = window.location.pathname === "/register" ? "register" : "login";
-    if (session.status === "signed-out") return <AccountPage key={mode} mode={mode} authenticate={async (action, username, password) => {
+    if (session.status === "signed-out") return <AccountPage key={mode} mode={mode} authenticate={async (action, email, password) => {
       const api = newClient();
-      const identity = await api.authenticate(action, username, password);
+      const identity = await api.authenticate(action, email, password);
       if (currentClient.current !== api) return;
       writeRoute({ name: "home" }, true);
       channel.current?.postMessage("identity-changed");

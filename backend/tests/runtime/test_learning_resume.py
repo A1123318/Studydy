@@ -127,7 +127,7 @@ def test_committed_answer_can_be_read_after_lost_response_and_replayed_once(lear
     client.delete("/v1/session", headers=HEADERS)
     fresh = TestClient(app, base_url=ORIGIN)
     assert fresh.post("/v1/session/login", headers=HEADERS,
-        json={"username": "learner_test", "password": "Synthetic test password 42"}).status_code == 200
+        json={"email": "learner_test@example.com", "password": "Synthetic test password 42"}).status_code == 200
     restored = fresh.get(resume_path(fixture), params={"run_id": fixture["structure"]["run_id"]}).json()
     assert restored["assessments"][0]["feedback"] == saved
     assert fresh.post(path, headers=headers, json=answer).json() == saved

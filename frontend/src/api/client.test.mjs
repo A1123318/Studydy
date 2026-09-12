@@ -229,3 +229,28 @@ test("resume rejects private answers and mixed feedback or revision bindings", a
     await assert.rejects(client.resumeStudy(request), error => error.kind === "schema");
   }
 });
+
+
+test("authentication sends only Email/password and retains safe error boundaries", async () => {
+  const observed = [];
+  const client = new StudydyApiClient(async (path, options) => {
+    observed.push({ path, body: JSON.parse(options.body) });
+    return Response.json({ schema: "learner-identity/v1", learner_id: sessionId });
+  });
+  for (const mode of ["login", "register"]) {
+    await client.authenticate(mode, "learner@example.com", "Synthetic password 42");
+  }
+  assert.deepEqual(observed, [
+    { path: "/v1/session/login", body: { email: "learner@example.com", password: "Synthetic password 42" } },
+    { path: "/v1/accounts", body: { email: "learner@example.com", password: "Synthetic password 42" } },
+  ]);
+  for (const [reason, status, message] of [
+    ["INVALID_EMAIL", 400, "請輸入有效的 Email 格式。"],
+    ["INVALID_CREDENTIALS", 401, "Email 或密碼錯誤。"],
+    ["ACCOUNT_UNAVAILABLE", 409, "這個 Email 已被使用，請使用其他 Email 或登入。"],
+    ["STORAGE_UNAVAILABLE", 503, "資料服務暫時無法使用，請稍後再試。"],
+  ]) {
+    const failed = new StudydyApiClient(async () => Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: reason, retryable: status === 503, message: "Request could not be completed." }, { status }));
+    await assert.rejects(failed.authenticate("login", "learner@example.com", "Synthetic password 42"), error => error instanceof ApiClientError && error.reasonCode === reason && error.message === message);
+  }
+});

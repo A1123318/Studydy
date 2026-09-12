@@ -8,6 +8,7 @@ import re
 import secrets
 from uuid import UUID, uuid4
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from .storage.tables import Learner, LearnerSession, database_session
 IDLE_LIFETIME = timedelta(days=7)
 ABSOLUTE_LIFETIME = timedelta(days=30)
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_EMAIL_ADDRESS = TypeAdapter(EmailStr)
 
 
 class SessionError(RuntimeError):
@@ -69,11 +71,16 @@ def _add_session(session: Session, learner_id: UUID) -> CreatedSession:
     return CreatedSession(learner_id=learner_id, raw_token=_encode_token(token_bytes))
 
 
-def _credentials(username: str, password: str) -> str:
-    username = username.strip().lower()
-    if re.fullmatch(r"[a-z0-9_]{3,32}", username) is None or not 15 <= len(password) <= 128:
+def _credentials(email: str, password: str) -> str:
+    # EmailStr 使用 email-validator 做格式與 Unicode/domain 正規化，不查 DNS。
+    # 登入 identifier 整體不分大小寫；不做 mailbox verification。
+    try:
+        email = _EMAIL_ADDRESS.validate_python(email).lower()
+    except ValidationError:
+        raise SessionError("REQUEST_INVALID") from None
+    if not isinstance(password, str) or not 15 <= len(password) <= 128:
         raise SessionError("REQUEST_INVALID")
-    return username
+    return email
 
 
 def _password_digest(password: str, salt: bytes) -> bytes:
@@ -82,16 +89,16 @@ def _password_digest(password: str, salt: bytes) -> bytes:
                   maxmem=256 * 1024 * 1024, dklen=32)
 
 
-def register_account(username: str, password: str, *, dsn: str | None = None) -> CreatedSession:
+def register_account(email: str, password: str, *, dsn: str | None = None) -> CreatedSession:
     """原子建立 credentials、Learner 與 session，不接管既有匿名資料。"""
-    username = _credentials(username, password)
+    email = _credentials(email, password)
     salt = secrets.token_bytes(16)
     password_hash = "scrypt$131072$8$1$" + salt.hex() + "$" + _password_digest(password, salt).hex()
     learner_id = uuid4()
     try:
         with database_session(dsn) as session:
             session.add(Learner(learner_id=learner_id, created_at=_utc_now(),
-                                username=username, password_hash=password_hash))
+                                email=email, password_hash=password_hash))
             session.flush()
             created = _add_session(session, learner_id)
     except IntegrityError as error:
@@ -103,12 +110,12 @@ def register_account(username: str, password: str, *, dsn: str | None = None) ->
     return created
 
 
-def login_account(username: str, password: str, *, dsn: str | None = None) -> CreatedSession:
+def login_account(email: str, password: str, *, dsn: str | None = None) -> CreatedSession:
     """驗證密碼後為原 learner 建立 session；失效 token 不會被復活。"""
-    username = _credentials(username, password)
+    email = _credentials(email, password)
     try:
         with database_session(dsn) as session:
-            learner = session.scalar(select(Learner).where(Learner.username == username))
+            learner = session.scalar(select(Learner).where(Learner.email == email))
             # 不存在的帳號也執行同成本雜湊，錯誤訊息不區分帳號或密碼。
             stored = learner.password_hash if learner is not None else None
             salt = bytes.fromhex(stored.split("$")[4]) if stored else bytes(16)

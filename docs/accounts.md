@@ -13,15 +13,18 @@
 PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrations import run_migrations; print(run_migrations())'
 ```
 
-空 DB 套用全部現行 migrations；`0002` 加入帳號，`0003` 加入教材名稱；再執行回傳 `()`。
-`0001` 不變，`0002` 只在 `learners` 新增 nullable username/password_hash 與約束。
-既有 learner、session、教材、學習與作答資料全部保留，不修改 owner。舊匿名 learner
-不會自動綁定帳號；本單元未提供匿名資料搬移。不同初始 migration checksum 的舊實驗 DB
-不在這個升級範圍內，請勿刪除 migration ledger 或重新建立空 DB 來繞過檢查。
+空 DB 套用 `(1, 2, 3, 4)`；已套用前三版的 DB 只執行 `0004_email_credentials.sql`；重跑回傳 `()`。
+`0001`～`0003` 保持原始內容與 checksum，不刪除 ledger 或修改舊 SQL。
+
+`0004` 將 credential column 從 `username` 改為唯一的 `email`，不保留 username alias。
+依此次 pre-release cutover 決定，舊帳號的 credentials 清除、所有尚有效的舊 sessions 撤銷；
+需要重新以 Email 註冊。`learner_id`、教材、Knowledge Structure、學習與作答資料保留原 owner，
+不刪除、不自動歸戶到新帳號，也不推導假的 Email。這不是長期的雙登入或相容 reader。
+在正式資料上套用前先完成備份，停止舊版本的產品程序；舊程式不能搭配新的 Email schema。
 
 ## 使用
 
-1. 開啟 Studydy，選「立即註冊」。帳號名稱為 3–32 個英文字母、數字或底線，不分大小寫。
+1. 開啟 Studydy，選「立即註冊」。Email 作為唯一登入 identifier，不分大小寫。
 2. 密碼為 15–128 個字元，可包含空格，註冊時需再次確認；沒有密碼重設服務，請自行妥善保存。
 3. 註冊成功後進入首頁，可從側邊導覽前往教材庫；右上角「登出」只撤銷本次授權，不刪除資料。
 4. 新瀏覽器輸入相同帳密，後端會取得同一 learner。其他瀏覽器的有效 session 可繼續使用。
@@ -39,17 +42,27 @@ PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrati
 
 | Method / path | 行為 |
 |---|---|
-| `POST /v1/accounts` | JSON `{username, password}`；201，建立帳號並登入 |
+| `POST /v1/accounts` | JSON `{email, password}`；201，建立帳號並登入 |
 | `POST /v1/session/login` | 同樣 JSON；200，驗證帳密並登入原 learner |
 | `GET /v1/session` | 200，回傳 `learner-identity/v1` 與 `learner_id`；無有效 session 為 401 |
 | `POST /v1/session/refresh` | 空 body；204，僅延長仍有效的既有 session |
 | `DELETE /v1/session` | 空 body；204，冪等撤銷本次 session 並移除 cookie |
 
-舊匿名 `POST /v1/session` 已移除。帳密錯誤統一回 `INVALID_CREDENTIALS`，名稱重複回
+舊匿名 `POST /v1/session` 已移除。帳密錯誤統一回 `INVALID_CREDENTIALS`，Email 重複回
 `ACCOUNT_UNAVAILABLE`，不回傳 password hash 或 session token JSON。
+Email 使用 Pydantic `EmailStr` 與 [email-validator](https://pypi.org/project/email-validator/) 驗證格式，
+移除首尾空白、採用 library 的 Unicode/domain 正規化後轉小寫，再持久化或 lookup。
+不做 DNS／deliverability 查詢、Email verification、OTP 或寄信；不將 Email 當成已驗證的信箱所有權。
+格式錯誤回傳 `INVALID_EMAIL`，前端關聯回 Email 欄位；不暴露 validator 原始輸入或例外細節。
+DB 唯一約束保護 concurrent registration；不存在 Email 與錯誤密碼都回傳相同 `INVALID_CREDENTIALS`。
+Password scrypt 成本、隨機 salt、constant-time digest comparison、session entropy／期限與 owner isolation 不變。
+
+表單使用 `noValidate` 搭配 Studydy inline errors；Email 保留 `type=email`、`autocomplete=username`，
+密碼保留 current-password／new-password。原生 constraint 語意保留，但不使用 browser validation popup。
+
 密碼使用標準函式庫 scrypt（N=2^17、r=8、p=1、隨機 16-byte salt），參數依
 [OWASP Password Storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt)。
-未加入新 dependency、OAuth、MFA、進階限流或第二套 identity system。
+僅新增 Email 格式驗證所需的 email-validator 與其依賴；未加入 OAuth、MFA、進階限流或第二套 identity system。
 
 [本地帳號測試方式](testing.md#account-regression-local-only) 不需要雲端 pod 或模型啟動。
 

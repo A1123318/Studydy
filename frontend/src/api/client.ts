@@ -24,6 +24,7 @@ type FetchRequest = (input: RequestInfo | URL, init?: RequestInit) => Promise<Re
 type Json = Record<string, unknown>;
 
 const knownReasons = new Set<KnownApiReasonCode>([
+  "INVALID_EMAIL",
   "INVALID_CREDENTIALS", "ACCOUNT_UNAVAILABLE", "REQUEST_INVALID", "SESSION_REQUIRED", "ORIGIN_NOT_ALLOWED", "RESOURCE_NOT_FOUND",
   "IDEMPOTENCY_CONFLICT", "NO_SAFE_ASSESSMENT", "MATERIAL_TOO_LARGE",
   "MATERIAL_PDF_INVALID", "UNSUPPORTED_MEDIA_TYPE", "STORAGE_UNAVAILABLE", "INTERNAL_ERROR",
@@ -241,9 +242,10 @@ function apiError(value: unknown): value is ApiErrorView {
 }
 
 function safeMessage(reason: ApiReasonCode): string {
+  if (reason === "INVALID_EMAIL") return "請輸入有效的 Email 格式。";
   if (reason === "SESSION_REQUIRED") return "工作階段已失效，請重新登入。";
-  if (reason === "INVALID_CREDENTIALS") return "帳號或密碼不正確。";
-  if (reason === "ACCOUNT_UNAVAILABLE") return "這個帳號名稱無法使用，請選擇其他名稱。";
+  if (reason === "INVALID_CREDENTIALS") return "Email 或密碼錯誤。";
+  if (reason === "ACCOUNT_UNAVAILABLE") return "這個 Email 已被使用，請使用其他 Email 或登入。";
   if (reason === "RESOURCE_NOT_FOUND") return "找不到這筆資料，或你沒有權限讀取。";
   if (reason === "NO_SAFE_ASSESSMENT") return "目前沒有可安全提供的新題目。";
   if (reason === "MATERIAL_TOO_LARGE") return "PDF 不可超過 100 MiB。";
@@ -317,10 +319,10 @@ export class StudydyApiClient {
     return this.json("/v1/session", { method: "GET" }, identity);
   }
 
-  authenticate(mode: "login" | "register", username: string, password: string): Promise<LearnerIdentity> {
+  authenticate(mode: "login" | "register", email: string, password: string): Promise<LearnerIdentity> {
     return this.json(mode === "register" ? "/v1/accounts" : "/v1/session/login", {
       method: "POST", headers: { "Content-Type": "application/json", Origin: origin() },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     }, identity);
   }
 

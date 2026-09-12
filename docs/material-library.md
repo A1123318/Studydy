@@ -39,7 +39,7 @@
 PYTHONPATH=backend/src backend/.venv/bin/python -c 'from runtime.storage.migrations import run_migrations; print(run_migrations())'
 ```
 
-accepted 單元 A schema 回傳 `(3,)`，空 DB 回傳 `(1, 2, 3)`，重跑回傳 `()`。
+accepted 單元 A schema 回傳 `(3, 4)`，空 DB 回傳 `(1, 2, 3, 4)`，重跑回傳 `()`；第 4 版的 Email credential cutover 見 [帳號 migration](accounts.md#migration)。
 本次沒有對正式資料庫執行 migration。
 
 ## 本地驗證

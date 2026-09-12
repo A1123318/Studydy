@@ -85,6 +85,7 @@ _ERROR_MESSAGE = "Request could not be completed."
 _SOURCE_LIMIT = 104_857_600
 _ERROR_STATUS = {
     "REQUEST_INVALID": (400, False),
+    "INVALID_EMAIL": (400, False),
     "INVALID_CREDENTIALS": (401, False),
     "ACCOUNT_UNAVAILABLE": (409, False),
     "SESSION_REQUIRED": (401, False),
@@ -481,7 +482,11 @@ def create_app(settings: ApiSettings) -> FastAPI:
         return response
 
     @app.exception_handler(RequestValidationError)
-    async def request_validation_error(_: Request, __: RequestValidationError):
+    async def request_validation_error(request: Request, error: RequestValidationError):
+        if request.url.path in {"/v1/accounts", "/v1/session/login"} and any(
+            item["loc"] == ("body", "email") for item in error.errors()
+        ):
+            return _error_response("INVALID_EMAIL")
         return _error_response("REQUEST_INVALID")
 
     @app.exception_handler(StarletteHttpException)
@@ -496,7 +501,7 @@ def create_app(settings: ApiSettings) -> FastAPI:
               operation_id="registerAccount", tags=["session"])
     def register_account_route(request: Request, response: Response, body: AccountCredentials) -> LearnerIdentityView:
         _require_query(request, set())
-        created = register_account(body.username, body.password, dsn=settings.dsn)
+        created = register_account(body.email, body.password, dsn=settings.dsn)
         _set_session_cookie(response, created.raw_token, settings)
         return LearnerIdentityView(learner_id=created.learner_id)
 
@@ -504,7 +509,7 @@ def create_app(settings: ApiSettings) -> FastAPI:
               operation_id="loginAccount", tags=["session"])
     def login_account_route(request: Request, response: Response, body: AccountCredentials) -> LearnerIdentityView:
         _require_query(request, set())
-        created = login_account(body.username, body.password, dsn=settings.dsn)
+        created = login_account(body.email, body.password, dsn=settings.dsn)
         _set_session_cookie(response, created.raw_token, settings)
         return LearnerIdentityView(learner_id=created.learner_id)
 

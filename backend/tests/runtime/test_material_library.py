@@ -41,7 +41,7 @@ def library_materials(closed_loop):
     running_run = create_material_processing_run(learner.learner_id, running.material_id, running.artifact_id, "running", settings, dsn=dsn)
     assert claim_next_material_processing_run(dsn=dsn).run.run_id == running_run.run_id
     _record_progress(running_run.run_id, "evidence", 0, 1, dsn=dsn)
-    foreign = register_account("library_b", "Synthetic test password 42", dsn=dsn)
+    foreign = register_account("library_b@example.com", "Synthetic test password 42", dsn=dsn)
     foreign_source = publish_idempotent_source_pdf(foreign.learner_id, io.BytesIO(_pdf()), "foreign-source", display_name="B 的私人教材.pdf", dsn=dsn)
     return {"learner": learner, "first": first, "structure": structure, "second_structure": second_structure,
             "failed": failed, "uploaded": uploaded, "running": running, "foreign": foreign, "foreign_source": foreign_source,
@@ -101,7 +101,7 @@ def test_library_owns_all_materials_and_keeps_prior_versions(library_materials, 
                  f"/v1/materials/{first['material_id']}/knowledge-structures/{first['available_structures'][0]['knowledge_structure_revision']}"):
         assert client.get(path).status_code == 404
     assert product_snapshot(dsn) == before
-    empty = register_account("empty_library", "Synthetic test password 42", dsn=dsn)
+    empty = register_account("empty_library@example.com", "Synthetic test password 42", dsn=dsn)
     client.cookies.clear()
     client.cookies.set("studydy_session", empty.raw_token)
     assert client.get("/v1/materials").json() == {"schema": "material-library/v1", "materials": []}
@@ -139,7 +139,10 @@ def test_material_name_migration_preserves_accepted_schema(clean_database_dsn, m
     for name in ("0001_final_schema.sql", "0002_learner_credentials.sql"):
         shutil.copyfile(migrations_dir / name, accepted / name)
     assert run_migrations(clean_database_dsn, migrations_dir=accepted) == (1, 2)
-    learner = register_account("migration_reader", "Synthetic test password 42", dsn=clean_database_dsn)
+    from runtime.learner_session import TrustedLearner
+    learner = TrustedLearner(uuid4())
+    with psycopg.connect(clean_database_dsn) as connection:
+        connection.execute("INSERT INTO learners (learner_id,created_at,username,password_hash) VALUES (%s,now(),%s,%s)", (learner.learner_id,"migration_reader","old-fixture-hash"))
     material_id, artifact_id = uuid4(), uuid4()
     content = _pdf()
     digest = hashlib.sha256(content).digest()
@@ -153,7 +156,7 @@ def test_material_name_migration_preserves_accepted_schema(clean_database_dsn, m
         connection.execute("INSERT INTO materials VALUES (%s,%s,%s,%s,%s,now())", (material_id, learner.learner_id, artifact_id, hashlib.sha256(b"old-upload").digest(), fingerprint))
         connection.execute("INSERT INTO artifacts VALUES (%s,%s,%s,'source_pdf','application/pdf',%s,%s,now())", (artifact_id, learner.learner_id, material_id, digest, len(content)))
         previous = connection.execute("SELECT * FROM materials").fetchone()
-    assert run_migrations(clean_database_dsn) == (3,)
+    assert run_migrations(clean_database_dsn) == (3, 4)
     assert run_migrations(clean_database_dsn) == ()
     with psycopg.connect(clean_database_dsn) as connection:
         assert connection.execute("SELECT material_id,learner_id,source_artifact_id,upload_idempotency_key_sha256,upload_request_fingerprint,created_at FROM materials").fetchone() == previous

@@ -21,6 +21,8 @@ They cover fresh installation and the additive credentials and material-name mig
 Assessment, private answer, server-side scoring, append-only AnswerEvent, mastery, guidance,
 idempotency, stale state, and the HTTP API closed loop.
 
+Email credentials use `0004_email_credentials.sql`: old development credentials are cleared and old sessions revoked once; learner IDs and owned records remain. Auth tests cover normalized Email uniqueness, invalid syntax, generic login failures, hashing/session regressions and the new schema. No Email DNS lookup or model call is used.
+
 The accepted Knowledge Structure v2 schema can be upgraded with `0002_learner_credentials.sql`;
 existing learner IDs and owners remain unchanged. `0003_material_display_name.sql` adds names.
 Migration tests upgrade the accepted schema with saved synthetic records, verify the records and
@@ -109,3 +111,18 @@ The CLI material run is a diagnostic path. Final product acceptance also needs t
 loop: upload, progress, Map/Path, source PDF locator, Assessment/Answer, guidance, and reload/reopen.
 Store that evidence privately and bind its manual review to the exact artifact revision. Never mark
 unexecuted browser checks true in the review example.
+
+## Auth UX regression
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+PYTHONPATH=backend/src:backend/tests:local_ai/src backend/.venv/bin/pytest -q backend/tests/runtime/test_accounts.py backend/tests/runtime/test_account_browser.py
+```
+
+The account browser suite covers Email/password-manager semantics, no native validation bubbles,
+inline errors/focus/correction, password reveal, duplicate-submit protection, safe API errors,
+Login/Register navigation and real owner/session isolation. Both pages are checked at
+1536×1024, 1920×1080 and 390×844 for size, centering, overflow and screenshots. Screenshots are
+written only to the ignored browser test output directory. No OAuth or verification flow is tested or implemented.

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { errorMessage } from "../../api/client";
+import { useRef, useState } from "react";
+import { ApiClientError, errorMessage } from "../../api/client";
 import { Icon } from "../../ui/Icon";
 import "./styles.css";
 
@@ -26,57 +26,102 @@ export function AccountFrame({ mode, children }: { mode: Mode; children: React.R
   </main>;
 }
 
-function PasswordField({ name, label, placeholder, confirm = false, register, disabled }: {
-  name: string; label: string; placeholder: string; confirm?: boolean; register: boolean; disabled: boolean;
+type FieldName = "email" | "password" | "confirm-password";
+type FieldErrors = Partial<Record<FieldName, string>>;
+const fieldOrder: FieldName[] = ["email", "password", "confirm-password"];
+
+function field(form: HTMLFormElement, name: FieldName): HTMLInputElement {
+  return form.elements.namedItem(name) as HTMLInputElement;
+}
+
+function validateFields(form: HTMLFormElement, register: boolean, rejectedEmail: string | null): FieldErrors {
+  const errors: FieldErrors = {};
+  const email = field(form, "email");
+  const password = field(form, "password");
+  if (!email.value.trim()) errors.email = "請輸入 Email。";
+  else if (email.validity.typeMismatch || email.value.length > email.maxLength || email.value.trim() === rejectedEmail) errors.email = "請輸入有效的 Email 格式。";
+  if (!password.value) errors.password = "請輸入密碼。";
+  else if (password.value.length < password.minLength || password.value.length > password.maxLength) {
+    errors.password = "密碼需為 15–128 個字元，可包含空格。";
+  }
+  if (register) {
+    const confirm = field(form, "confirm-password");
+    if (!confirm.value) errors["confirm-password"] = "請再次輸入密碼。";
+    else if (confirm.value !== password.value) errors["confirm-password"] = "兩次輸入的密碼不一致，請再確認。";
+  }
+  return errors;
+}
+
+function PasswordField({ name, label, placeholder, confirm = false, register, disabled, error }: {
+  name: "password" | "confirm-password"; label: string; placeholder: string; confirm?: boolean;
+  register: boolean; disabled: boolean; error?: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const describedBy = [register && !confirm ? "password-hint" : null, error ? `${name}-error` : null].filter(Boolean).join(" ") || undefined;
   return <div className="auth-field">
     <label htmlFor={name}>{label}</label>
     <div className="auth-input-wrap">
       <Icon name="lock" size={18} />
       <input id={name} name={name} type={visible ? "text" : "password"} placeholder={placeholder} required
         minLength={15} maxLength={128} autoComplete={register ? "new-password" : "current-password"} disabled={disabled}
-        aria-describedby={register && !confirm ? "password-hint" : undefined} />
+        aria-invalid={error ? true : undefined} aria-describedby={describedBy} />
       <button type="button" className="auth-eye" aria-label={`${visible ? "隱藏" : "顯示"}${confirm ? "確認密碼" : "密碼"}`}
         aria-pressed={visible} disabled={disabled} onClick={() => setVisible(value => !value)}><Icon name={visible ? "eye-off" : "eye"} size={18} /></button>
     </div>
     {register && !confirm && <small id="password-hint">請使用 15–128 個字元，可包含空格。</small>}
+    {error && <p className="auth-field-error" id={`${name}-error`}>{error}</p>}
   </div>;
 }
 
 export function AccountPage({ mode, authenticate }: {
-  mode: Mode; authenticate: (mode: Mode, username: string, password: string) => Promise<void>;
+  mode: Mode; authenticate: (mode: Mode, email: string, password: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const rejectedEmail = useRef<string | null>(null);
   const [message, setMessage] = useState("");
+  const [attempted, setAttempted] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
   const register = mode === "register";
   return <AccountFrame mode={mode}>
     <h1>{register ? "建立新帳戶" : "登入您的帳戶"}</h1>
-    <form className="auth-form" onSubmit={async event => {
+    <form className="auth-form" noValidate onInput={event => {
+      if (attempted) setErrors(validateFields(event.currentTarget, register, rejectedEmail.current));
+      setMessage("");
+    }} onSubmit={async event => {
       event.preventDefault();
-      if (busy) return;
+      if (submitting.current) return;
       const form = event.currentTarget;
-      const fields = new FormData(form);
-      const password = String(fields.get("password"));
-      if (register && password !== fields.get("confirm-password")) { setMessage("兩次輸入的密碼不一致，請再確認。"); return; }
-      setBusy(true); setMessage("");
-      try { await authenticate(mode, String(fields.get("username")), password); }
-      catch (error) { setMessage(errorMessage(error)); }
-      finally { setBusy(false); }
+      const nextErrors = validateFields(form, register, rejectedEmail.current);
+      setAttempted(true); setErrors(nextErrors); setMessage("");
+      const firstInvalid = fieldOrder.find(name => nextErrors[name]);
+      if (firstInvalid) { field(form, firstInvalid).focus(); return; }
+      const email = field(form, "email").value.trim();
+      const password = field(form, "password").value;
+      submitting.current = true;
+      setBusy(true);
+      try { await authenticate(mode, email, password); }
+      catch (error) {
+        if (error instanceof ApiClientError && error.reasonCode === "INVALID_EMAIL") {
+          rejectedEmail.current = email;
+          setErrors({ email: "請輸入有效的 Email 格式。" });
+          requestAnimationFrame(() => field(form, "email").focus());
+        } else setMessage(errorMessage(error));
+      }
+      finally { submitting.current = false; setBusy(false); }
     }}>
       <div className="auth-field">
-        <label htmlFor="username">帳號名稱</label>
-        <div className="auth-input-wrap"><Icon name="user" size={18} /><input id="username" name="username" autoComplete="username"
-          placeholder="請輸入帳號名稱" required pattern="[A-Za-z0-9_]{3,32}" minLength={3} maxLength={32} disabled={busy}
-          aria-describedby={register ? "username-hint" : undefined} /></div>
-        {register && <small id="username-hint">3–32 個英文字母、數字或底線，不分大小寫。</small>}
+        <label htmlFor="email">Email</label>
+        <div className="auth-input-wrap"><Icon name="user" size={18} /><input type="email" id="email" name="email" autoComplete="username"
+          placeholder="請輸入 Email" required maxLength={254} disabled={busy}
+          aria-invalid={errors.email ? true : undefined} aria-describedby={errors.email ? "email-error" : undefined} /></div>
+        {errors.email && <p className="auth-field-error" id="email-error">{errors.email}</p>}
       </div>
-      <PasswordField name="password" label="密碼" placeholder={register ? "請設定密碼" : "請輸入密碼"} register={register} disabled={busy} />
-      {register && <PasswordField name="confirm-password" label="確認密碼" placeholder="請再次輸入密碼" confirm register disabled={busy} />}
+      <PasswordField name="password" label="密碼" placeholder={register ? "請設定密碼" : "請輸入密碼"} register={register} disabled={busy} error={errors.password} />
+      {register && <PasswordField name="confirm-password" label="確認密碼" placeholder="請再次輸入密碼" confirm register disabled={busy} error={errors["confirm-password"]} />}
       {message && <p className="auth-error" role="alert">{message}</p>}
       <button className="primary-button auth-submit" disabled={busy} type="submit">{busy ? "處理中…" : register ? "註冊" : "登入"}</button>
     </form>
-    {!register && <div className="auth-divider"><span>或</span></div>}
     <p className="auth-switch">{register ? "已經有帳戶了？" : "還沒有帳戶？"}{" "}<a href={register ? "/login" : "/register"}>{register ? "立即登入" : "立即註冊"}</a></p>
   </AccountFrame>;
 }

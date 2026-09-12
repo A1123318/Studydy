@@ -1,4 +1,5 @@
 export type KnownApiReasonCode =
+  | "INVALID_EMAIL"
   | "INVALID_CREDENTIALS"
   | "ACCOUNT_UNAVAILABLE"
   | "REQUEST_INVALID"

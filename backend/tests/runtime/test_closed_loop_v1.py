@@ -149,12 +149,12 @@ def _assessment_response(angle: str, prompt: str, evidence_id: str) -> dict:
 
 @pytest.fixture
 def closed_loop(clean_database_dsn, migrations_dir, tmp_path, monkeypatch):
-    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3)
+    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3, 4)
     assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == ()
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(mode=0o700)
     monkeypatch.setenv("STUDYDY_ARTIFACT_ROOT", str(artifact_root))
-    created = register_account("learner_test", "Synthetic test password 42", dsn=clean_database_dsn)
+    created = register_account("learner_test@example.com", "Synthetic test password 42", dsn=clean_database_dsn)
     learner = TrustedLearner(created.learner_id)
     source = publish_idempotent_source_pdf(created.learner_id, io.BytesIO(_pdf()), "upload", dsn=clean_database_dsn)
     settings = _settings(tmp_path)
@@ -169,7 +169,7 @@ def closed_loop(clean_database_dsn, migrations_dir, tmp_path, monkeypatch):
 
 
 def test_final_schema_contains_only_current_product_tables(clean_database_dsn, migrations_dir):
-    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3)
+    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3, 4)
     with psycopg.connect(clean_database_dsn) as connection:
         tables = {
             row[0]
@@ -525,7 +525,7 @@ def test_http_api_projects_the_same_closed_loop_without_private_answer(closed_lo
 def test_http_upload_worker_assessment_and_guidance_are_one_closed_loop(
     clean_database_dsn, migrations_dir, tmp_path, monkeypatch
 ):
-    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3)
+    assert run_migrations(clean_database_dsn, migrations_dir=migrations_dir) == (1, 2, 3, 4)
     artifact_root = tmp_path / "artifacts"
     artifact_root.mkdir(mode=0o700)
     monkeypatch.setenv("STUDYDY_ARTIFACT_ROOT", str(artifact_root))
@@ -571,7 +571,7 @@ def test_http_upload_worker_assessment_and_guidance_are_one_closed_loop(
     ))
     mutation_headers = {"Origin": "https://studydy.test"}
     with TestClient(app, base_url="https://studydy.test") as client:
-        created_session = client.post("/v1/accounts", headers=mutation_headers, json={"username": "http_learner", "password": "Synthetic test password 42"})
+        created_session = client.post("/v1/accounts", headers=mutation_headers, json={"email": "http_learner@example.com", "password": "Synthetic test password 42"})
         assert created_session.status_code == 201
         assert "Max-Age=604800" in created_session.headers["set-cookie"]
         uploaded = client.post(

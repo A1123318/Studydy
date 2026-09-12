@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class _Closed(BaseModel):
@@ -20,7 +20,7 @@ class ApiErrorView(_Closed):
 
 
 class AccountCredentials(_Closed):
-    username: str = Field(min_length=3, max_length=32)
+    email: EmailStr = Field(max_length=254)
     password: str = Field(min_length=15, max_length=128, repr=False)
 
 

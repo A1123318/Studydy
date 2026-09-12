@@ -5,13 +5,13 @@ test.skip(process.env.STUDYDY_E2E_RESUME !== "true", "Requires the local resume 
 const origin = "http://127.0.0.1:4173";
 const pendingPrompt = "保存的未答題：Stack 如何取出資料？";
 
-async function login(page: Page, username = "learner_test") {
+async function login(page: Page, email = "learner_test@example.com") {
   await page.goto("/");
-  await page.getByLabel("帳號名稱", { exact: true }).fill(username);
+  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("密碼", { exact: true }).fill("Synthetic test password 42");
   await page.getByRole("button", { name: "登入", exact: true }).click();
   await expect(page.getByRole("heading", { name: "歡迎回來！", exact: true })).toBeVisible();
-  await expect(page.locator(".dashboard-stat strong")).toHaveText(username === "learner_test" ? ["3", "1", "3", "1"] : ["1", "0", "0", "0"]);
+  await expect(page.locator(".dashboard-stat strong")).toHaveText(email === "learner_test@example.com" ? ["3", "1", "3", "1"] : ["1", "0", "0", "0"]);
   await page.getByRole("button", { name: "教材庫", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的教材", exact: true })).toBeVisible();
 }
@@ -127,7 +127,7 @@ test("original learning and questions survive reload, new profiles and a lost co
   await expect(lastPage.getByRole("heading", { name: "目前沒有安全題目", exact: true })).toBeVisible();
   await lastPage.getByRole("button", { name: "登出", exact: true }).click();
   await expect(lastPage.getByRole("heading", { name: "登入您的帳戶" })).toBeVisible();
-  await login(lastPage, "library_b");
+  await login(lastPage, "library_b@example.com");
   await expect(lastPage.getByText("堆疊講義.pdf", { exact: true })).toHaveCount(0);
   await lastPage.goto(studyUrl);
   await expect(lastPage.getByRole("heading", { name: "無法開啟本次學習", exact: true })).toBeVisible();
