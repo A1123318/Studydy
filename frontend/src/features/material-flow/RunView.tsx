@@ -86,7 +86,7 @@ export function RunView({ apiClient, route }: {
     const currentPercent = materialCurrentStagePercent(run);
     const overallPercent = materialOverallProgressPercent(run);
     const stageLabel = materialProgressStageLabel(run.progress_stage);
-    const stageActivity = run.progress_stage === "queued" ? "等待開始" : run.progress_stage === "publishing" ? "發布中" : "處理中";
+    const stageActivity = run.progress_stage === "queued" ? "排隊中" : run.progress_stage === "publishing" ? "發布中" : "處理中";
     return (
       <section className="processing-page task-page">
         <header className="processing-hero">
@@ -101,10 +101,10 @@ export function RunView({ apiClient, route }: {
               <progress className="processing-progress" max={100} value={overallPercent ?? undefined}
                 aria-label={overallPercent === null ? "整體流程進度（估計），尚無可估計資料" : `整體流程進度（估計） ${overallPercent}%`} />
               <p className="progress-estimate-note">依已完成的處理階段與頁數估算，代表流程完成度，不代表剩餘時間。</p>
-              <h3>本階段進度</h3>
-              <div className="progress-heading"><strong className="stage-label">{stageLabel}</strong><strong>{currentPercent === null ? stageActivity : `${currentPercent}%`}</strong></div>
+              <h3>{currentPercent === null ? "目前狀態" : "本階段進度"}</h3>
+              <div className="progress-heading"><strong className={`stage-label${currentPercent === null ? " stage-status-label" : ""}`}>{currentPercent === null && <span className="processing-status-indicator" aria-hidden="true" />}{stageLabel}</strong><strong>{currentPercent === null ? stageActivity : `${currentPercent}%`}</strong></div>
               {currentPercent === null
-                ? <div className="indeterminate-progress" role="progressbar" aria-label={`本階段進度：${stageLabel}，${stageActivity}`}><span /></div>
+                ? <p>{run.progress_stage === "queued" ? "正在等待本機處理資源，開始後會自動更新進度。" : run.progress_stage === "publishing" ? "正在整理並發布可開啟的知識地圖。" : "正在處理教材內容。"}</p>
                 : <progress className="processing-progress" max={100} value={currentPercent}
                     aria-label={`本階段進度 ${currentPercent}%，已完成 ${run.completed_pages} / ${run.total_pages} 頁`} />}
               {currentPercent !== null && <p>已完成 {run.completed_pages} / {run.total_pages} 頁</p>}

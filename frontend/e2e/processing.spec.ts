@@ -43,7 +43,7 @@ async function session(page: Page) {
 }
 
 for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
-  const selected = viewport.width === 1536 ? Object.keys(cases) : ["evidence", "semantics", "publishing", "succeeded", "failed"];
+  const selected = viewport.width === 1536 ? Object.keys(cases) : ["pending", "evidence", "semantics", "publishing", "succeeded", "failed"];
   for (const name of selected) {
     test(`processing ${name} at ${viewport.width}px is truthful and usable`, async ({ page }) => {
       await page.setViewportSize(viewport); await page.clock.install({ time: clockTime }); await page.clock.pauseAt(clockTime); await session(page);
@@ -76,7 +76,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(processing).toContainText("可回查的概念與學習重點");
       } else {
         await expect(processing.getByRole("heading", { name: "整體流程進度（估計）", exact: true })).toBeVisible();
-        await expect(processing.getByRole("heading", { name: "本階段進度", exact: true })).toBeVisible();
+        await expect(processing.getByRole("heading", { name: percentages[name][1] === null ? "目前狀態" : "本階段進度", exact: true })).toBeVisible();
         await expect(processing.getByRole("heading", { name: "處理流程", exact: true })).toBeVisible();
         await expect(processing.locator(".progress-estimate-note")).toHaveText("依已完成的處理階段與頁數估算，代表流程完成度，不代表剩餘時間。");
         for (const oldText of ["整體進度（估計）", "目前階段", "實際處理階段", "已經過", "剩餘時間"]) {
@@ -85,13 +85,21 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         const [overall, current] = percentages[name];
         await expect(processing.getByRole("progressbar", { name: `整體流程進度（估計） ${overall}%`, exact: true })).toHaveAttribute("value", String(overall));
         if (current !== null) {
+          await expect(processing.locator(".processing-status-indicator")).toHaveCount(0);
           await expect(processing.getByRole("progressbar", { name: `本階段進度 ${current}%，已完成 ${run.completed_pages} / 45 頁`, exact: true })).toHaveAttribute("value", String(current));
           await expect(processing.getByText(`已完成 ${run.completed_pages} / 45 頁`, { exact: true })).toBeVisible();
         } else {
-          const indicator = processing.getByRole("progressbar", { name: /本階段進度：/ });
-          expect(await indicator.getAttribute("aria-valuenow")).toBeNull();
-          await expect(indicator).toHaveAttribute("aria-label", name === "publishing" ? "本階段進度：發布知識地圖，發布中" : "本階段進度：等待處理資源，等待開始");
-          await expect(processing.locator(".processing-status")).toContainText(name === "publishing" ? "發布中" : "等待開始");
+          const status = processing.locator(".processing-status");
+          await expect(status.getByRole("progressbar")).toHaveCount(1);
+          await expect(status.getByRole("heading", { name: "本階段進度", exact: true })).toHaveCount(0);
+          await expect(status.getByText("等待開始", { exact: true })).toHaveCount(0);
+          await expect(status.locator(".indeterminate-progress")).toHaveCount(0);
+          const indicator = status.locator(".processing-status-indicator");
+          await expect(indicator).toHaveAttribute("aria-hidden", "true");
+          for (const attribute of ["role", "aria-valuenow", "aria-valuemin", "aria-valuemax"]) expect(await indicator.getAttribute(attribute)).toBeNull();
+          await expect(status).toHaveAttribute("aria-live", "polite");
+          await expect(status).toContainText(name === "publishing" ? "發布中" : "排隊中");
+          await expect(status).toContainText(name === "publishing" ? "正在整理並發布可開啟的知識地圖。" : "正在等待本機處理資源，開始後會自動更新進度。");
           if (name === "publishing") await expect(processing.locator(".processing-status")).not.toContainText("100%");
         }
         if (name === "long-elapsed") await expect(processing.locator(".processing-times")).toContainText("120 分 0 秒");
@@ -156,4 +164,18 @@ test("read failure retry only reads the original run and never creates work", as
   failed = false; await page.getByRole("button", { name: "重新讀取", exact: true }).click();
   await expect(page.getByRole("progressbar", { name: "整體流程進度（估計） 3%", exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(path + "$")); expect(writes).toEqual([]);
+});
+
+
+test("processing status respects reduced motion without removing its wording", async ({ page }) => {
+  await session(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route(`**/v1/material-processing-runs/${runId}`, route => route.fulfill({ json: cases.publishing }));
+  await page.goto(path);
+  const indicator = page.locator(".processing-status-indicator");
+  await expect(indicator).toBeVisible();
+  expect(await indicator.evaluate(element => getComputedStyle(element).animationName)).toBe("none");
+  await expect(page.locator(".processing-status")).toContainText("發布中");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  expect(await indicator.evaluate(element => getComputedStyle(element).animationName)).toBe("spin");
 });
