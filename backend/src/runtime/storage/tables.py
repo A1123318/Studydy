@@ -70,6 +70,7 @@ class Material(Base):
     upload_idempotency_key_sha256: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     upload_request_fingerprint: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     display_name: Mapped[str | None] = mapped_column(Text)
+    discard_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

@@ -30,6 +30,7 @@ from .models import (
     KnowledgeStructureView,
     MaterialProcessingCreate,
     MaterialProcessingRunView,
+    MaterialDiscardView,
     MaterialView,
     MaterialLibraryItem,
     MaterialLibraryView,
@@ -70,8 +71,8 @@ from ..material_processing import (
     create_material_processing_run,
     runtime_preflight,
     read_material_processing_run,
-    request_material_processing_cancellation,
 )
+from ..material_discard import MaterialDiscardError, request_material_discard
 from ..storage.artifacts import (
     open_verified_source_pdf,
     publish_idempotent_source_pdf,
@@ -93,6 +94,7 @@ _ERROR_STATUS = {
     "ORIGIN_NOT_ALLOWED": (403, False),
     "RESOURCE_NOT_FOUND": (404, False),
     "IDEMPOTENCY_CONFLICT": (409, False),
+    "MATERIAL_NOT_DISCARDABLE": (409, False),
     "NO_SAFE_ASSESSMENT": (422, False),
     "MATERIAL_TOO_LARGE": (413, False),
     "MATERIAL_PDF_INVALID": (400, False),
@@ -210,6 +212,8 @@ def _error_response(reason_code: str, *, status_code: int | None = None) -> JSON
 
 def _fixed_exception(error: Exception) -> str:
     reason = str(error)
+    if reason == "MATERIAL_NOT_DISCARDABLE" or (isinstance(error, MaterialDiscardError) and reason == "RESOURCE_NOT_FOUND"):
+        return reason
     if isinstance(error, SessionError) and reason in _ERROR_STATUS:
         return reason
     if "IDEMPOTENCY_CONFLICT" in reason or reason in {
@@ -396,6 +400,8 @@ def _install_openapi(app: FastAPI) -> None:
                 if path == "/v1/session/login":
                     response_codes.add(401)
                 if path.endswith("/resume"):
+                    response_codes.add(409)
+                if path == "/v1/materials/{material_id}" and method == "delete":
                     response_codes.add(409)
                 if path not in public_paths:
                     response_codes.add(401)
@@ -616,16 +622,17 @@ def create_app(settings: ApiSettings) -> FastAPI:
             )
         )
 
-    @app.post(
-        "/v1/material-processing-runs/{run_id}/cancel",
-        response_model=MaterialProcessingRunView, response_model_by_alias=True,
-        operation_id="cancelMaterialProcessingRun", tags=["material-processing"],
+    @app.delete(
+        "/v1/materials/{material_id}", status_code=202,
+        response_model=MaterialDiscardView, response_model_by_alias=True,
+        operation_id="discardMaterial", tags=["materials"],
     )
-    async def cancel_material_run_route(request: Request, run_id: UUID) -> MaterialProcessingRunView:
+    async def discard_material_route(request: Request, material_id: UUID) -> MaterialDiscardView:
         _require_query(request, set())
         await _require_empty_body(request)
         learner = _trusted_learner(request, settings)
-        return project_material_run(request_material_processing_cancellation(learner.learner_id, run_id, dsn=settings.dsn))
+        state = await run_in_threadpool(request_material_discard, learner.learner_id, material_id, dsn=settings.dsn)
+        return MaterialDiscardView(material_id=material_id, state=state)
 
     @app.get(
         "/v1/material-processing-runs/{run_id}",

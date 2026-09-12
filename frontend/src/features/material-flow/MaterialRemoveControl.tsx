@@ -1,0 +1,55 @@
+import { useEffect, useId, useRef, useState } from "react";
+
+import { errorMessage, type StudydyApiClient } from "../../api/client";
+import type { MaterialDiscardView } from "../../api/contracts";
+
+export function MaterialRemoveControl({ apiClient, materialId, onAccepted }: {
+  apiClient: StudydyApiClient;
+  materialId: string;
+  onAccepted: (state: MaterialDiscardView["state"]) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  const action = useRef<HTMLButtonElement>(null);
+  const keep = useRef<HTMLButtonElement>(null);
+  const title = useId();
+  const interacted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    if (!interacted.current) return;
+    if (confirming) keep.current?.focus(); else action.current?.focus();
+  }, [confirming]);
+  const submit = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setError(null);
+    try {
+      const result = await apiClient.discardMaterial(materialId);
+      if (!mounted.current) return;
+      setRemoving(true); onAccepted(result.state);
+    } catch (failure) {
+      if (mounted.current) setError(`無法移除教材。${errorMessage(failure)}`);
+    } finally {
+      inFlight.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  };
+  if (removing) return <p role="status">正在移除…</p>;
+  return <div className="material-remove-control">
+    {confirming ? <section className="cancel-confirmation" aria-labelledby={title} onKeyDown={event => {
+      if (event.key === "Escape" && !busy) { setConfirming(false); setError(null); }
+    }}>
+      <h3 id={title}>確定要移除這份教材嗎？</h3>
+      <p>PDF 與處理紀錄會一併移除，且無法復原。</p>
+      <div className="state-actions">
+        <button ref={keep} className="secondary-button" type="button" disabled={busy} onClick={() => { setConfirming(false); setError(null); }}>保留教材</button>
+        <button className="secondary-button cancel-confirm-button" type="button" disabled={busy} onClick={() => void submit()}>確認移除</button>
+      </div>
+    </section> : <button ref={action} className="secondary-button" type="button" onClick={() => { interacted.current = true; setConfirming(true); }}>移除教材</button>}
+    {busy && <p role="status">正在移除…</p>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+  </div>;
+}

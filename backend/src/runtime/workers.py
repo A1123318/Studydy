@@ -9,6 +9,7 @@ from .material_processing import (
     execute_claimed_material_processing_run,
     recover_interrupted_material_runs,
 )
+from .material_discard import finish_material_discards
 
 _IDLE_WAIT_SECONDS = 0.1
 _STARTUP_WAIT_SECONDS = 5
@@ -54,6 +55,7 @@ class RuntimeWorkers:
             try:
                 if is_starting:
                     recover_interrupted_material_runs(dsn=self.dsn)
+                    finish_material_discards(dsn=self.dsn)
                     self._started.set()
                     is_starting = False
                 claim = claim_next_material_processing_run(dsn=self.dsn)
@@ -61,6 +63,7 @@ class RuntimeWorkers:
                     execute_claimed_material_processing_run(
                         claim, deepcopy(self.local_config), dsn=self.dsn
                     )
+                finish_material_discards(dsn=self.dsn)
             except Exception as error:
                 if is_starting:
                     self._startup_error = error

@@ -249,6 +249,7 @@ test("authentication sends only Email/password and retains safe error boundaries
     ["INVALID_CREDENTIALS", 401, "Email 或密碼不正確。"],
     ["ACCOUNT_UNAVAILABLE", 409, "這個 Email 已被使用，請使用其他 Email。"],
     ["STORAGE_UNAVAILABLE", 503, "資料服務暫時無法使用，請稍後再試。"],
+    ["MATERIAL_NOT_DISCARDABLE", 409, "這份教材已有可使用的學習資料，目前無法直接移除。"],
   ]) {
     const failed = new StudydyApiClient(async () => Response.json({ schema: "api-error/v1", request_id: sessionId, reason_code: reason, retryable: status === 503, message: "Request could not be completed." }, { status }));
     await assert.rejects(failed.authenticate("login", "learner@example.com", "Synthetic password 42"), error => error instanceof ApiClientError && error.reasonCode === reason && error.message === message);
@@ -381,16 +382,29 @@ test("v5 run guards accept canonical cancellation states and reject invalid life
   }
 });
 
-test("cancelMaterialRun posts an empty Origin-bound request with no idempotency header", async () => {
-  const client = new StudydyApiClient(async (path, init) => {
-    assert.equal(path, `/v1/material-processing-runs/${runId}/cancel`);
-    assert.equal(init.method, "POST");
-    assert.equal(init.headers.Origin, "http://127.0.0.1:4173");
-    assert.equal(init.headers["Idempotency-Key"], undefined);
-    assert.equal(init.body, undefined);
-    return Response.json(cancellationView("cancelled"));
-  });
-  assert.equal((await client.cancelMaterialRun(runId)).status, "cancelled");
+test("discardMaterial sends the canonical empty DELETE and validates its response", async () => {
+  for (const state of ["removing", "removed"]) {
+    const client = new StudydyApiClient(async (path, init) => {
+      assert.equal(path, `/v1/materials/${materialId}`);
+      assert.equal(init.method, "DELETE");
+      assert.equal(init.headers.Origin, "http://127.0.0.1:4173");
+      assert.equal(init.headers["Idempotency-Key"], undefined);
+      assert.equal(init.body, undefined);
+      return Response.json({ schema: "material-discard/v1", material_id: materialId, state }, { status: 202 });
+    });
+    assert.equal((await client.discardMaterial(materialId)).state, state);
+    assert.equal(client.cancelMaterialRun, undefined);
+  }
+  for (const value of [
+    { schema: "material-discard/v2", material_id: materialId, state: "removed" },
+    { schema: "material-discard/v1", material_id: "invalid", state: "removed" },
+    { schema: "material-discard/v1", material_id: runId, state: "removed" },
+    { schema: "material-discard/v1", material_id: materialId, state: "deleting" },
+    { schema: "material-discard/v1", material_id: materialId, state: "removed", extra: true },
+    { schema: "material-discard/v1", material_id: materialId },
+  ]) {
+    await assert.rejects(new StudydyApiClient(async () => Response.json(value)).discardMaterial(materialId), e => e.kind === "schema");
+  }
 });
 
 test("v2 library attempts preserve cancellation intent while older published maps remain usable", async () => {

@@ -1,51 +1,67 @@
-# 取消教材處理
+# 取消並移除教材
 
-取消只停止指定 learner 所擁有的單一 processing run。Material、source PDF、先前已發布的 Knowledge Structure 與 StudySession 全部保留。沒有刪除、重新分析、pause/resume 或 resident 模型控制功能。
+Upload → Processing 是新教材的第一次分析。「取消並移除教材」會停止不需要的分析，並移除該份 Material、處理紀錄及原始 PDF。處理失敗本身不代表刪除授權：failed、legacy cancelled 或尚未分析的教材仍保留，由 learner 確認「移除教材」。
 
 ## Canonical contracts
 
-- Run：`material-processing-run/v5`，新增 nullable `cancel_requested_at`。
-- 教材集合／項目：`material-library/v2`、`material-library-item/v2`；`latest_attempt` 同步投影取消意圖。
-- 已發布 binding 保持 `material-run-output-binding/v4`。
-- 不提供舊 run v4／library v1 相容回應。
+- 唯一公開移除入口：`DELETE /v1/materials/{material_id}`。
+- HTTP 202、`material-discard/v1`：`material_id` 與 `state: removing | removed`。
+- CookieSession、Origin required；拒絕 query、非空 body 與 client learner override，不需要 Idempotency-Key。
+- 跨 owner／已不存在為 `RESOURCE_NOT_FOUND` / 404。不保存刪除 tombstone；重複 DELETE 在 removing 期間穩定，完成後為 404。
+- 不可移除為 `MATERIAL_NOT_DISCARDABLE` / 409 / retryable false；DB／filesystem 暫時錯誤為 `STORAGE_UNAVAILABLE` / 503。
+- Run 維持 `material-processing-run/v5`，library/item 維持 v2，output binding 維持 v4。
+- 舊 public cancel-only endpoint 與 frontend client 已移除；run cancellation 是 internal primitive，不再有 learner cancel-but-keep 行為。
 
-`POST /v1/material-processing-runs/{run_id}/cancel` 要求 CookieSession 與正確 Origin，拒絕 query parameters 和非空 body。不需要 Idempotency-Key，回傳目前 run v5。跨 learner 為 404；其他錯誤沿用固定、安全的 API error contract。
+## Eligibility 與持久化意圖
 
-| DB state | Cancel response / transition |
+| Material 的全部資料 | DELETE 行為 |
 |---|---|
-| pending | 立即 cancelled；request、completion、updated 時間使用同一 DB clock 值 |
-| running queued/evidence/semantics | 首次寫入 cancel_requested_at，仍 running；重複請求不改 timestamp |
-| running publishing | 不接受新的取消意圖，原樣回傳 |
-| succeeded / partial / failed / cancelled | 原樣回傳 |
+| 無 run，且沒有 map/session | 直接移除 |
+| 全部 run 都 failed/cancelled，且沒有 map/session | 直接移除 |
+| Pending，且沒有受保護資料 | 保存 discard intent，pending 立即 cancelled，再移除 |
+| Running queued/evidence/semantics，且沒有受保護資料 | 保存 intent，對所有 active runs 接受 cancellation，回 removing |
+| 任一 succeeded/partial、running publishing、KnowledgeStructure 或 StudySession | 409，不設定 intent，不刪除 |
 
-沒有正式 `cancelling` status。「正在取消處理」只由 running + non-null cancel_requested_at 推導。
+`materials.discard_requested_at` 是 nullable internal authority，不是 status enum，也不加入 library response。新取消要求只有在持有 Material → run row locks、owner/source identity 正確且 Material 已有 discard intent 時才能建立。新 run 建立也鎖 Material，拒絕已要求 discard 的教材。
+
+Run statuses 仍只有 pending、running、succeeded、partial、failed、cancelled。既有 `cancel_requested_at` 無論是否有 Material intent，worker 都必須 honor；歷史 cancelled 資料合法且不會被 migration 補 intent 或自動刪除。
 
 ## Worker 與 race
 
-claim、取消要求、progress checkpoint、failure 使用相同 run row lock。
+Discard 先鎖 Material，再依 run ID 鎖住全部 runs，檢查全部 map/session 與 run eligibility。取消與 publishing transition 使用同一 run row lock：
 
-- cancel 先於 publishing：checkpoint 提交 cancelled 後正常 unwind，不發布新 structure。
-- publishing 先取得鎖：後來的取消不被接受，發布繼續。
-- cancel 先於 failure：取消意圖優先，terminal 為 cancelled、error_code 為 null。
-- failure 先完成：後來的取消不改寫既有 failure。
-- restart recovery：有取消意圖的 running 轉 cancelled；其他 running 維持原 RESTART_INTERRUPTED failure 行為。
+- discard 先：Material intent 和所有 cancellation requests 同一 transaction commit；publishing checkpoint honor cancellation，不發布新 structure。
+- publishing 先：discard 回 409，發布繼續，舊地圖不受影響。
+- 已接受取消先於 failure：terminal 是 cancelled、error_code null。Failure 已先完成則不改寫其結果；明確 discard 仍可清除未發布教材。
+- Runtime work 前、preflight 後、evidence page、semantic bundle、下一個 bundle/retry、publishing 前維持 cooperative checkpoints。單一已在執行的 OCR/Qwen request 允許先完成。
+- Cancellation terminal transaction 先 commit、pipeline 正常 unwind；worker 再呼叫統一 purge authority。多個 run 必須全部停止才可 purge。
+- Startup 先恢復 interrupted runs，再 reconciliation/purge。Worker 完成工作與正常輪詢時重試尚未完成的 discard；沒有另一張 queue 或 scheduler。
 
-Checkpoint 包含 runtime work 前、preflight 後、每個 evidence page／semantic bundle 的 progress、evidence → semantics 前、下一個 bundle／semantic retry 前與 publishing transition。取消 terminal 必須先 commit，之後才拋內部 unwind signal，避免 transaction rollback 撤銷取消。
+## DB 與實體 PDF 清理
 
-已在執行中的單一 OCR／Qwen request 可以先完成，下一個 checkpoint 才停止。取消不 kill backend、worker 或共享 Qwen/vLLM；沿用 pipeline 對自己所擁有暫存資源的既有 cleanup。
+`runtime/material_discard.py` 是唯一 eligibility / deletion SQL authority。`runtime/storage/artifacts.py` 負責檔案操作：
+
+1. 鎖 Material、全部 runs 與 source Artifact，重新確認沒有受保護資料、沒有 active run。
+2. 原子 rename `objects/<artifact_id.hex>` 到同一 artifact root 的私有 `.trash/`，同步目錄。
+3. 同一 DB transaction 明確依序刪除 runs → Artifact → Material；不增加 cascade。
+4. Commit 後由新 transaction 查 DB：沒有 Artifact reference 則 unlink quarantine PDF。
+5. Rollback／commit acknowledgement 遺失時，也重新查 DB 決定 restore 或 unlink，不猜測 commit 是否成功。
+6. Process crash 留下的 quarantine 在 startup/worker retry reconciliation：DB 仍引用 → restore；不再引用 → unlink。
+
+每個 source 的 PostgreSQL advisory transaction lock 讓 reconciliation 等待 rename 所屬 DB transaction 完成。Quarantine 0700、不對產品提供 URL；清理失敗保留可重試的私有檔案，不建立指向已永久刪除 PDF 的 DB row。若 filesystem/DB 持續不可用，清理需等 storage 恢復；不會回報成功移除。已提交後 unlink 失敗可能回 503，此時 DB row 已移除，worker/startup 仍會清除 quarantine。
 
 ## Frontend
 
-pending 與可取消的 running 顯示 inline confirmation。第一次點擊不送 API；確認時防止重複送出，GET polling 繼續。API 回傳／GET 觀察到取消意圖後顯示「正在取消處理」，只有 terminal cancelled 才顯示「已取消教材處理」。Reload 由 persisted fields 重建畫面。
+Processing 以 inline confirmation 送出一次 DELETE。`removed` 直接返回我的教材；`removing` 顯示「正在取消並移除教材」，GET polling 繼續。新 invariant 使 reload 讀到 active cancellation request 時可重建移除狀態。
 
-取消 POST 的失敗是獨立 task alert，不把 run 改成 failed。Publishing 贏得 race 時顯示不能再取消的 notice。舊 GET 或較舊 POST 不能蓋掉新的取消意圖或 terminal 狀態。Cancelled 不投影為 100% 成功。
+只有本頁已收到 DELETE acceptance 或讀到 active persisted cancellation intent，後續 run 404 才當成移除完成返回教材集合；一般 404 仍顯示讀取錯誤。若直接重開已刪除的舊 URL，沒有 acceptance 證據時也維持一般 404，不推測刪除原因。
 
-## Migration 與啟動
+Failed/cancelled/no-run card 只有在沒有 map/session 時呈現「移除教材」，使用 inline confirmation、保留／確認按鈕、鍵盤焦點與 Escape。DELETE 失敗保留卡片並提供 retry；成功更新列表與數量。Server 仍以全部 runs 決定 eligibility，不信任 latest_attempt gating。Detail 沿用同一小型控制元件，沒有重設版面。
 
-`0005_material_processing_cancellation.sql` 只新增欄位並替換實際 PostgreSQL 的 status／lifecycle constraints；0001–0004 checksum 不變，也不改寫既有 run data。
+## Migration 與版本切換
 
-版本切換需協調舊 worker：已在舊程式中執行的 run 不會因檔案更新而取得新的 checkpoint。先讓舊 worker 的工作結束，再套用 migration 並啟動新 backend/frontend；不要混用舊 worker 與新的取消契約，也不要以 kill resident service 代替取消。
+新增 `0006_material_discard.sql`，只新增 nullable Material 欄位；0001–0005 完全不變。升級前確認舊版沒有 active cancel-only request，並協調停止舊 backend，再 migration/build/start；不要讓舊 public cancel route 與新 invariant 混用。歷史 terminal cancellation 不需搬移或刪除。
 
-## Deterministic verification
+## Verification
 
-`backend/tests/runtime/test_processing_cancellation.py` 使用 disposable PostgreSQL、Event-controlled row-lock ordering 和 stubbed analysis。`backend/tests/test_material_pipeline_v1.py` 驗證 callback 不會開啟下一個 bundle/retry。Browser cases 在 `frontend/e2e/processing-cancel.spec.ts`，包含 publishing race、POST failure、GET/POST late response、reload、mobile confirmation 與舊地圖入口。這些測試不需要 A40、Qwen、OCR 或 model qualification。
+`test_material_discard.py` 使用 disposable PostgreSQL、synthetic PDFs、Event 排序的競態、stubbed worker 與 quarantine fault injection。`test_processing_cancellation.py` 驗證新取消的 intent gate 及 legacy honor/recovery；pipeline checkpoint tests 保持。Processing／material-discard Playwright 使用隔離 mocked API，涵蓋 desktop/mobile、409、503、reload、404、舊 map/session 與卡片數量更新。沒有 GPU、OCR model、Qwen inference 或 Assessment qualification，也沒有模型／程序 kill 控制。

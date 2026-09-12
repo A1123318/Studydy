@@ -56,6 +56,12 @@ class MaterialOutputBindingView(_Closed):
     semantic_calls: int
 
 
+class MaterialDiscardView(_Closed):
+    schema_: Literal["material-discard/v1"] = Field(default="material-discard/v1", alias="schema")
+    material_id: UUID
+    state: Literal["removing", "removed"]
+
+
 class MaterialProcessingRunView(_Closed):
     schema_: Literal["material-processing-run/v5"] = Field(alias="schema")
     run_id: UUID

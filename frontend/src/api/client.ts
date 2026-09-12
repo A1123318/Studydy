@@ -12,6 +12,7 @@ import type {
   LearnerProgressView,
   MaterialProcessingCreate,
   MaterialProcessingRunView,
+  MaterialDiscardView,
   MaterialView,
   MaterialLibraryItem,
   MaterialLibraryView,
@@ -27,6 +28,7 @@ const knownReasons = new Set<KnownApiReasonCode>([
   "INVALID_EMAIL",
   "INVALID_CREDENTIALS", "ACCOUNT_UNAVAILABLE", "REQUEST_INVALID", "SESSION_REQUIRED", "ORIGIN_NOT_ALLOWED", "RESOURCE_NOT_FOUND",
   "IDEMPOTENCY_CONFLICT", "NO_SAFE_ASSESSMENT", "MATERIAL_TOO_LARGE",
+  "MATERIAL_NOT_DISCARDABLE",
   "MATERIAL_PDF_INVALID", "UNSUPPORTED_MEDIA_TYPE", "STORAGE_UNAVAILABLE", "INTERNAL_ERROR",
 ]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -80,6 +82,13 @@ function materialAttempt(value: unknown): boolean {
     && typeof item.error_code === "string" && /^[A-Z][A-Z0-9_]{0,99}$/.test(item.error_code);
   return ["succeeded", "partial"].includes(String(item.status)) && item.progress_stage === "completed"
     && item.cancel_requested_at === null && item.error_code === null && item.total_pages !== null && item.completed_pages === item.total_pages;
+}
+
+function materialDiscard(value: unknown): value is MaterialDiscardView {
+  const item = object(value);
+  return !!item && Object.keys(item).length === 3 && item.schema === "material-discard/v1"
+    && typeof item.material_id === "string" && uuid.test(item.material_id)
+    && (item.state === "removing" || item.state === "removed");
 }
 
 function materialRun(value: unknown): value is MaterialProcessingRunView {
@@ -268,6 +277,7 @@ function safeMessage(reason: ApiReasonCode): string {
   if (reason === "MATERIAL_PDF_INVALID") return "這份 PDF 已損毀、加密或無法開啟。";
   if (reason === "UNSUPPORTED_MEDIA_TYPE") return "只接受 PDF 教材。";
   if (reason === "STORAGE_UNAVAILABLE") return "資料服務暫時無法使用，請稍後再試。";
+  if (reason === "MATERIAL_NOT_DISCARDABLE") return "這份教材已有可使用的學習資料，目前無法直接移除。";
   return "請求無法完成，請稍後再試。";
 }
 
@@ -444,11 +454,11 @@ export class StudydyApiClient {
     return this.json(`/v1/material-processing-runs/${encodeURIComponent(runId)}`, { method: "GET" }, materialRun);
   }
 
-  async cancelMaterialRun(runId: string): Promise<MaterialProcessingRunView> {
-    const view = await this.json(`/v1/material-processing-runs/${encodeURIComponent(runId)}/cancel`, {
-      method: "POST", headers: { Origin: origin() },
-    }, materialRun, 10_000);
-    if (view.run_id !== runId) throw new ApiClientError("schema", "處理作業身分不一致。", { reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
+  async discardMaterial(materialId: string): Promise<MaterialDiscardView> {
+    const view = await this.json(`/v1/materials/${encodeURIComponent(materialId)}`, {
+      method: "DELETE", headers: { Origin: origin() },
+    }, materialDiscard, 10_000);
+    if (view.material_id !== materialId) throw new ApiClientError("schema", "教材身分不一致。", { reasonCode: "RESPONSE_SCHEMA_MISMATCH" });
     return view;
   }
 

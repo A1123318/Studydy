@@ -12,7 +12,7 @@ from typing import BinaryIO
 from uuid import UUID, uuid4
 
 import pymupdf
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -68,7 +68,7 @@ def _root() -> Path:
             raise ValueError
         objects = path / "objects"
         staging = path / ".staging"
-        for directory in (objects, staging):
+        for directory in (objects, staging, path / ".trash"):
             directory.mkdir(mode=0o700, exist_ok=True)
             item = directory.stat(follow_symlinks=False)
             if not stat.S_ISDIR(item.st_mode) or stat.S_IMODE(item.st_mode) != 0o700:
@@ -122,6 +122,66 @@ def _copy_pdf(source: BinaryIO, destination: Path) -> tuple[bytes, int]:
 
 def _object_path(root: Path, artifact_id: UUID) -> Path:
     return root / "objects" / artifact_id.hex
+
+
+def _sync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _lock_source_discard(session: Session, artifact_id: UUID) -> None:
+    # Reconciliation 必須等待 rename 所屬 transaction 結束，不能誤還原未提交的刪除。
+    session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": int.from_bytes(artifact_id.bytes[:8], "big", signed=True)})
+
+
+def _reconcile_source(session: Session, root: Path, artifact_id: UUID) -> None:
+    trash = root / ".trash" / artifact_id.hex
+    if not trash.exists():
+        return
+    if not stat.S_ISREG(trash.stat(follow_symlinks=False).st_mode):
+        raise OSError
+    referenced = session.scalar(select(Artifact.artifact_id).where(Artifact.artifact_id == artifact_id))
+    if referenced is not None:
+        destination = _object_path(root, artifact_id)
+        if destination.exists():
+            raise OSError
+        os.rename(trash, destination)
+        _sync_directory(destination.parent)
+    else:
+        trash.unlink()
+    _sync_directory(trash.parent)
+
+
+def quarantine_source_pdf(session: Session, artifact_id: UUID) -> None:
+    """Caller 已鎖 Material/runs/artifact；advisory lock 隨 DB commit/rollback 釋放。"""
+    try:
+        root = _root()
+        _lock_source_discard(session, artifact_id)
+        _reconcile_source(session, root, artifact_id)
+        source = _object_path(root, artifact_id)
+        if not stat.S_ISREG(source.stat(follow_symlinks=False).st_mode):
+            raise OSError
+        os.rename(source, root / ".trash" / artifact_id.hex)
+        _sync_directory(source.parent)
+        _sync_directory(root / ".trash")
+    except Exception:
+        raise _error("ARTIFACT_STORAGE_FAILED") from None
+
+
+def reconcile_discarded_sources(*, dsn: str | None = None, artifact_id: UUID | None = None) -> None:
+    """只處理 discard quarantine：仍有 DB reference 就還原，否則實體刪除。"""
+    try:
+        root = _root()
+        identities = [artifact_id] if artifact_id else [UUID(hex=path.name) for path in (root / ".trash").iterdir()]
+        for identity in identities:
+            with database_session(dsn) as session:
+                _lock_source_discard(session, identity)
+                _reconcile_source(session, root, identity)
+    except Exception:
+        raise _error("ARTIFACT_STORAGE_FAILED") from None
 
 
 def _verify_file(path: Path, expected_digest: bytes, expected_size: int) -> BinaryIO:

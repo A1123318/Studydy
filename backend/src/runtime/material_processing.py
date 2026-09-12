@@ -22,7 +22,7 @@ from runtime.semantic_service import SemanticServiceError, preflight_semantic_se
 
 from .storage.artifacts import open_verified_source_pdf
 from .storage.knowledge_structures import KnowledgeStructureStoreError, publish_knowledge_structure, runtime_binding_is_valid
-from .storage.tables import Learner, MaterialProcessingRun as RunRow, database_session
+from .storage.tables import Learner, Material, MaterialProcessingRun as RunRow, database_session
 
 
 _CONFIG_KEYS = {"private_runtime_root", "runtime_lock", "python_executable", "site_packages", "ocr_model_root"}
@@ -299,6 +299,14 @@ def create_material_processing_run(
         with database_session(dsn) as session:
             if session.scalar(select(Learner.learner_id).where(Learner.learner_id == learner_id).with_for_update()) is None:
                 raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+            material = session.scalar(select(Material).where(
+                Material.material_id == material_id, Material.learner_id == learner_id,
+                Material.source_artifact_id == source_artifact_id,
+            ).with_for_update())
+            if material is None:
+                raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
+            if material.discard_requested_at is not None:
+                raise MaterialProcessingError("MATERIAL_NOT_DISCARDABLE")
             existing = session.scalar(select(RunRow).where(RunRow.learner_id == learner_id, RunRow.idempotency_key_sha256 == key).with_for_update())
             if existing is not None:
                 if bytes(existing.request_fingerprint) != fingerprint:
@@ -334,21 +342,36 @@ def read_material_processing_run(learner_id: UUID, run_id: UUID, *, dsn: str | N
         raise MaterialProcessingError("MATERIAL_RUN_STORAGE_FAILED") from None
 
 
+def _request_cancellation_locked(material: Material, row: RunRow, session: Any) -> None:
+    """Caller 持有 Material → run locks；只限制新增意圖，不阻擋既有取消。"""
+    if (row.learner_id, row.material_id, row.source_artifact_id) != (material.learner_id, material.material_id, material.source_artifact_id):
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+    if row.cancel_requested_at is not None or row.status not in {"pending", "running"} or row.progress_stage == "publishing":
+        return
+    if material.discard_requested_at is None:
+        raise MaterialProcessingError("MATERIAL_RUN_INVALID")
+    now = session.scalar(select(func.clock_timestamp()))
+    row.cancel_requested_at = row.updated_at = now
+    if row.status == "pending":
+        row.status = "cancelled"
+        row.completed_at = now
+
+
 def request_material_processing_cancellation(learner_id: UUID, run_id: UUID, *, dsn: str | None = None) -> MaterialProcessingRun:
-    """與 claim／publishing 共用 row lock；重複取消不改寫原時間。"""
+    """Internal discard primitive；首次取消必須已具備 Material discard intent。"""
     try:
         with database_session(dsn) as session:
+            material = session.scalar(select(Material).where(
+                Material.learner_id == learner_id,
+                Material.material_id == select(RunRow.material_id).where(RunRow.learner_id == learner_id, RunRow.run_id == run_id).scalar_subquery(),
+            ).with_for_update())
+            if material is None:
+                raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
             row = session.scalar(select(RunRow).where(RunRow.learner_id == learner_id, RunRow.run_id == run_id).with_for_update())
             if row is None:
                 raise MaterialProcessingError("MATERIAL_RUN_NOT_FOUND")
-            if row.status == "pending" or (row.status == "running" and row.progress_stage in {"queued", "evidence", "semantics"} and row.cancel_requested_at is None):
-                now = session.scalar(select(func.clock_timestamp()))
-                row.cancel_requested_at = now
-                row.updated_at = now
-                if row.status == "pending":
-                    row.status = "cancelled"
-                    row.completed_at = now
-                session.flush()
+            _request_cancellation_locked(material, row, session)
+            session.flush()
             return _row(row)
     except MaterialProcessingError:
         raise

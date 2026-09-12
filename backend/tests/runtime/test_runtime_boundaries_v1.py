@@ -75,6 +75,7 @@ def test_runtime_verify_loads_only_ocr_sidecar(tmp_path, monkeypatch):
 def test_worker_recovers_once_and_does_not_own_model_lifecycle(monkeypatch):
     events = []
     monkeypatch.setattr(workers_module, "recover_interrupted_material_runs", lambda **_: events.append("recover") or 0)
+    monkeypatch.setattr(workers_module, "finish_material_discards", lambda **_: None)
     monkeypatch.setattr(workers_module, "claim_next_material_processing_run", lambda **_: None)
     worker = workers_module.RuntimeWorkers(None, {})
     worker.start()

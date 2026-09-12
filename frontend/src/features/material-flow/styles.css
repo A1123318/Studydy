@@ -600,6 +600,7 @@
 }
 
 .processing-cancel { margin-top: var(--space-5); }
+.material-remove-control { margin-top: var(--space-4); }
 .cancel-confirmation { padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .cancel-confirmation h3 { margin: 0; font-size: 16px; }
 .cancel-confirmation p { color: var(--text-secondary); font-size: 14px; }

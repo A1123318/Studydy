@@ -7,6 +7,7 @@ export type KnownApiReasonCode =
   | "ORIGIN_NOT_ALLOWED"
   | "RESOURCE_NOT_FOUND"
   | "IDEMPOTENCY_CONFLICT"
+  | "MATERIAL_NOT_DISCARDABLE"
   | "NO_SAFE_ASSESSMENT"
   | "MATERIAL_TOO_LARGE"
   | "MATERIAL_PDF_INVALID"
@@ -49,6 +50,12 @@ export type MaterialOutputBinding = {
   reason_codes: string[];
   ocr_calls: number;
   semantic_calls: number;
+};
+
+export type MaterialDiscardView = {
+  schema: "material-discard/v1";
+  material_id: string;
+  state: "removing" | "removed";
 };
 
 export type MaterialProcessingRunView = {

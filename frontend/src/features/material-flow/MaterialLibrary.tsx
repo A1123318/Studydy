@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { errorMessage, type StudydyApiClient } from "../../api/client";
+import { ApiClientError, errorMessage, type StudydyApiClient } from "../../api/client";
 import type { MaterialLibraryItem, MaterialStructureLink, StudySessionLink } from "../../api/contracts";
 import { writeRoute } from "../../app/routes";
 import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
+import { MaterialRemoveControl } from "./MaterialRemoveControl";
 import { formatFileSize, materialFailureMessage, materialProgressStageLabel, materialRunLabel } from "./material-flow";
 
 function openStructure(item: MaterialLibraryItem, structure: MaterialStructureLink) {
@@ -20,6 +21,7 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
   const [items, setItems] = useState<MaterialLibraryItem[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const pendingRemovals = useRef(new Set<string>());
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
@@ -29,10 +31,16 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
         if (cancelled) return;
         setItems(materials);
         setMessage(null);
-        if (materials.some(item => item.latest_attempt?.status === "pending" || item.latest_attempt?.status === "running")) {
+        for (const id of pendingRemovals.current) {
+          if (!materials.some(item => item.material_id === id)) pendingRemovals.current.delete(id);
+        }
+        if (pendingRemovals.current.size > 0 || materials.some(item => item.latest_attempt?.status === "pending" || item.latest_attempt?.status === "running")) {
           timer = window.setTimeout(read, 3000);
         }
       } catch (error) {
+        if (!cancelled && materialId && pendingRemovals.current.has(materialId) && error instanceof ApiClientError && error.reasonCode === "RESOURCE_NOT_FOUND") {
+          writeRoute({ name: "materials" }); return;
+        }
         if (!cancelled) setMessage(errorMessage(error));
       }
     };
@@ -90,6 +98,15 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
           {latest && <button className={processingPrimary ? "primary-button" : "secondary-button"} type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
           {materialId && <a className="secondary-button" href={apiClient.sourceArtifactUrl(item.source_artifact_id)} target="_blank" rel="noreferrer">開啟原始 PDF</a>}
         </div>
+        {!mapsOnly && available.length === 0 && item.study_sessions.length === 0 && (!latest || latest.status === "failed" || latest.status === "cancelled") &&
+          <MaterialRemoveControl apiClient={apiClient} materialId={item.material_id} onAccepted={state => {
+            if (state === "removed") {
+              pendingRemovals.current.delete(item.material_id);
+              if (materialId) writeRoute({ name: "materials" });
+              else setItems(previous => previous?.filter(saved => saved.material_id !== item.material_id) ?? null);
+            } else pendingRemovals.current.add(item.material_id);
+            setReload(value => value + 1);
+          }} />}
         {!isCollection && unpublishedNote}
         {materialId && item.study_sessions.length > 0 && <section aria-label="學習紀錄">
           <h3>既有學習紀錄</h3>

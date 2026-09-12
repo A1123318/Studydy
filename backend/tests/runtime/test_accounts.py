@@ -212,13 +212,14 @@ def test_email_cutover_retires_old_credentials_and_sessions_without_deleting_own
         connection.execute("INSERT INTO artifacts VALUES (%s,%s,%s,'source_pdf','application/pdf',%s,1,now())", (artifact_id, learner_id, material_id, bytes(32)))
         material = connection.execute("SELECT * FROM materials").fetchone()
         owner = connection.execute("SELECT learner_id,created_at FROM learners").fetchone()
-    assert run_migrations(clean_database_dsn) == (4, 5)
+    assert run_migrations(clean_database_dsn) == (4, 5, 6)
     with psycopg.connect(clean_database_dsn) as connection:
         columns = {row[0] for row in connection.execute("SELECT column_name FROM information_schema.columns WHERE table_name='learners'")}
         assert "email" in columns and "username" not in columns
         assert connection.execute("SELECT email,password_hash FROM learners").fetchone() == (None, None)
         assert connection.execute("SELECT learner_id,created_at FROM learners").fetchone() == owner
-        assert connection.execute("SELECT * FROM materials").fetchone() == material
+        assert connection.execute("SELECT material_id,learner_id,source_artifact_id,upload_idempotency_key_sha256,upload_request_fingerprint,created_at,display_name FROM materials").fetchone() == material
+        assert connection.execute("SELECT discard_requested_at FROM materials").fetchone() == (None,)
         assert connection.execute("SELECT revoked_at IS NOT NULL FROM learner_sessions WHERE session_id=%s", (session_id,)).fetchone() == (True,)
     assert resolve_session(_encode_token(old_token), dsn=clean_database_dsn) is None
     fresh = register_account("new_account@example.com", PASSWORD, dsn=clean_database_dsn)
