@@ -260,11 +260,6 @@
   margin-top: var(--space-6);
 }
 
-.processing-stack {
-  display: grid;
-  gap: var(--space-5);
-}
-
 .processing-card {
   padding: var(--space-6);
 }
@@ -382,22 +377,11 @@
   line-height: 1.5;
 }
 
-.material-result {
-  display: grid;
-  grid-template-columns: 48px 1fr auto;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.material-result h2,
-.material-result p {
-  margin: 0;
-}
-
-.material-result p {
-  margin-top: var(--space-1);
-  color: var(--text-secondary);
-}
+.processing-summary-material { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-3); }
+.processing-summary h3 { font-size: 16px; margin: var(--space-5) 0 var(--space-3); }
+.processing-summary-material h3,
+.processing-summary-material p { margin: 0; }
+.processing-summary-material p { margin-top: var(--space-1); color: var(--text-secondary); }
 
 .status-badge {
   display: inline-flex;
@@ -412,23 +396,7 @@
   color: var(--success);
 }
 
-.result-summary {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  align-items: center;
-}
-
-.result-summary h2 {
-  grid-column: 1 / -1;
-}
-
-.result-summary img {
-  width: 140px;
-  height: 140px;
-  object-fit: contain;
-}
-
-.result-summary ul {
+.processing-summary ul {
   display: grid;
   gap: var(--space-3);
   margin: 0;
@@ -436,27 +404,15 @@
   list-style: none;
 }
 
-.result-summary li {
+.processing-summary li {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
 }
 
-.result-summary li svg {
+.processing-summary li svg {
   color: var(--success);
-}
-
-.complete-progress {
-  display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-5);
-}
-
-.complete-progress strong {
-  color: var(--studydy-blue);
-  font-size: 1.35rem;
-  text-align: right;
 }
 
 .completion-bar {
@@ -475,6 +431,8 @@
   color: var(--success);
   background: var(--success-soft);
 }
+
+.completion-icon.is-partial { color: #795400; background: var(--warning-soft); }
 
 .completion-bar p {
   margin: var(--space-1) 0 0;
@@ -532,20 +490,10 @@
     grid-template-columns: 1fr;
   }
 
-  .result-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .result-summary img {
-    margin: 0 auto;
-  }
-
-  .material-result,
   .completion-bar {
     grid-template-columns: 44px 1fr;
   }
 
-  .material-result .status-badge,
   .completion-bar .primary-button {
     grid-column: 1 / -1;
     justify-self: stretch;

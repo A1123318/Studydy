@@ -43,7 +43,7 @@ async function session(page: Page) {
 }
 
 for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
-  const selected = viewport.width === 1536 ? Object.keys(cases) : ["pending", "evidence", "semantics", "publishing", "succeeded", "failed"];
+  const selected = viewport.width === 1536 ? Object.keys(cases) : ["pending", "evidence", "semantics", "publishing", "succeeded", "partial", "failed"];
   for (const name of selected) {
     test(`processing ${name} at ${viewport.width}px is truthful and usable`, async ({ page }) => {
       await page.setViewportSize(viewport); await page.clock.install({ time: clockTime }); await page.clock.pauseAt(clockTime); await session(page);
@@ -73,7 +73,25 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(processing.locator("code")).toBeHidden();
       } else if (run.status === "succeeded" || run.status === "partial") {
         await expect(processing.getByRole("heading", { level: 1 })).toHaveText(run.status === "partial" ? "教材整理完成，部分內容待確認" : "教材整理完成");
-        await expect(processing.getByRole("progressbar", { name: "教材處理完成 100%", exact: true })).toHaveAttribute("value", "100");
+        await expect(processing.locator(".processing-grid > section.processing-card")).toHaveCount(2);
+        await expect(processing.locator(".processing-grid h2")).toHaveText(["處理摘要", "處理流程"]);
+        await expect(processing.getByRole("heading", { name: "可查看內容", exact: true })).toBeVisible();
+        await expect(processing.locator(".processing-summary")).toContainText("共處理 45 頁");
+        await expect(processing.locator(".processing-summary ul > li")).toHaveText(["可回查的概念與學習重點", "教材中的概念關係", "教材建議學習順序"]);
+        await expect(processing.locator(".status-badge")).toHaveClass(`status-badge ${run.status === "partial" ? "is-partial" : "is-success"}`);
+        await expect(processing.locator(".status-badge")).toHaveText(run.status === "partial" ? "部分內容待確認" : "處理完成");
+        if (run.status === "partial") await expect(processing.locator(".status-badge svg")).toHaveCount(0);
+        await expect(processing.locator(".status-timeline > li")).toHaveCount(4);
+        await expect(processing.locator(".status-timeline > li.is-complete")).toHaveCount(4);
+        await expect(processing.locator(".status-timeline strong")).toHaveText(["等待處理資源", "整理頁面與教材來源", "建立概念、關係與學習順序", "發布知識地圖"]);
+        await expect(processing.locator(".status-timeline p")).toHaveText(Array(4).fill("此階段已完成。"));
+        await expect(processing.getByRole("progressbar")).toHaveCount(0);
+        await expect(processing.locator(".complete-progress, .processing-stack, .result-summary")).toHaveCount(0);
+        await expect(processing).not.toContainText(/100%|已發布內容|處理結果|一切準備完成/);
+        await expect(processing.locator("img")).toHaveCount(1);
+        await expect(processing.locator('img[src$="processing-complete.png"]')).toHaveCount(0);
+        await expect(processing.locator(".completion-bar strong")).toHaveText(run.status === "partial" ? "知識地圖已建立，部分內容待確認" : "知識地圖已準備完成");
+        await expect(processing.locator(".processing-hero > div > p:last-child")).toHaveText(run.status === "partial" ? "知識地圖已建立，可先查看已整理的內容；部分內容仍需確認。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。");
         await expect(processing.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
         await expect(processing).toContainText("可回查的概念與學習重點");
       } else {
@@ -112,7 +130,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         const hero = await processing.locator(".processing-hero").boundingBox();
         expect(hero!.height).toBeGreaterThanOrEqual(150); expect(hero!.height).toBeLessThanOrEqual(180);
       }
-      if (["evidence", "semantics", "publishing"].includes(name)) {
+      if (["evidence", "semantics", "publishing", "succeeded", "partial"].includes(name)) {
         const cards = await processing.locator(".processing-grid > section").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
         if (viewport.width > 920) { expect(cards[0].y).toBe(cards[1].y); expect(cards[0].y).toBeLessThan(350); }
         else expect(cards[1].y).toBeGreaterThanOrEqual(cards[0].y + cards[0].height);

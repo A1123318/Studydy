@@ -263,38 +263,35 @@ export function RunView({ apiClient, route }: {
       <header className="processing-hero">
         <img src="/assets/studydy/success-jump.png" alt="" />
         <div><p className="eyebrow">教材處理</p><h1>{partial ? "教材整理完成，部分內容待確認" : "教材整理完成"}</h1>
-          <p>知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。</p></div>
+          <p>{partial ? "知識地圖已建立，可先查看已整理的內容；部分內容仍需確認。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。"}</p></div>
       </header>
       <div className="processing-grid">
-        <div className="processing-stack">
-          <section className="surface processing-card material-result">
+        <section className="surface processing-card processing-summary">
+          <h2>處理摘要</h2>
+          <div className="processing-summary-material">
             <span className="file-kind"><Icon name="file" /></span>
-            <div><h2>教材</h2><p>共處理 {binding.page_count} 頁</p></div>
-            <span className={`status-badge ${partial ? "is-partial" : "is-success"}`}><Icon name="check" />{partial ? "部分內容待確認" : "處理完成"}</span>
-          </section>
-          <section className="surface processing-card result-summary">
-            <h2>已發布內容</h2>
-            <img src="/assets/studydy/processing-complete.png" alt="" />
-            <ul>
-              <li><Icon name="check" />可回查的概念與學習重點</li>
-              <li><Icon name="check" />教材中的概念關係</li>
-              <li><Icon name="check" />教材建議學習順序</li>
-            </ul>
-          </section>
-        </div>
+            <div><h3>教材</h3><p>共處理 {binding.page_count} 頁</p></div>
+          </div>
+          <p className={`status-badge ${partial ? "is-partial" : "is-success"}`}>{!partial && <Icon name="check" />}{partial ? "部分內容待確認" : "處理完成"}</p>
+          <h3>可查看內容</h3>
+          <ul>
+            <li><Icon name="check" />可回查的概念與學習重點</li>
+            <li><Icon name="check" />教材中的概念關係</li>
+            <li><Icon name="check" />教材建議學習順序</li>
+          </ul>
+        </section>
         <section className="surface processing-card">
-          <h2>處理結果</h2>
-          <div className="complete-progress"><strong>100%</strong><progress className="processing-progress" max={100} value={100} aria-label="教材處理完成 100%" /></div>
+          <h2>處理流程</h2>
           <ol className="status-timeline">
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>教材已接收</strong><p>教材已上傳並完成整理。</p></div></li>
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>來源已保留</strong><p>可以回到原始 PDF 查看來源。</p></div></li>
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>知識地圖已發布</strong><p>{partial ? "部分內容仍待確認，可先查看已發布的結果。" : "可以開始探索教材概念與關係。"}</p></div></li>
+            {materialProgressStages.slice(0, -1).map(stage => (
+              <li className="is-complete" key={stage}><span><Icon name="check" /></span><div><strong>{materialProgressStageLabel(stage)}</strong><p>此階段已完成。</p></div></li>
+            ))}
           </ol>
         </section>
       </div>
       <div className="surface completion-bar">
-        <span className="completion-icon"><Icon name="check" /></span>
-        <div><strong>{partial ? "已發布可查看的內容" : "知識地圖已準備完成"}</strong><p>可以查看概念、關係、來源與建議學習順序。</p></div>
+        <span className={`completion-icon${partial ? " is-partial" : ""}`}><Icon name={partial ? "map" : "check"} /></span>
+        <div><strong>{partial ? "知識地圖已建立，部分內容待確認" : "知識地圖已準備完成"}</strong><p>{partial ? "可以先查看已整理的概念、關係與來源。" : "可以查看概念、關係、來源與建議學習順序。"}</p></div>
         <button className="primary-button" type="button" onClick={() => writeRoute({
           name: "knowledge-map", materialId: run.material_id, runId: run.run_id,
           structureRevision: binding.knowledge_structure_revision,
