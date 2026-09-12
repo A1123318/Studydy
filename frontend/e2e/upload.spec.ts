@@ -37,6 +37,12 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       const submit = page.locator(".upload-card .full-button");
       await expect(upload.getByRole("heading", { name: "上傳教材", level: 1, exact: true })).toBeVisible();
       await expect(submit).toBeDisabled();
+      const drop = upload.locator(".file-drop");
+      const initialHeight = (await drop.boundingBox())!.height;
+      expect(initialHeight).toBeGreaterThanOrEqual(210);
+      await expect(drop).toContainText("將 PDF 拖放到此處");
+      await expect(drop).toContainText("或點擊選擇 PDF · 最大 100 MiB");
+      expect((await drop.locator(".file-drop__icon").boundingBox())!.width).toBe(58);
       await expect(input).toHaveAttribute("accept", "application/pdf");
       await expect(upload).toHaveAttribute("aria-labelledby", "upload-title");
       await expect(page.locator(".sidebar-helper")).toHaveCount(0);
@@ -88,6 +94,17 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         expect(await input.inputValue()).toBe("");
       }
       if (state === "drag-over") await expect(page.locator(".file-drop")).toHaveClass(/is-dragging/);
+      const selected = ["selected", "long-name", "submitting", "api-failure"].includes(state);
+      const dropHeight = (await drop.boundingBox())!.height;
+      if (selected) {
+        expect(dropHeight).toBeGreaterThanOrEqual(110); expect(dropHeight).toBeLessThanOrEqual(130);
+        expect(dropHeight).toBeLessThan(initialHeight);
+        await expect(drop).toContainText("拖放或點擊以更換 PDF");
+        await expect(drop).not.toContainText("100 MiB");
+        const filename = await upload.locator(".chosen-file strong").textContent();
+        await expect(drop).not.toContainText(filename!);
+        expect((await drop.locator(".file-drop__icon").boundingBox())!.width).toBe(42);
+      } else expect(dropHeight).toBe(initialHeight);
       expect(await upload.evaluate(element => getComputedStyle(element).maxWidth)).toBe("1180px");
       const card = await upload.locator(".upload-card").boundingBox();
       const rail = await upload.locator(".upload-aside").boundingBox();
@@ -114,13 +131,28 @@ test("selection, invalid replacements, accessible picker, drag/drop and removal 
   expect(await input.evaluate(element => getComputedStyle(element).display)).not.toBe("none");
   const picker = page.waitForEvent("filechooser"); await drop.click(); await (await picker).setFiles(pdf);
   await expect(chosen).toContainText("1 KiB · 準備上傳"); await expect(submit).toBeEnabled();
-  await input.setInputFiles({ ...pdf, name: "replacement.pdf" }); await expect(chosen.locator("strong")).toHaveText("replacement.pdf");
+  const compactHeight = (await drop.boundingBox())!.height;
+  expect(compactHeight).toBeLessThan(130);
+  const replacementPicker = page.waitForEvent("filechooser");
+  await drop.click(); await (await replacementPicker).setFiles({ ...pdf, name: "replacement.pdf" });
+  await expect(chosen.locator("strong")).toHaveText("replacement.pdf");
+  expect((await drop.boundingBox())!.height).toBe(compactHeight);
+  await input.focus(); expect(await drop.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
+  const replacementDrop = await transfer(page, [{ name: "drag-replaced.pdf", type: "application/pdf" }]);
+  await drop.dispatchEvent("dragenter", { dataTransfer: replacementDrop });
+  await expect(drop).toHaveClass(/has-file/); await expect(drop).toHaveClass(/is-dragging/);
+  expect(await drop.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe("none");
+  await drop.dispatchEvent("drop", { dataTransfer: replacementDrop }); await replacementDrop.dispose();
+  await expect(chosen.locator("strong")).toHaveText("drag-replaced.pdf");
+  expect((await drop.boundingBox())!.height).toBe(compactHeight);
   for (const invalid of [
     { name: "empty.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(0) },
     { name: "not-pdf.txt", mimeType: "text/plain", buffer: Buffer.from("notes") },
   ]) {
     await input.setInputFiles(invalid); await expect(page.getByRole("alert")).toBeVisible();
     await expect(chosen).toHaveCount(0); await expect(submit).toBeDisabled();
+    await expect(drop).not.toHaveClass(/has-file/);
+    expect((await drop.boundingBox())!.height).toBeGreaterThanOrEqual(210);
     await expect(input).toHaveAttribute("aria-invalid", "true");
     await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
     await expect(page.locator("#upload-file-error")).toHaveAttribute("role", "alert");
@@ -136,6 +168,8 @@ test("selection, invalid replacements, accessible picker, drag/drop and removal 
     const invalid = await transfer(page, files); await drop.dispatchEvent("drop", { dataTransfer: invalid }); await invalid.dispose();
     await expect(page.getByRole("alert")).toContainText(files.length === 2 ? "一次只能處理一份 PDF" : "不是可用的 PDF");
     await expect(chosen).toHaveCount(0); await expect(submit).toBeDisabled();
+    await expect(drop).not.toHaveClass(/has-file/);
+    expect((await drop.boundingBox())!.height).toBeGreaterThanOrEqual(210);
     await expect(input).toHaveAttribute("aria-invalid", "true");
     await expect(input).toHaveAttribute("aria-describedby", "upload-file-error");
     await expect(page.locator("#upload-file-error")).toHaveAttribute("role", "alert");
@@ -144,6 +178,9 @@ test("selection, invalid replacements, accessible picker, drag/drop and removal 
   await input.setInputFiles(pdf); await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "移除", exact: true }).click();
   await expect(chosen).toHaveCount(0); await expect(submit).toBeDisabled(); expect(await input.inputValue()).toBe("");
+  await expect(drop).not.toHaveClass(/has-file/);
+  expect((await drop.boundingBox())!.height).toBeGreaterThanOrEqual(210);
+  await expect(drop).toContainText("將 PDF 拖放到此處");
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 

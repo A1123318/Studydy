@@ -106,8 +106,8 @@ export function UploadView({ apiClient }: { apiClient: StudydyApiClient }) {
               onChange={(event) => chooseFiles(event.currentTarget.files)}
             />
             <span className="file-drop__icon"><Icon name="upload" size={28} /></span>
-            <strong>{file ? "更換 PDF 教材" : "將 PDF 拖放到此處"}</strong>
-            <span>或點擊選擇 PDF · 最大 100 MiB</span>
+            <strong>{file ? "拖放或點擊以更換 PDF" : "將 PDF 拖放到此處"}</strong>
+            {!file && <span>或點擊選擇 PDF · 最大 100 MiB</span>}
           </label>
 
           {file && (

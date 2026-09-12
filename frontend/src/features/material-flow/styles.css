@@ -121,6 +121,10 @@
   border-radius: var(--radius-card);
 }
 
+.file-drop.has-file { min-height: 120px; padding: var(--space-4); }
+.file-drop.has-file .file-drop__icon { width: 42px; height: 42px; margin-bottom: var(--space-2); }
+.file-drop.has-file + .chosen-file { margin-top: var(--space-3); }
+
 .file-drop strong {
   font-size: 1.02rem;
 }
