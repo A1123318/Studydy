@@ -72,14 +72,14 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(processing.locator("details")).not.toHaveAttribute("open", "");
         await expect(processing.locator("code")).toBeHidden();
       } else if (run.status === "succeeded" || run.status === "partial") {
-        await expect(processing.getByRole("heading", { level: 1 })).toHaveText(run.status === "partial" ? "教材整理完成，部分內容待確認" : "教材整理完成");
+        await expect(processing.getByRole("heading", { level: 1 })).toHaveText("教材整理完成");
         await expect(processing.locator(".processing-grid > section.processing-card")).toHaveCount(2);
         await expect(processing.locator(".processing-grid h2")).toHaveText(["處理摘要", "處理流程"]);
         await expect(processing.getByRole("heading", { name: "可查看內容", exact: true })).toBeVisible();
         await expect(processing.locator(".processing-summary")).toContainText("共處理 45 頁");
         await expect(processing.locator(".processing-summary ul > li")).toHaveText(["可回查的概念與學習重點", "教材中的概念關係", "教材建議學習順序"]);
         await expect(processing.locator(".status-badge")).toHaveClass(`status-badge ${run.status === "partial" ? "is-partial" : "is-success"}`);
-        await expect(processing.locator(".status-badge")).toHaveText(run.status === "partial" ? "部分內容待確認" : "處理完成");
+        await expect(processing.locator(".status-badge")).toHaveText(run.status === "partial" ? "部分結果可用" : "處理完成");
         if (run.status === "partial") await expect(processing.locator(".status-badge svg")).toHaveCount(0);
         await expect(processing.locator(".status-timeline > li")).toHaveCount(4);
         await expect(processing.locator(".status-timeline > li.is-complete")).toHaveCount(4);
@@ -90,8 +90,13 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(processing).not.toContainText(/100%|已發布內容|處理結果|一切準備完成/);
         await expect(processing.locator("img")).toHaveCount(1);
         await expect(processing.locator('img[src$="processing-complete.png"]')).toHaveCount(0);
-        await expect(processing.locator(".completion-bar strong")).toHaveText(run.status === "partial" ? "知識地圖已建立，部分內容待確認" : "知識地圖已準備完成");
-        await expect(processing.locator(".processing-hero > div > p:last-child")).toHaveText(run.status === "partial" ? "知識地圖已建立，可先查看已整理的內容；部分內容仍需確認。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。");
+        await expect(processing.locator(".completion-bar strong")).toHaveText(run.status === "partial" ? "知識地圖已建立" : "知識地圖已準備完成");
+        await expect(processing.locator(".processing-hero > div > p:last-child")).toHaveText(run.status === "partial" ? "知識地圖已建立，可先查看已整理的內容；部分內容未完整整理。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。");
+        await expect(processing.locator(".completion-bar p")).toHaveText(run.status === "partial" ? "可以查看已整理的概念、關係與來源。" : "可以查看概念、關係、來源與建議學習順序。");
+        await expect(processing).not.toContainText(/待確認|待複核|需要你確認|請確認內容/);
+        await expect(processing.locator(".processing-grid")).not.toContainText("未完整整理");
+        await expect(processing.locator(".completion-bar")).not.toContainText("未完整整理");
+        if (run.status === "succeeded") await expect(processing).not.toContainText(/部分結果可用|未完整整理/);
         await expect(processing.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
         await expect(processing).toContainText("可回查的概念與學習重點");
       } else {

@@ -262,8 +262,8 @@ export function RunView({ apiClient, route }: {
     <section className="processing-page task-page is-complete">
       <header className="processing-hero">
         <img src="/assets/studydy/success-jump.png" alt="" />
-        <div><p className="eyebrow">教材處理</p><h1>{partial ? "教材整理完成，部分內容待確認" : "教材整理完成"}</h1>
-          <p>{partial ? "知識地圖已建立，可先查看已整理的內容；部分內容仍需確認。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。"}</p></div>
+        <div><p className="eyebrow">教材處理</p><h1>教材整理完成</h1>
+          <p>{partial ? "知識地圖已建立，可先查看已整理的內容；部分內容未完整整理。" : "知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。"}</p></div>
       </header>
       <div className="processing-grid">
         <section className="surface processing-card processing-summary">
@@ -272,7 +272,7 @@ export function RunView({ apiClient, route }: {
             <span className="file-kind"><Icon name="file" /></span>
             <div><h3>教材</h3><p>共處理 {binding.page_count} 頁</p></div>
           </div>
-          <p className={`status-badge ${partial ? "is-partial" : "is-success"}`}>{!partial && <Icon name="check" />}{partial ? "部分內容待確認" : "處理完成"}</p>
+          <p className={`status-badge ${partial ? "is-partial" : "is-success"}`}>{!partial && <Icon name="check" />}{partial ? "部分結果可用" : "處理完成"}</p>
           <h3>可查看內容</h3>
           <ul>
             <li><Icon name="check" />可回查的概念與學習重點</li>
@@ -291,7 +291,7 @@ export function RunView({ apiClient, route }: {
       </div>
       <div className="surface completion-bar">
         <span className={`completion-icon${partial ? " is-partial" : ""}`}><Icon name={partial ? "map" : "check"} /></span>
-        <div><strong>{partial ? "知識地圖已建立，部分內容待確認" : "知識地圖已準備完成"}</strong><p>{partial ? "可以先查看已整理的概念、關係與來源。" : "可以查看概念、關係、來源與建議學習順序。"}</p></div>
+        <div><strong>{partial ? "知識地圖已建立" : "知識地圖已準備完成"}</strong><p>{partial ? "可以查看已整理的概念、關係與來源。" : "可以查看概念、關係、來源與建議學習順序。"}</p></div>
         <button className="primary-button" type="button" onClick={() => writeRoute({
           name: "knowledge-map", materialId: run.material_id, runId: run.run_id,
           structureRevision: binding.knowledge_structure_revision,
