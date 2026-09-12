@@ -384,3 +384,63 @@ test("private routes reject unknown/offline sessions and redirect expired sessio
   await refresh;
   await expect(page.getByRole("navigation", { name: "主要導覽", exact: true })).toBeVisible();
 });
+
+for (const mode of ["login", "register"] as const) {
+  for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844 }]) {
+    test(`${mode} focus respects validation state at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.goto(`/${mode}`);
+      const email = page.locator("#email");
+      const secret = page.locator("#password");
+      const style = (input: typeof email) => input.evaluate(element => {
+        const css = getComputedStyle(element);
+        const color = (value: string) => {
+          const canvas = document.createElement("canvas").getContext("2d")!;
+          canvas.fillStyle = value;
+          return canvas.fillStyle;
+        };
+        const token = (name: string) => css.getPropertyValue(name).trim();
+        return { border: color(css.borderColor), ring: color(css.outlineColor), outline: css.outlineStyle, width: css.outlineWidth,
+          neutral: color(token("--border")), blue: color(token("--studydy-blue")), error: color(token("--error")),
+          errorRing: color(`color-mix(in srgb, ${token("--error")} 25%, transparent)`) };
+      });
+      const normal = await style(email);
+      expect(normal.border).toBe(normal.neutral);
+      await email.click();
+      const focused = await style(email);
+      expect(focused.border).toBe(focused.blue);
+      expect(focused.outline).toBe("solid");
+      expect(parseFloat(focused.width)).toBeGreaterThan(0);
+      await email.press("Tab");
+      await expect(secret).toBeFocused();
+      expect((await style(secret)).border).toBe(focused.blue);
+      expect((await style(secret)).ring).toBe(focused.ring);
+      await page.getByRole("button", { name: mode === "login" ? "登入" : "註冊", exact: true }).click();
+      await expect(email).toBeFocused();
+      const invalid = await style(email);
+      expect(invalid.border).toBe(invalid.error);
+      expect(invalid.ring).toBe(invalid.errorRing);
+      expect(invalid.ring).not.toBe(focused.ring);
+      expect(invalid.outline).toBe("solid");
+      expect(parseFloat(invalid.width)).toBeGreaterThan(0);
+      await expect(email).toHaveAttribute("aria-describedby", "email-error");
+      await expect(page.locator("#email-error")).toBeVisible();
+      await page.screenshot({ path: `/tmp/studydy-auth-focus/${mode}-${viewport.width}-email.png`, fullPage: true });
+      await email.press("Tab");
+      await expect(secret).toBeFocused();
+      expect((await style(email)).border).toBe(invalid.error);
+      expect((await style(email)).outline).toBe("none");
+      expect((await style(secret)).border).toBe(invalid.error);
+      expect((await style(secret)).ring).toBe(invalid.ring);
+      await page.screenshot({ path: `/tmp/studydy-auth-focus/${mode}-${viewport.width}-password.png`, fullPage: true });
+      await email.fill("focus@example.com");
+      await expect(email).not.toHaveAttribute("aria-invalid", "true");
+      await expect(page.locator("#email-error")).toHaveCount(0);
+      expect((await style(email)).ring).toBe(focused.ring);
+      await secret.fill(password);
+      await expect(page.locator("#password-error")).toHaveCount(0);
+      expect((await style(secret)).border).toBe(focused.blue);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+    });
+  }
+}
