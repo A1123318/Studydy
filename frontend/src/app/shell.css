@@ -1,14 +1,14 @@
-.app-shell { display: grid; min-height: 100vh; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: 87px minmax(0, 1fr); background: var(--page-cool); }
-.app-header { grid-column: 1 / -1; grid-row: 1; height: 87px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid var(--border-light); background: #fff; z-index: 5; }
+.app-shell { --shell-header-height: 74px; display: grid; min-height: 100vh; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: var(--shell-header-height) minmax(0, 1fr); background: var(--page-cool); }
+.app-header { grid-column: 1 / -1; grid-row: 1; height: var(--shell-header-height); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid var(--border-light); background: #fff; z-index: 5; }
 .brand { display: inline-flex; align-items: center; gap: 10px; width: max-content; padding: 0; border: 0; background: transparent; color: var(--studydy-blue); font-size: 30px; font-weight: 700; text-align: left; line-height: 1.15; }
 .brand img { width: 36px; height: 42px; object-fit: contain; }
 .brand small { display: block; margin-top: 5px; color: var(--text-muted); font-size: 11px; font-weight: 400; letter-spacing: .03em; }
 .account-controls { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
 .account-controls .secondary-button { min-width: 74px; min-height: 42px; border-color: var(--border); }
 .account-avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--studydy-blue); background: var(--studydy-blue-soft); }
-.app-sidebar { grid-column: 1; grid-row: 2; position: sticky; top: 0; height: calc(100vh - 87px); min-height: 570px; padding: 28px 20px; display: flex; flex-direction: column; border-right: 1px solid var(--border-light); background: #fff; }
+.app-sidebar { grid-column: 1; grid-row: 2; position: sticky; top: 0; height: calc(100vh - var(--shell-header-height)); min-height: 570px; padding: 24px 16px; display: flex; flex-direction: column; border-right: 1px solid var(--border-light); background: #fff; }
 .app-sidebar nav { display: grid; gap: 8px; }
-.app-sidebar nav > button { display: flex; align-items: center; gap: 14px; min-height: 54px; width: 100%; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 16px; text-align: left; }
+.app-sidebar nav > button { display: flex; align-items: center; gap: 14px; min-height: 50px; width: 100%; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 16px; text-align: left; }
 .app-sidebar nav > button:hover:not(:disabled) { background: var(--page-cool); color: var(--studydy-blue); }
 .app-sidebar nav > button[aria-current="page"] { color: var(--studydy-blue); background: var(--studydy-blue-soft); font-weight: 600; }
 .app-sidebar nav > button:disabled { cursor: default; color: var(--text-muted); }
@@ -24,8 +24,8 @@
 .app-shell.is-workspace .app-main { padding: 28px 32px 40px; }
 @media (max-width: 1100px) { .app-main { padding: 28px; } .app-shell { grid-template-columns: 240px minmax(0, 1fr); } }
 @media (max-width: 900px) {
- .app-shell { grid-template-columns: 1fr; grid-template-rows: 72px auto minmax(0, 1fr); }
- .app-header { height: 72px; padding: 0 16px; }
+ .app-shell { --shell-header-height: 72px; grid-template-columns: 1fr; grid-template-rows: var(--shell-header-height) auto minmax(0, 1fr); }
+ .app-header { padding: 0 16px; }
  .brand { font-size: 24px; } .brand small { font-size: 10px; }
  .account-avatar { display: none; }
  .app-sidebar { position: static; grid-column: 1; grid-row: 2; height: auto; min-height: 0; padding: 8px 12px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-light); }

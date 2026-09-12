@@ -32,20 +32,24 @@ export function Dashboard({ apiClient }: { apiClient: StudydyApiClient }) {
   ];
   return <section className="dashboard">
     <header className="dashboard-greeting"><h1>歡迎回來！</h1><p>讓我們一起繼續你的學習旅程。</p></header>
-    <section className="dashboard-hero" aria-label="建立你的知識地圖">
-      <div className="hero-copy"><h2>建立你的知識地圖</h2><p>上傳你的學習教材，讓 AI 為你<br />建立專屬的知識地圖。</p>
-        <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="upload" size={18} />上傳教材</button>
-        <button className="text-button hero-library-link" type="button" onClick={() => writeRoute({ name: "materials" })}>前往我的教材 <Icon name="chevron-right" size={16} /></button>
+    <div className="dashboard-content">
+      <div className="dashboard-primary">
+        <section className="dashboard-hero" aria-label="建立你的知識地圖">
+          <div className="hero-copy"><h2>建立你的知識地圖</h2><p>上傳你的學習教材，讓 AI 為你建立專屬的知識地圖。</p>
+            <button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="upload" size={18} />上傳教材</button>
+            <button className="text-button hero-library-link" type="button" onClick={() => writeRoute({ name: "materials" })}>前往我的教材 <Icon name="chevron-right" size={16} /></button>
+          </div>
+          <div className="hero-illustration"><div className="hero-document" aria-hidden="true"><Icon name="file" size={54} /><span /><span /><span /></div><img src="/assets/Studydy_角色素材/引導/guide_present.png" alt="Studydy 引導你建立知識地圖" /></div>
+        </section>
+        {error && <div className="dashboard-error" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setRetry(value => value + 1)}>重新讀取</button></div>}
+        <section className="dashboard-overview" aria-label="學習總覽"><h2>學習總覽</h2><div className="dashboard-stats" aria-busy={materials === null && !error}>
+          {stats.map((stat, index) => <button className={`dashboard-stat accent-${index}`} key={stat.title} type="button" onClick={() => writeRoute({ name: stat.route })}>
+            <span className="stat-icon"><Icon name={stat.icon} size={23} /></span><span className="stat-copy"><span>{stat.title}</span><strong>{error ? "—" : stat.value ?? "—"}</strong><small>{error ? "暫時無法讀取" : materials ? stat.note : "正在讀取…"}</small></span><Icon name="chevron-right" size={16} />
+          </button>)}
+        </div></section>
+        {recent && !error && <section className="dashboard-resume surface"><div><h2>接續上次學習</h2><p>{recent.material.display_name}</p></div><button className="primary-button" type="button" onClick={() => writeRoute({ name: "study-session", materialId: recent.material.material_id, runId: recent.session.run_id, structureRevision: recent.session.knowledge_structure_revision, studySessionId: recent.session.study_session_id })}>{recent.session.status === "completed" ? "查看學習紀錄" : "繼續學習"}<Icon name="chevron-right" size={18} /></button></section>}
       </div>
-      <div className="hero-illustration"><div className="hero-document" aria-hidden="true"><Icon name="file" size={54} /><span /><span /><span /></div><img src="/assets/Studydy_角色素材/引導/guide_present.png" alt="Studydy 引導你建立知識地圖" /></div>
-    </section>
-    {error && <div className="dashboard-error" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setRetry(value => value + 1)}>重新讀取</button></div>}
-    <section className="dashboard-overview" aria-label="學習總覽"><h2>學習總覽</h2><div className="dashboard-stats" aria-busy={materials === null && !error}>
-      {stats.map((stat, index) => <button className={`dashboard-stat accent-${index}`} key={stat.title} type="button" onClick={() => writeRoute({ name: stat.route })}>
-        <span className="stat-icon"><Icon name={stat.icon} size={23} /></span><span className="stat-copy"><span>{stat.title}</span><strong>{error ? "—" : stat.value ?? "—"}</strong><small>{error ? "暫時無法讀取" : materials ? stat.note : "正在讀取…"}</small></span><Icon name="chevron-right" size={16} />
-      </button>)}
-    </div></section>
-    {recent && !error && <section className="dashboard-resume surface"><div><h2>接續上次學習</h2><p>{recent.material.display_name}</p></div><button className="primary-button" type="button" onClick={() => writeRoute({ name: "study-session", materialId: recent.material.material_id, runId: recent.session.run_id, structureRevision: recent.session.knowledge_structure_revision, studySessionId: recent.session.study_session_id })}>{recent.session.status === "completed" ? "查看學習紀錄" : "繼續學習"}<Icon name="chevron-right" size={18} /></button></section>}
-    <section className="dashboard-help surface"><h2>Studydy 如何幫助你的學習</h2><div className="dashboard-features">{features.map((feature, index) => <article className={`accent-${index}`} key={feature.title}><span className="stat-icon"><Icon name={feature.icon} size={22} /></span><h3>{feature.title}</h3><p>{feature.description}</p></article>)}</div></section>
+      <aside className="dashboard-help surface" aria-label="Studydy 學習協助"><h2>Studydy 如何幫助你的學習</h2><div className="dashboard-features">{features.map((feature, index) => <article className={`accent-${index}`} key={feature.title}><span className="stat-icon"><Icon name={feature.icon} size={22} /></span><div><h3>{feature.title}</h3><p>{feature.description}</p></div></article>)}</div></aside>
+    </div>
   </section>;
 }

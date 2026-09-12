@@ -530,3 +530,28 @@ test("recovered map reads owned progress and continues the same session without 
   await expect(page.getByRole("button", { name: "開始評量", exact: true })).toBeVisible();
   expect(creates).toBe(0);
 });
+
+test("shared shell density keeps standard pages and map workspace bounded", async ({ page }) => {
+  await routes(page);
+  await page.route("**/v1/materials", route => json(route, { schema: "material-library/v1", materials: [] }));
+  const map = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
+  for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    for (const [name, path, heading] of [
+      ["home", "/", "歡迎回來！"], ["materials", "/materials", "我的教材"],
+      ["upload", "/upload", "上傳學習資料"], ["study", `${map}/study-sessions/${sessionId}`, "Stack"],
+      ["map", map, "知識地圖"],
+    ]) {
+      await page.goto(path);
+      await expect(page.locator(".app-header")).toBeVisible();
+      if (name === "study") await expect(page.locator(".study-session-page")).toBeVisible();
+      else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+      expect((await page.locator(".app-header").boundingBox())!.height).toBe(name === "map" ? 56 : viewport.width > 900 ? 74 : 72);
+      if (name === "map") await expect(page.locator(".app-sidebar")).toHaveCount(0);
+      else if (name !== "home" && viewport.width > 900) await expect(page.locator(".sidebar-helper")).toBeVisible();
+      if (["materials", "upload"].includes(name)) expect(await page.locator(".app-main > *").first().evaluate(element => getComputedStyle(element).maxWidth)).toBe("1018px");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      await page.screenshot({ path: `/tmp/studydy-dashboard/shell-${name}-${viewport.width}.png`, fullPage: true });
+    }
+  }
+});
