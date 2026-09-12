@@ -542,7 +542,7 @@ test("shared shell density keeps standard pages and map workspace bounded", asyn
       ["upload", "/upload", "上傳教材"], ["study", `${map}/study-sessions/${sessionId}`, "Stack"],
       ["maps", "/knowledge-maps", "知識地圖"],
       ["detail", `/materials/${materialId}`, "教材詳情"],
-      ["processing", `/materials/${materialId}/runs/${runId}`, "處理完成，等待複核"],
+      ["processing", `/materials/${materialId}/runs/${runId}`, "教材整理完成"],
       ["map", map, "知識地圖"],
     ]) {
       await page.goto(path);
@@ -551,11 +551,11 @@ test("shared shell density keeps standard pages and map workspace bounded", asyn
       else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       expect((await page.locator(".app-header").boundingBox())!.height).toBe(name === "map" ? 56 : viewport.width > 900 ? 74 : 72);
       if (name === "map") await expect(page.locator(".app-sidebar")).toHaveCount(0);
-      else if (!["home", "materials", "maps", "upload"].includes(name) && viewport.width > 900) await expect(page.locator(".sidebar-helper")).toBeVisible();
-      if (["home", "materials", "maps", "upload"].includes(name)) await expect(page.locator(".sidebar-helper")).toHaveCount(0);
-      const widths: Record<string, string> = { home: "1260px", materials: "1260px", maps: "1260px", detail: "1018px", processing: "1018px", upload: "1180px" };
+      else if (!["home", "materials", "maps", "upload", "processing"].includes(name) && viewport.width > 900) await expect(page.locator(".sidebar-helper")).toBeVisible();
+      if (["home", "materials", "maps", "upload", "processing"].includes(name)) await expect(page.locator(".sidebar-helper")).toHaveCount(0);
+      const widths: Record<string, string> = { home: "1260px", materials: "1260px", maps: "1260px", detail: "1018px", processing: "1180px", upload: "1180px" };
       if (widths[name]) expect(await page.locator(".app-main > *").first().evaluate(element => getComputedStyle(element).maxWidth)).toBe(widths[name]);
-      await expect(page.locator(".task-page")).toHaveCount(name === "upload" ? 1 : 0);
+      await expect(page.locator(".task-page")).toHaveCount(["upload", "processing"].includes(name) ? 1 : 0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       await page.screenshot({ path: `/tmp/studydy-dashboard/shell-${name}-${viewport.width}.png`, fullPage: true });
     }

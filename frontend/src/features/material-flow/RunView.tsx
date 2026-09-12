@@ -12,7 +12,8 @@ import {
   materialProgressStageLabel,
   materialProgressStages,
   materialRunHasUsableMap,
-  materialRunLabel,
+  materialCurrentStagePercent,
+  materialOverallProgressPercent,
 } from "./material-flow";
 
 export function RunView({ apiClient, route }: {
@@ -60,157 +61,144 @@ export function RunView({ apiClient, route }: {
   }, [run?.run_id, run?.status]);
 
   if (message) return (
-    <StateView
-      action={(
-        <div className="state-actions">
-          <button className="primary-button" type="button" onClick={() => setReload((value) => value + 1)}><Icon name="refresh" />重新讀取</button>
-          <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />返回上傳</button>
-        </div>
-      )}
-      description={message}
-      image="/assets/studydy/failure-confused.png"
-      title="無法讀取處理狀態"
-      tone="failure"
-    />
+    <section className="processing-page task-page">
+      <StateView
+        action={<>
+          <button className="primary-button" type="button" onClick={() => setReload(value => value + 1)}><Icon name="refresh" />重新讀取</button>
+          <button className="secondary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回我的教材</button>
+        </>}
+        description={message} image="/assets/studydy/failure-confused.png" title="無法讀取處理狀態" tone="failure"
+      />
+    </section>
   );
 
   if (!run) return (
-    <section className="processing-page" aria-live="polite">
+    <section className="processing-page task-page" aria-live="polite">
       <header className="processing-hero">
         <img src="/assets/studydy/processing-laptop.png" alt="" />
-        <p className="eyebrow">Material Processing</p>
-        <h1>正在讀取處理狀態</h1>
+        <div><p className="eyebrow">教材處理</p><h1>正在讀取處理狀態</h1></div>
       </header>
     </section>
   );
 
   if (run.status === "pending" || run.status === "running") {
     const currentStageIndex = materialProgressStages.indexOf(run.progress_stage);
-    const hasPageProgress = (
-      run.progress_stage === "evidence"
-      || run.progress_stage === "semantics"
-    ) && run.total_pages !== null;
+    const currentPercent = materialCurrentStagePercent(run);
+    const overallPercent = materialOverallProgressPercent(run);
+    const stageLabel = materialProgressStageLabel(run.progress_stage);
+    const stageActivity = run.progress_stage === "queued" ? "等待開始" : run.progress_stage === "publishing" ? "發布中" : "處理中";
     return (
-    <section className="processing-page">
-      <header className="processing-hero">
-        <img src="/assets/studydy/processing-laptop.png" alt="" />
-        <p className="eyebrow">Material Processing</p>
-        <h1>{materialRunLabel(run.status)}</h1>
-        <p>Studydy 正在整理教材；正式內容會在來源與安全檢查通過後才發布。</p>
-      </header>
-      <div className="processing-grid">
-        <section className="surface processing-card">
-          <h2>目前狀態</h2>
-          <div className="processing-status" aria-live="polite">
-            {hasPageProgress ? (
-              <progress
-                aria-label={`${materialProgressStageLabel(run.progress_stage)} ${run.completed_pages} / ${run.total_pages} 頁`}
-                className="current-stage-progress"
-                max={run.total_pages!}
-                value={run.completed_pages}
-              />
-            ) : (
-              <div className="indeterminate-progress" aria-label={`${materialProgressStageLabel(run.progress_stage)}，進度估算中`}><span /></div>
-            )}
-            <strong>{materialProgressStageLabel(run.progress_stage)}</strong>
-            {hasPageProgress && <p>目前階段已完成 {run.completed_pages} / {run.total_pages} 頁。</p>}
-          </div>
-          <dl className="processing-times">
-            <div><dt>已經過</dt><dd>{materialElapsedLabel(run.created_at, now)}</dd></div>
-            <div><dt>剩餘時間</dt><dd>估算中</dd></div>
-            <div><dt>最近更新</dt><dd><time dateTime={run.updated_at}>{new Date(run.updated_at).toLocaleTimeString("zh-TW")}</time></dd></div>
-          </dl>
-          <p>你可以離開此頁，稍後返回同一處理作業；進度由後端保存。</p>
-          {run.progress_stage === "queued" && <p>目前只有一個本機處理工作依序執行，排隊不代表處理失敗。</p>}
-        </section>
-        <section className="surface processing-card">
-          <h2>實際處理階段</h2>
-          <ol className="status-timeline">
-            {materialProgressStages.slice(0, -1).map((stage, index) => (
-              <li className={index < currentStageIndex ? "is-complete" : index === currentStageIndex ? "is-active" : undefined} key={stage}>
-                <span><Icon name={index < currentStageIndex ? "check" : stage === "semantics" ? "map" : "process"} /></span>
-                <div><strong>{materialProgressStageLabel(stage)}</strong><p>{index < currentStageIndex ? "此階段已完成。" : index === currentStageIndex ? "目前正在這個階段。" : "尚未開始。"}</p></div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
-    </section>
+      <section className="processing-page task-page">
+        <header className="processing-hero">
+          <img src="/assets/studydy/processing-laptop.png" alt="" />
+          <div><p className="eyebrow">教材處理</p><h1>{run.status === "pending" ? "等待開始處理" : "正在分析教材"}</h1>
+            <p>Studydy 正在整理教材內容並建立知識地圖，進度會自動保存。</p></div>
+        </header>
+        <div className="processing-grid">
+          <section className="surface processing-card">
+            <div className="processing-status" aria-live="polite">
+              <div className="progress-heading"><h2>整體進度（估計）</h2><strong>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
+              <progress className="processing-progress" max={100} value={overallPercent ?? undefined}
+                aria-label={overallPercent === null ? "整體進度（估計），尚無可估計資料" : `整體進度（估計） ${overallPercent}%`} />
+              <p className="progress-estimate-note">依頁面與階段完成度估算，並非耗時比例。</p>
+              <h3>目前階段</h3>
+              <div className="progress-heading"><strong className="stage-label">{stageLabel}</strong><strong>{currentPercent === null ? stageActivity : `${currentPercent}%`}</strong></div>
+              {currentPercent === null
+                ? <div className="indeterminate-progress" role="progressbar" aria-label={`目前階段：${stageLabel}，${stageActivity}`}><span /></div>
+                : <progress className="processing-progress" max={100} value={currentPercent}
+                    aria-label={`目前階段進度 ${currentPercent}%，已完成 ${run.completed_pages} / ${run.total_pages} 頁`} />}
+              {currentPercent !== null && <p>目前階段已完成 {run.completed_pages} / {run.total_pages} 頁。</p>}
+            </div>
+            <dl className="processing-times">
+              <div><dt>已經過</dt><dd>{materialElapsedLabel(run.created_at, now)}</dd></div>
+              <div><dt>最近更新</dt><dd><time dateTime={run.updated_at}>{new Date(run.updated_at).toLocaleTimeString("zh-TW")}</time></dd></div>
+            </dl>
+            <p>你可以離開此頁，處理進度會自動保存，可稍後從「我的教材」返回查看。</p>
+          </section>
+          <section className="surface processing-card">
+            <h2>實際處理階段</h2>
+            <ol className="status-timeline">
+              {materialProgressStages.slice(0, -1).map((stage, index) => (
+                <li className={index < currentStageIndex ? "is-complete" : index === currentStageIndex ? "is-active" : undefined} key={stage}>
+                  <span><Icon name={index < currentStageIndex ? "check" : stage === "semantics" ? "map" : "process"} /></span>
+                  <div><strong>{materialProgressStageLabel(stage)}</strong><p>{index < currentStageIndex ? "此階段已完成。" : index === currentStageIndex ? "目前正在這個階段。" : "尚未開始。"}</p></div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+      </section>
     );
   }
 
   if (run.status === "failed") return (
-    <section className="terminal-failure">
+    <section className="processing-page task-page terminal-failure">
       <StateView
-        action={<button className="secondary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />返回上傳</button>}
+        action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回我的教材</button>}
         description={materialFailureMessage(run.error_code ?? "MATERIAL_ANALYSIS_FAILED")}
-        image="/assets/studydy/failure-confused.png"
-        title="教材處理失敗"
-        tone="failure"
+        image="/assets/studydy/failure-confused.png" title="教材處理失敗" tone="failure"
       />
       <p className="failure-progress" role="status">
         最後安全進度：{materialProgressStageLabel(run.progress_stage)}
         {run.total_pages === null ? "" : `，${run.completed_pages} / ${run.total_pages} 頁`}
       </p>
-      <code className="failure-code">{run.error_code}</code>
+      {run.error_code && <details className="processing-technical"><summary>技術資訊</summary><code>{run.error_code}</code></details>}
     </section>
   );
 
   if (!materialRunHasUsableMap(run)) return (
-    <StateView
-      action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "upload" })}><Icon name="arrow-left" />改用其他教材</button>}
-      description="這份教材沒有產生可安全顯示的概念，因此沒有發布知識地圖。請改用包含清楚教學內容的 PDF。"
-      image="/assets/studydy/empty-disappointed.png"
-      title="目前沒有可開啟的知識地圖"
-      tone="empty"
-    />
+    <section className="processing-page task-page">
+      <StateView
+        action={<button className="primary-button" type="button" onClick={() => writeRoute({ name: "materials" })}>返回我的教材</button>}
+        description="這份教材目前沒有可開啟的知識地圖，可以從我的教材查看已保存的處理紀錄。"
+        image="/assets/studydy/empty-disappointed.png" title="目前沒有可開啟的知識地圖" tone="empty"
+      />
+    </section>
   );
 
   const binding = run.output_binding!;
+  const partial = run.status === "partial";
   return (
-    <section className="processing-page is-complete">
+    <section className="processing-page task-page is-complete">
       <header className="processing-hero">
         <img src="/assets/studydy/success-jump.png" alt="" />
-        <p className="eyebrow">Processing complete</p>
-        <h1>{materialRunLabel(run.status)}</h1>
-        <p>教材已完成來源與安全檢查，可以開啟知識地圖進行複核。</p>
+        <div><p className="eyebrow">教材處理</p><h1>{partial ? "教材整理完成，部分內容待確認" : "教材整理完成"}</h1>
+          <p>知識地圖已準備完成，可以查看概念、關係、來源與建議學習順序。</p></div>
       </header>
       <div className="processing-grid">
         <div className="processing-stack">
           <section className="surface processing-card material-result">
             <span className="file-kind"><Icon name="file" /></span>
             <div><h2>教材</h2><p>共處理 {binding.page_count} 頁</p></div>
-            <span className="status-badge is-success"><Icon name="check" />處理完成</span>
+            <span className={`status-badge ${partial ? "is-partial" : "is-success"}`}><Icon name="check" />{partial ? "部分內容待確認" : "處理完成"}</span>
           </section>
           <section className="surface processing-card result-summary">
             <h2>已發布內容</h2>
             <img src="/assets/studydy/processing-complete.png" alt="" />
             <ul>
-              <li><Icon name="check" />可回查的概念與 Claim</li>
-              <li><Icon name="check" />三種概念連結</li>
+              <li><Icon name="check" />可回查的概念與學習重點</li>
+              <li><Icon name="check" />教材中的概念關係</li>
               <li><Icon name="check" />教材建議學習順序</li>
             </ul>
           </section>
         </div>
         <section className="surface processing-card">
           <h2>處理結果</h2>
-          <div className="complete-progress"><strong>完成</strong><span><i /></span></div>
+          <div className="complete-progress"><strong>100%</strong><progress className="processing-progress" max={100} value={100} aria-label="教材處理完成 100%" /></div>
           <ol className="status-timeline">
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>教材已接收</strong><p>檔案與處理作業完成綁定。</p></div></li>
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>來源已保留</strong><p>每個重點都可回到原始 PDF 頁面。</p></div></li>
-            <li className="is-complete"><span><Icon name="check" /></span><div><strong>知識地圖已發布</strong><p>{run.status === "partial" ? "部分內容需要複核，已保留可使用的結果。" : "可安全複核的內容已準備完成。"}</p></div></li>
+            <li className="is-complete"><span><Icon name="check" /></span><div><strong>教材已接收</strong><p>教材已上傳並完成整理。</p></div></li>
+            <li className="is-complete"><span><Icon name="check" /></span><div><strong>來源已保留</strong><p>可以回到原始 PDF 查看來源。</p></div></li>
+            <li className="is-complete"><span><Icon name="check" /></span><div><strong>知識地圖已發布</strong><p>{partial ? "部分內容仍待確認，可先查看已發布的結果。" : "可以開始探索教材概念與關係。"}</p></div></li>
           </ol>
         </section>
       </div>
       <div className="surface completion-bar">
         <span className="completion-icon"><Icon name="check" /></span>
-        <div><strong>一切準備完成</strong><p>接著查看概念、連結、教材來源與建議順序。</p></div>
+        <div><strong>{partial ? "已發布可查看的內容" : "知識地圖已準備完成"}</strong><p>可以查看概念、關係、來源與建議學習順序。</p></div>
         <button className="primary-button" type="button" onClick={() => writeRoute({
-          name: "knowledge-map",
-          materialId: run.material_id,
-          runId: run.run_id,
+          name: "knowledge-map", materialId: run.material_id, runId: run.run_id,
           structureRevision: binding.knowledge_structure_revision,
-        })}>開啟複核地圖<Icon name="chevron-right" /></button>
+        })}>開啟知識地圖<Icon name="chevron-right" /></button>
       </div>
     </section>
   );

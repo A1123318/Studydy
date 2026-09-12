@@ -1,0 +1,150 @@
+import { expect, test, type Page } from "@playwright/test";
+import type { MaterialProcessingRunView } from "../src/api/contracts";
+
+const materialId = "11111111-1111-4111-8111-111111111111";
+const runId = "22222222-2222-4222-8222-222222222222";
+const artifactId = "33333333-3333-4333-8333-333333333333";
+const revision = `knowledge-structure:sha256:${"a".repeat(64)}`;
+const path = `/materials/${materialId}/runs/${runId}`;
+const clockTime = new Date("2026-09-12T12:00:00Z");
+const base: MaterialProcessingRunView = {
+  schema: "material-processing-run/v4", material_id: materialId, run_id: runId, source_artifact_id: artifactId,
+  status: "running", progress_stage: "evidence", completed_pages: 3, total_pages: 45,
+  created_at: "2026-09-12T11:59:58Z", updated_at: "2026-09-12T11:59:59Z", completed_at: null, error_code: null, output_binding: null,
+};
+function completed(status: "succeeded" | "partial"): MaterialProcessingRunView {
+  return { ...base, status, progress_stage: "completed", completed_pages: 45, completed_at: "2026-09-12T12:00:00Z",
+    output_binding: { schema: "material-run-output-binding/v4", knowledge_structure_revision: revision,
+      runtime_lock_sha256: "b".repeat(64), page_count: 45, processing: status, quality: status === "partial" ? "needs_review" : "accepted",
+      decision: "retain", reason_codes: [], ocr_calls: 0, semantic_calls: 1 } };
+}
+const cases: Record<string, MaterialProcessingRunView> = {
+  pending: { ...base, status: "pending", progress_stage: "queued", total_pages: null, completed_pages: 0 },
+  evidence: base,
+  "evidence-full": { ...base, completed_pages: 45 },
+  "semantics-zero": { ...base, progress_stage: "semantics", completed_pages: 0 },
+  semantics: { ...base, progress_stage: "semantics", completed_pages: 20 },
+  "semantics-full": { ...base, progress_stage: "semantics", completed_pages: 45 },
+  publishing: { ...base, progress_stage: "publishing", completed_pages: 45 },
+  succeeded: completed("succeeded"), partial: completed("partial"),
+  failed: { ...base, status: "failed", error_code: "NO_USABLE_EVIDENCE", completed_at: "2026-09-12T12:00:00Z" },
+  "api-failure": base, loading: base,
+  "long-elapsed": { ...base, created_at: "2026-09-12T10:00:00Z" },
+  "unknown-total": { ...base, progress_stage: "queued", completed_pages: 0, total_pages: null },
+};
+const percentages: Record<string, [number, number | null]> = {
+  pending: [0, null], evidence: [3, 7], "evidence-full": [49, 100], "semantics-zero": [49, 0], semantics: [71, 44],
+  "semantics-full": [99, 100], publishing: [99, null], "long-elapsed": [3, 7], "unknown-total": [0, null],
+};
+async function session(page: Page) {
+  await page.route("**/v1/session/refresh", route => route.fulfill({ status: 204 }));
+  await page.route("**/v1/session", route => route.fulfill({ json: { schema: "learner-identity/v1", learner_id: materialId } }));
+}
+
+for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  const selected = viewport.width === 1536 ? Object.keys(cases) : ["evidence", "semantics", "publishing", "succeeded", "failed"];
+  for (const name of selected) {
+    test(`processing ${name} at ${viewport.width}px is truthful and usable`, async ({ page }) => {
+      await page.setViewportSize(viewport); await page.clock.install({ time: clockTime }); await page.clock.pauseAt(clockTime); await session(page);
+      const run = cases[name];
+      const productRequests: string[] = [];
+      page.on("request", request => { if (/\/v1\/(materials|material-processing-runs)/.test(request.url())) productRequests.push(request.method() + " " + new URL(request.url()).pathname); });
+      await page.route(`**/v1/material-processing-runs/${runId}`, route => name === "loading" ? undefined : name === "api-failure"
+        ? route.fulfill({ status: 503, json: { schema: "api-error/v1", request_id: materialId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." } })
+        : route.fulfill({ json: run }));
+      await page.goto(path);
+      const processing = page.locator(".processing-page.task-page");
+      await expect(processing).toBeVisible();
+      await expect(page.locator(".sidebar-helper")).toHaveCount(0);
+      await expect(processing).not.toContainText(/剩餘時間|Material Processing|Processing complete|Claim|三種概念連結|開啟複核地圖|發布可複核結果/);
+      await expect(processing.getByRole("button", { name: /取消|重新分析/ })).toHaveCount(0);
+      expect(await processing.evaluate(element => getComputedStyle(element).maxWidth)).toBe("1180px");
+      if (name === "loading") await expect(processing).toHaveAttribute("aria-live", "polite");
+      else if (name === "api-failure") {
+        await expect(processing.getByRole("heading", { name: "無法讀取處理狀態", exact: true })).toBeVisible();
+        await expect(processing.getByRole("button", { name: "重新讀取", exact: true })).toBeVisible();
+      } else if (run.status === "failed") {
+        await expect(processing.getByRole("heading", { name: "教材處理失敗", exact: true })).toBeVisible();
+        await expect(processing).toContainText("最後安全進度：整理頁面與教材來源，3 / 45 頁");
+        await expect(processing.locator("details")).not.toHaveAttribute("open", "");
+        await expect(processing.locator("code")).toBeHidden();
+      } else if (run.status === "succeeded" || run.status === "partial") {
+        await expect(processing.getByRole("heading", { level: 1 })).toHaveText(run.status === "partial" ? "教材整理完成，部分內容待確認" : "教材整理完成");
+        await expect(processing.getByRole("progressbar", { name: "教材處理完成 100%", exact: true })).toHaveAttribute("value", "100");
+        await expect(processing.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
+        await expect(processing).toContainText("可回查的概念與學習重點");
+      } else {
+        const [overall, current] = percentages[name];
+        await expect(processing.getByRole("progressbar", { name: `整體進度（估計） ${overall}%`, exact: true })).toHaveAttribute("value", String(overall));
+        if (current !== null) {
+          await expect(processing.getByRole("progressbar", { name: `目前階段進度 ${current}%，已完成 ${run.completed_pages} / 45 頁`, exact: true })).toHaveAttribute("value", String(current));
+          await expect(processing).toContainText(`目前階段已完成 ${run.completed_pages} / 45 頁`);
+        } else {
+          const indicator = processing.getByRole("progressbar", { name: /目前階段：/ });
+          expect(await indicator.getAttribute("aria-valuenow")).toBeNull();
+          await expect(processing.locator(".processing-status")).toContainText(name === "publishing" ? "發布中" : "等待開始");
+          if (name === "publishing") await expect(processing.locator(".processing-status")).not.toContainText("100%");
+        }
+        if (name === "long-elapsed") await expect(processing.locator(".processing-times")).toContainText("120 分 0 秒");
+        await expect(processing.locator(".processing-times dt")).toHaveText(["已經過", "最近更新"]);
+        await expect(processing).toContainText("可稍後從「我的教材」返回查看");
+      }
+      if (viewport.width > 620 && name !== "failed" && name !== "api-failure") {
+        const hero = await processing.locator(".processing-hero").boundingBox();
+        expect(hero!.height).toBeGreaterThanOrEqual(150); expect(hero!.height).toBeLessThanOrEqual(180);
+      }
+      if (["evidence", "semantics", "publishing"].includes(name)) {
+        const cards = await processing.locator(".processing-grid > section").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
+        if (viewport.width > 920) { expect(cards[0].y).toBe(cards[1].y); expect(cards[0].y).toBeLessThan(350); }
+        else expect(cards[1].y).toBeGreaterThanOrEqual(cards[0].y + cards[0].height);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      expect(await processing.locator("h1, h2, h3, p, button, strong").evaluateAll(elements => elements.filter(element => element.scrollWidth > element.clientWidth + 1).map(element => element.tagName))).toEqual([]);
+      await page.screenshot({ path: `/tmp/studydy-processing/${viewport.width}-${name}.png`, fullPage: true });
+      expect(productRequests).toEqual([`GET /v1/material-processing-runs/${runId}`]);
+      if (run.status === "failed") {
+        await processing.getByText("技術資訊", { exact: true }).click(); await expect(processing.locator("code")).toHaveText("NO_USABLE_EVIDENCE"); await expect(processing.locator("code")).toBeVisible();
+        await processing.getByRole("button", { name: "返回我的教材", exact: true }).click(); await expect(page).toHaveURL(/\/materials$/);
+      }
+      if (run.status === "succeeded" || run.status === "partial") {
+        await processing.getByRole("button", { name: "開啟知識地圖", exact: true }).click();
+        expect(new URL(page.url()).pathname).toBe(`${path}/knowledge-structures/${encodeURIComponent(revision)}`);
+      }
+    });
+  }
+}
+
+test("processing polling uses backend values only, stops at terminal, and clears on unmount", async ({ page }) => {
+  await page.clock.install({ time: clockTime }); await page.clock.pauseAt(clockTime); await session(page);
+  let server = { ...base }; let reads = 0;
+  await page.route(`**/v1/material-processing-runs/${runId}`, route => { reads++; return route.fulfill({ json: server }); });
+  await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible();
+  await page.clock.runFor(1000); expect(reads).toBe(1);
+  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
+  await expect(page.locator(".processing-times")).toContainText("3 秒");
+  let response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(500); await response; expect(reads).toBe(2);
+  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toHaveAttribute("value", "3");
+  server = cases.semantics;
+  response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(1500); await response;
+  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 71%", exact: true })).toHaveAttribute("value", "71");
+  server = completed("succeeded");
+  response = page.waitForResponse(`**/v1/material-processing-runs/${runId}`); await page.clock.runFor(1500); await response;
+  await expect(page.getByRole("heading", { name: "教材整理完成", exact: true })).toBeVisible(); expect(reads).toBe(4);
+  await page.clock.runFor(6001); expect(reads).toBe(4);
+  server = base; await page.goto(path); await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible(); expect(reads).toBe(5);
+  await page.getByRole("button", { name: "教材庫", exact: true }).click(); await expect(page).toHaveURL(/\/materials$/);
+  await page.clock.runFor(6001); expect(reads).toBe(5);
+});
+
+test("read failure retry only reads the original run and never creates work", async ({ page }) => {
+  await session(page);
+  let failed = true; const writes: string[] = [];
+  page.on("request", request => { if (request.method() !== "GET" && /\/v1\/(materials|material-processing-runs)/.test(request.url())) writes.push(request.url()); });
+  await page.route(`**/v1/material-processing-runs/${runId}`, route => failed
+    ? route.fulfill({ status: 503, json: { schema: "api-error/v1", request_id: materialId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." } })
+    : route.fulfill({ json: base }));
+  await page.goto(path); await expect(page.getByRole("heading", { name: "無法讀取處理狀態", exact: true })).toBeVisible();
+  failed = false; await page.getByRole("button", { name: "重新讀取", exact: true }).click();
+  await expect(page.getByRole("progressbar", { name: "整體進度（估計） 3%", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(path + "$")); expect(writes).toEqual([]);
+});

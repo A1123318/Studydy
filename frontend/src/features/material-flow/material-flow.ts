@@ -11,11 +11,36 @@ export const materialProgressStages = [
 ] as const;
 
 export function materialProgressStageLabel(stage: MaterialProcessingRunView["progress_stage"]): string {
-  if (stage === "queued") return "等待本機處理資源";
+  if (stage === "queued") return "等待處理資源";
   if (stage === "evidence") return "整理頁面與教材來源";
   if (stage === "semantics") return "建立概念、關係與學習順序";
-  if (stage === "publishing") return "發布可複核結果";
+  if (stage === "publishing") return "發布知識地圖";
   return "處理完成";
+}
+
+type ProcessingProgress = Pick<MaterialProcessingRunView, "status" | "progress_stage" | "completed_pages" | "total_pages">;
+
+export function materialCurrentStagePercent(run: ProcessingProgress): number | null {
+  if (run.progress_stage === "completed" && (run.status === "succeeded" || run.status === "partial")) return 100;
+  if (run.progress_stage !== "evidence" && run.progress_stage !== "semantics") return null;
+  const total = run.total_pages;
+  if (total === null || !Number.isSafeInteger(total) || total <= 0 || !Number.isFinite(run.completed_pages)) return null;
+  return Math.round(Math.max(0, Math.min(total, run.completed_pages)) / total * 100);
+}
+
+export function materialOverallProgressPercent(run: ProcessingProgress): number | null {
+  if (run.progress_stage === "completed" && (run.status === "succeeded" || run.status === "partial")) return 100;
+  if (run.progress_stage === "queued") return 0;
+  const total = run.total_pages;
+  if (total === null || !Number.isSafeInteger(total) || total <= 0 || !Number.isFinite(run.completed_pages)) return null;
+  const completed = Math.max(0, Math.min(total, run.completed_pages));
+  let done: number;
+  if (run.progress_stage === "evidence") done = completed;
+  else if (run.progress_stage === "semantics") done = total + completed;
+  else if (run.progress_stage === "publishing") done = total * 2;
+  else return null;
+  // 頁面整理與語意整理各計一輪，發布計最後一單位；這不是耗時比例。
+  return Math.min(99, Math.round(done / (total * 2 + 1) * 100));
 }
 
 export function materialElapsedLabel(createdAt: string, now: number): string {
