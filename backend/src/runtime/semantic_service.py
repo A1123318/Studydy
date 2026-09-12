@@ -12,7 +12,9 @@ import httpx
 from pdf_evidence.ocr_page_evidence import canonical_bytes
 
 
-API_KEY_ENV = "VLLM_API_KEY"
+BASE_URL_ENV = "STUDYDY_SEMANTIC_BASE_URL"
+API_KEY_ENV = "STUDYDY_SEMANTIC_API_KEY"
+DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 CHAT_PATH = "/v1/chat/completions"
 TOKENIZE_PATH = "/tokenize"
 PREFLIGHT_TIMEOUT_SECONDS = 5
@@ -28,32 +30,36 @@ class SemanticServiceError(RuntimeError):
         self.reason_code = reason_code
 
 
-def _origin(value: Any) -> str:
-    if not isinstance(value, str) or not value or "\x00" in value:
+def validate_semantic_base_url(value: Any) -> str:
+    if not isinstance(value, str) or not value or any(character.isspace() or ord(character) < 32 for character in value):
         raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
-    parsed = urlsplit(value)
     try:
+        parsed = urlsplit(value)
         port = parsed.port
     except ValueError:
         raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID") from None
     if (
-        parsed.scheme != "http"
-        or parsed.hostname != "127.0.0.1"
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or (parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"})
         or parsed.username is not None
         or parsed.password is not None
         or parsed.path not in {"", "/"}
         or parsed.query
         or parsed.fragment
-        or port is None
-        or not 1 <= port <= 65_535
+        or (port is not None and not 1 <= port <= 65_535)
     ):
         raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
     return value.rstrip("/")
 
 
+def semantic_base_url() -> str:
+    return validate_semantic_base_url(os.environ.get(BASE_URL_ENV, DEFAULT_BASE_URL))
+
+
 def _headers(environment: Mapping[str, str] | None = None) -> dict[str, str]:
     value = (os.environ if environment is None else environment).get(API_KEY_ENV)
-    if value is None:
+    if value is None or value == "":
         return {}
     if not value or len(value) > 4096 or any(character in value for character in "\x00\r\n"):
         raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")
@@ -72,14 +78,14 @@ def semantic_client(*, environment: Mapping[str, str] | None = None) -> httpx.Cl
 def _service(lock: Any) -> dict[str, Any]:
     try:
         service = lock["semantic_service"]
-        origin = _origin(service["base_url"])
+        origin = semantic_base_url()
         if (
             lock["schema"] != "studydy-runtime-lock/v16"
             or lock["python"] != "3.12"
             or service["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or service["max_model_len"] != 32768
             or service["max_num_seqs"] != 1
-            or service["authentication"] != "environment-bearer:VLLM_API_KEY"
+            or service["authentication"] != "environment-bearer:STUDYDY_SEMANTIC_API_KEY"
             or service["server"]["python"] != "3.12"
         ):
             raise SemanticServiceError("SEMANTIC_SERVICE_CONFIG_INVALID")

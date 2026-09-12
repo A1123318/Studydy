@@ -92,3 +92,61 @@ def test_source_tree_has_no_qwen_process_owner_or_retired_semantic_modules():
     assert not (root / "backend/src/pdf_evidence/text_first_run.py").exists()
     assert not (root / "backend/src/knowledge_map/formal_concepts.py").exists()
     assert not (root / "local_ai/assessment-runtime-lock.json").exists()
+
+
+@pytest.mark.parametrize("saved_endpoint", ["http://127.0.0.1:8000", "https://previous.example.test"])
+def test_saved_map_reopens_after_endpoint_change_without_inference(tmp_path, monkeypatch, saved_endpoint):
+    """保留舊 lock hash 與已發布內容；切換連線不影響 reopen，也不寫 DB。"""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    import httpx
+    from pdf_evidence.ocr_page_evidence import canonical_sha256
+    import runtime.storage.knowledge_structures as storage
+    from test_closed_loop_v1 import _structure
+
+    monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", saved_endpoint)
+    config = local_app.read_local_ai_config_from_environment(_environment(tmp_path))
+    saved = runtime_binding(config)
+    old_lock = deepcopy(config["runtime_lock"])
+    old_lock["semantic_service"]["base_url"] = "http://127.0.0.1:8000"
+    old_lock["semantic_service"]["authentication"] = "environment-bearer:VLLM_API_KEY"
+    saved["runtime_lock_sha256"] = canonical_sha256(old_lock)
+    saved["runtime_binding_sha256"] = canonical_sha256({key: value for key, value in saved.items() if key != "runtime_binding_sha256"})
+    learner_id, material_id, run_id, artifact_id = (uuid4() for _ in range(4))
+    document = _structure(str(run_id), "a" * 64, old_lock)
+    row = (document, storage._binding(document), saved, artifact_id, document["revision"], run_id)
+    original = deepcopy(row)
+    statements = []
+
+    class Session:
+        def execute(self, statement):
+            assert statement.is_select
+            statements.append(statement)
+            return SimpleNamespace(one_or_none=lambda: row)
+
+    monkeypatch.setattr(storage, "database_session", lambda _: nullcontext(Session()))
+    monkeypatch.setattr(storage, "open_verified_source_pdf", lambda *args, **kwargs: nullcontext(SimpleNamespace(material_id=material_id, sha256="a" * 64)))
+    monkeypatch.setattr(httpx.Client, "send", lambda *args, **kwargs: pytest.fail("Reopen must not call semantic HTTP"))
+    for endpoint in ("https://replacement.example.test", "invalid-current-setting"):
+        monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", endpoint)
+        monkeypatch.setenv("STUDYDY_SEMANTIC_API_KEY", "mock-rotated-token")
+        reopened = storage.read_knowledge_structure(learner_id, material_id, run_id=run_id)
+        assert reopened.document == document
+        assert reopened.revision == document["revision"]
+    assert len(statements) == 2
+    assert row == original
+    saved["semantic_service"]["base_url"] = "https://tampered.example.test"
+    assert not storage.runtime_binding_is_valid(saved)
+
+
+def test_new_runtime_binding_records_endpoint_but_never_key(tmp_path, monkeypatch):
+    config = local_app.read_local_ai_config_from_environment(_environment(tmp_path))
+    monkeypatch.delenv("STUDYDY_SEMANTIC_BASE_URL", raising=False)
+    local = runtime_binding(config)
+    monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", "https://semantic.example.test/")
+    monkeypatch.setenv("STUDYDY_SEMANTIC_API_KEY", "mock-private-token")
+    remote = runtime_binding(config)
+    assert remote["semantic_service"]["base_url"] == "https://semantic.example.test"
+    assert remote["runtime_lock_sha256"] == local["runtime_lock_sha256"]
+    assert remote["runtime_binding_sha256"] != local["runtime_binding_sha256"]
+    assert "mock-private-token" not in str(remote)

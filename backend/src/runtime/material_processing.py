@@ -18,7 +18,7 @@ from sqlalchemy import func, select, update
 
 from pdf_evidence.material_pipeline import MaterialAnalysisError, analyze_material, validate_runtime_lock
 from pdf_evidence.ocr_page_evidence import canonical_sha256
-from runtime.semantic_service import SemanticServiceError, preflight_semantic_service
+from runtime.semantic_service import SemanticServiceError, preflight_semantic_service, semantic_base_url
 
 from .storage.artifacts import open_verified_source_pdf
 from .storage.knowledge_structures import KnowledgeStructureStoreError, publish_knowledge_structure, runtime_binding_is_valid
@@ -189,7 +189,7 @@ def runtime_binding(local_config: Any) -> dict[str, Any]:
         "model_id": lock["semantic_service"]["model_id"],
         "model_revision": lock["semantic_service"]["revision"],
         "semantic_service": {
-            "base_url": lock["semantic_service"]["base_url"],
+            "base_url": semantic_base_url(),
             "max_model_len": lock["semantic_service"]["max_model_len"],
             "server": deepcopy(lock["semantic_service"]["server"]),
         },

@@ -5,6 +5,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+import runtime.semantic_service as semantic_service
+
 from runtime.semantic_service import SemanticServiceError, material_request_fits, preflight_semantic_service, request_semantics
 
 
@@ -12,10 +14,17 @@ def _lock() -> dict:
     return json.loads((Path(__file__).parents[2] / "local_ai/runtime-lock.json").read_text())
 
 
-def test_preflight_and_both_tasks_use_the_same_resident_service():
+@pytest.mark.parametrize("endpoint", [None, "https://semantic.example.test/"])
+def test_preflight_and_all_tasks_use_the_same_resident_service(monkeypatch, endpoint):
+    monkeypatch.delenv("STUDYDY_SEMANTIC_BASE_URL", raising=False)
+    if endpoint is not None:
+        monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", endpoint)
+    monkeypatch.setenv("STUDYDY_SEMANTIC_API_KEY", "mock-only-token")
     paths: list[str] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
+        assert str(request.url).startswith((endpoint or "http://127.0.0.1:8000").rstrip("/") + "/")
+        assert request.headers["Authorization"] == "Bearer mock-only-token"
         paths.append(request.url.path)
         if request.url.path == "/health": return httpx.Response(200)
         if request.url.path == "/version": return httpx.Response(200, json={"version": "0.28.0"})
@@ -26,19 +35,24 @@ def test_preflight_and_both_tasks_use_the_same_resident_service():
         generation = _lock()["material_semantics"]["generation"]
         if task == "material_semantics":
             assert {key: body[key] for key in generation} == generation
+        elif task == "assessment_check":
+            check_generation = _lock()["assessment"]["check_generation"]
+            assert {key: body[key] for key in check_generation} == check_generation
         else:
             assert body["chat_template_kwargs"] == {"enable_thinking": False}
             assert (set(generation) - {"chat_template_kwargs"}).isdisjoint(body)
-        content = {"material_semantics": {"concepts": [], "relations": []}, "assessment": {"schema": "assessment-semantics-response/v2", "candidates": []}}[task]
+        content = {"material_semantics": {"concepts": [], "relations": []}, "assessment": {"schema": "assessment-semantics-response/v2", "candidates": []}, "assessment_check": {"candidates": []}}[task]
         return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(content)}}]})
 
-    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs))
+    with semantic_service.semantic_client() as client:
         preflight_semantic_service(_lock(), client=client)
         schema = {"type": "object"}
-        for task in ("material_semantics", "assessment"):
+        for task in ("material_semantics", "assessment", "assessment_check"):
             result = request_semantics(client, runtime_lock=_lock(), task=task, request={"schema": "x"}, response_schema=schema)
             assert ("concepts" if task == "material_semantics" else "candidates") in result
-    assert paths.count("/v1/chat/completions") == 2
+    assert paths.count("/v1/chat/completions") == 3
     assert set(paths) == {"/health", "/version", "/v1/models", "/tokenize", "/v1/chat/completions"}
 
 
@@ -85,13 +99,14 @@ def test_material_packing_and_generation_share_exact_token_budget(count, fits):
     assert sum(path == "/v1/chat/completions" for path, _ in requests) == int(fits)
 
 
-def test_non_loopback_or_second_runtime_contract_is_rejected_before_network():
+def test_insecure_remote_or_second_runtime_contract_is_rejected_before_network(monkeypatch):
     lock = _lock()
-    lock["semantic_service"]["base_url"] = "http://example.test:8000"
+    monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", "http://example.test:8000")
     with httpx.Client(transport=httpx.MockTransport(lambda _request: (_ for _ in ()).throw(AssertionError()))) as client:
         with pytest.raises(SemanticServiceError, match="SEMANTIC_SERVICE_CONFIG_INVALID"):
             request_semantics(client, runtime_lock=lock, task="material_semantics", request={}, response_schema={})
 
+    monkeypatch.delenv("STUDYDY_SEMANTIC_BASE_URL")
     second = deepcopy(_lock())
     second["semantic_service"]["model_id"] = "Qwen/second-model"
     with httpx.Client(transport=httpx.MockTransport(lambda _request: (_ for _ in ()).throw(AssertionError()))) as client:
@@ -135,3 +150,54 @@ def test_material_bundle_budget_excludes_existing_catalog(fresh_count, fits):
     assert calls[0] == material
     assert calls[1]["existing_concepts"] == []
     assert calls[1]["sections"] == material["sections"]
+
+
+@pytest.mark.parametrize("endpoint", ["", "https://user:password@example.test", "https://example.test?key=value", "https://example.test/#secret", "https://example.test/v1", "https://[invalid", "https://example.test:invalid", "https://example.test\n"])
+def test_invalid_endpoint_is_rejected_without_echoing_value(monkeypatch, endpoint):
+    monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", endpoint)
+    with pytest.raises(SemanticServiceError) as failure:
+        semantic_service.semantic_base_url()
+    assert str(failure.value) == "SEMANTIC_SERVICE_CONFIG_INVALID"
+
+
+def test_bearer_uses_only_new_environment_variable():
+    assert semantic_service._headers({"VLLM_API_KEY": "ignored-test-value"}) == {}
+    assert semantic_service._headers({"STUDYDY_SEMANTIC_API_KEY": ""}) == {}
+    with pytest.raises(SemanticServiceError) as failure:
+        semantic_service._headers({"STUDYDY_SEMANTIC_API_KEY": "invalid\r\nvalue"})
+    assert str(failure.value) == "SEMANTIC_SERVICE_CONFIG_INVALID"
+
+
+def test_redirect_does_not_forward_bearer(monkeypatch):
+    requests = []
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(307, headers={"location": "https://other.example.test/health"})
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs))
+    with semantic_service.semantic_client(environment={"STUDYDY_SEMANTIC_API_KEY": "mock-only-token"}) as client:
+        with pytest.raises(SemanticServiceError, match="SEMANTIC_SERVICE_UNAVAILABLE"):
+            preflight_semantic_service(_lock(), client=client)
+    assert all(request.url.host == "127.0.0.1" for request in requests)
+
+
+@pytest.mark.parametrize("failure", [401, 404, "timeout", "version"])
+def test_remote_preflight_keeps_failure_contract(monkeypatch, failure):
+    monkeypatch.setenv("STUDYDY_SEMANTIC_BASE_URL", "https://semantic.example.test")
+    def respond(request):
+        assert request.url.host == "semantic.example.test"
+        if failure == "timeout":
+            raise httpx.ReadTimeout("mock timeout", request=request)
+        if isinstance(failure, int):
+            return httpx.Response(failure)
+        if request.url.path == "/health":
+            return httpx.Response(200)
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "incompatible"})
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "Qwen/Qwen3.8-27B-FP8", "max_model_len": 32768}]})
+        return httpx.Response(200, json={"count": 1, "max_model_len": 32768})
+    reason = "SEMANTIC_SERVICE_TIMEOUT" if failure == "timeout" else "SEMANTIC_SERVICE_IDENTITY_MISMATCH" if failure == "version" else "SEMANTIC_SERVICE_UNAVAILABLE"
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        with pytest.raises(SemanticServiceError, match=reason):
+            preflight_semantic_service(_lock(), client=client)

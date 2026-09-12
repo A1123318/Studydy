@@ -25,7 +25,6 @@
     "model_id": "Qwen/Qwen3.8-27B-FP8",
     "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
     "api_protocol": "openai-chat-completions/v1",
-    "base_url": "http://127.0.0.1:8000",
     "max_model_len": 32768,
     "max_num_seqs": 1,
     "server": {
@@ -36,7 +35,7 @@
       "cuda": "13.0",
       "transformers": "5.15.1"
     },
-    "authentication": "environment-bearer:VLLM_API_KEY"
+    "authentication": "environment-bearer:STUDYDY_SEMANTIC_API_KEY"
   },
   "material_semantics": {
     "request_schema": "material-semantics-request/v2",

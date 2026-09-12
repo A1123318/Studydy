@@ -15,6 +15,8 @@ from knowledge_map.structure import (
 )
 from pdf_evidence.ocr_page_evidence import canonical_sha256
 
+from runtime.semantic_service import SemanticServiceError, validate_semantic_base_url
+
 from .artifacts import open_verified_source_pdf
 from .tables import KnowledgeStructure, MaterialProcessingRun, database_session
 
@@ -40,7 +42,7 @@ def runtime_binding_is_valid(value: Any) -> bool:
         identity = {
             key: item for key, item in value.items() if key != "runtime_binding_sha256"
         }
-        # Existing Maps retain the runtime that produced them across template updates.
+        # 舊 Map 依保存的 runtime 與 hash 驗證，不依目前連線設定。
         transformers_version = value["semantic_service"]["server"]["transformers"]
         return (
             value["schema"] == "material-runtime-binding/v1"
@@ -54,7 +56,7 @@ def runtime_binding_is_valid(value: Any) -> bool:
             and len(value["model_revision"]) == 40
             and all(character in "0123456789abcdef" for character in value["model_revision"])
             and value["semantic_service"] == {
-                "base_url": "http://127.0.0.1:8000",
+                "base_url": validate_semantic_base_url(value["semantic_service"]["base_url"]),
                 "max_model_len": 32768,
                 "server": {
                     "package": "vllm", "version": "0.28.0", "python": "3.12",
@@ -69,7 +71,7 @@ def runtime_binding_is_valid(value: Any) -> bool:
             }
             and value["policy"] == "evidence-unified-semantics-product/v1"
         )
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, SemanticServiceError):
         return False
 
 

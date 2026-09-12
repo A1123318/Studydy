@@ -84,13 +84,12 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
             or not ocr["prompt"]
             or ocr["render"] != {"dpi": 200, "colorspace": "RGB", "format": "PNG"}
             or set(semantic) != {
-                "model_id", "revision", "api_protocol", "base_url", "max_model_len",
+                "model_id", "revision", "api_protocol", "max_model_len",
                 "max_num_seqs", "server", "authentication",
             }
             or semantic["model_id"] != "Qwen/Qwen3.8-27B-FP8"
             or re.fullmatch(r"[0-9a-f]{40}", semantic["revision"]) is None
             or semantic["api_protocol"] != "openai-chat-completions/v1"
-            or semantic["base_url"] != "http://127.0.0.1:8000"
             or semantic["max_model_len"] != 32768
             or semantic["max_num_seqs"] != 1
             or semantic["server"] != {
@@ -101,7 +100,7 @@ def validate_runtime_lock(lock: Any) -> dict[str, Any]:
                 "cuda": "13.0",
                 "transformers": "5.15.1",
             }
-            or semantic["authentication"] != "environment-bearer:VLLM_API_KEY"
+            or semantic["authentication"] != "environment-bearer:STUDYDY_SEMANTIC_API_KEY"
             or set(material) != {
                 "request_schema", "response_schema", "bundle_policy",
                 "max_tokens", "prompt", "retry_attempts", "generation", "max_new_input_tokens",
