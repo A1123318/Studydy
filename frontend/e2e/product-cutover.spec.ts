@@ -122,6 +122,20 @@ async function routes(page: Page, view = structureView(), readProgress = () => p
   });
 }
 
+async function openFocusRelation(page: Page, mobile: boolean) {
+  if (mobile) {
+    const fallback = page.locator(".focus-relations");
+    if (await fallback.getAttribute("open") === null) await fallback.locator("summary").click();
+    const button = fallback.getByRole("list", { name: "直接概念關係" }).getByRole("button").first();
+    await button.click();
+    return button;
+  }
+  await page.getByRole("button", { name: "顯示完整關係圖", exact: true }).click();
+  const edge = page.locator(".focus-graph .concept-flow-edge").first();
+  await edge.locator(".react-flow__edge-textbg").click();
+  return edge;
+}
+
 test("focus, path, and chapter views lead to source-backed learning", async ({ page }) => {
   await routes(page);
   await page.route("**/v1/study-sessions", route => {
@@ -477,12 +491,15 @@ test("parallel relations retain separate labels, paths and details in both direc
     })).toBe(true);
   };
   await assertSeparate();
-  const relationList = page.getByRole("list", { name: "直接概念關係" });
-  await expect(relationList.getByRole("button", { name: /來自 ←/ })).toHaveCount(2);
-  await expect(relationList.getByRole("button", { name: /連向 →/ })).toHaveCount(3);
+  await expect(page.locator(".focus-context-content .relation-list")).toHaveCount(0);
+  await expect(page.locator(".focus-relation-summary")).toContainText("5 個直接關係");
   for (const relation of view.relations) {
     await page.locator(`.concept-flow-edge.is-${relation.type} .react-flow__edge-textbg`).click();
     await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText(relation.learner_reason);
+    await expect(page.getByRole("dialog").locator(".relation-direction strong")).toHaveText([
+      view.concepts.find(concept => concept.concept_id === relation.source_concept_id)!.label,
+      view.concepts.find(concept => concept.concept_id === relation.target_concept_id)!.label,
+    ]);
     await assertSeparate();
     if (relation.type === "prerequisite") {
       await page.getByRole("dialog").getByRole("button", { name: /目標概念/ }).click();
@@ -649,7 +666,10 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await expect(context.getByRole("heading", { name: view.concepts[0].label, exact: true })).toBeVisible();
       if (viewport.width > 900) {
         await expect(page.locator(".focus-relations")).toHaveCount(0);
-        await expect(context.getByRole("list", { name: "直接概念關係" }).getByRole("listitem")).toHaveCount(kind === "small" ? 5 : 8);
+        await expect(context.locator(".focus-relation-summary")).toContainText(`${kind === "small" ? 5 : 8} 個直接關係`);
+        await expect(context.locator(".focus-context-content .relation-list")).toHaveCount(0);
+        await expect(context.locator(".focus-context-content").getByRole("button")).toHaveCount(0);
+        await expect(context).toContainText("點選地圖上的概念或連線查看詳細內容。");
         await expect(page.getByRole("button", { name: "開始學習", exact: true })).toBeInViewport();
         const graphBox = (await graph.boundingBox())!;
         const contextBox = (await context.boundingBox())!;
@@ -661,7 +681,6 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         if (viewport.width >= 1200) expect(entryBox.x).toBeGreaterThan((await navigator.boundingBox())!.x + (await navigator.boundingBox())!.width);
         expect(graphBox.width).toBeGreaterThan(contextBox.width);
         expect(Math.abs(graphBox.y + graphBox.height - contextBox.y - contextBox.height)).toBeLessThan(3);
-        if (kind !== "small") expect(await context.locator(".focus-context-content").evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
       } else {
         await expect(graph).toHaveCSS("height", "360px");
         await expect(page.locator(".focus-relations")).not.toHaveAttribute("open", "");
@@ -677,7 +696,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
       await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-context.png`, fullPage: true });
       const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-      const detailAction = context.getByRole("button", { name: "查看概念與來源", exact: true });
+      const detailAction = viewport.width <= 900 ? context.getByRole("button", { name: "查看概念與來源", exact: true }) : page.locator(".concept-flow-node.is-focus");
       await detailAction.click();
       const conceptDetail = page.getByRole("dialog", { name: "概念詳情" });
       await expect(conceptDetail).toBeFocused();
@@ -692,9 +711,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-concept.png`, fullPage: true });
       if (viewport.width <= 900) await page.mouse.click(1, 1); else await page.keyboard.press("Escape");
       await expect(detailAction).toBeFocused();
-      if (viewport.width <= 900) await page.locator(".focus-relations summary").click();
-      const relation = context.getByRole("list", { name: "直接概念關係" }).getByRole("button").first();
-      await relation.click();
+      const relation = await openFocusRelation(page, viewport.width <= 900);
       const relationDetail = page.getByRole("dialog", { name: "關係詳情" });
       await expect(relationDetail).toBeFocused();
       await expect(page.locator(".focus-study-action")).toBeVisible();
@@ -732,7 +749,12 @@ for (const width of [1920, 1536, 1366, 1100, 390]) {
     await expect(page.locator(".react-flow__node")).toHaveCount(1);
     await expect(page.locator(".concept-flow-edge")).toHaveCount(0);
     if (width <= 900) await page.locator(".focus-relations summary").click();
-    await expect(page.locator(".relation-empty")).toContainText("沒有直接連結");
+    if (width <= 900) await expect(page.locator(".relation-empty")).toContainText("沒有直接連結");
+    else {
+      await expect(page.locator(".focus-relation-summary")).toContainText("目前沒有直接關係");
+      await expect(page.locator(".focus-context-content .relation-list")).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "學習入口" }).getByRole("button")).toBeEnabled();
+    }
     await navigator.getByRole("button", { name: "Concept 52", exact: true }).focus();
     await page.keyboard.press("Tab");
     await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".focus-graph"))).toBe(true);
@@ -964,8 +986,7 @@ for (const viewport of [{ width: 1536, height: 1024 }, { width: 1366, height: 76
       await page.screenshot({ path: `/tmp/studydy-map-study-action/${viewport.width}-${history}-concept.png`, fullPage: viewport.width > 900 });
       await page.keyboard.press("Escape");
       await expect(entry).toContainText(title);
-      if (viewport.width <= 900) await page.locator(".focus-relations summary").click();
-      await page.getByRole("list", { name: "直接概念關係" }).getByRole("button").click();
+      await openFocusRelation(page, viewport.width <= 900);
       await expect(page.getByRole("dialog", { name: "關係詳情" })).toBeVisible();
       await expect(page.locator(".focus-study-action")).toContainText(title);
       await page.screenshot({ path: `/tmp/studydy-map-study-action/${viewport.width}-${history}-relation.png`, fullPage: viewport.width > 900 });
@@ -997,18 +1018,19 @@ for (const viewport of [{ width: 1536, height: 1024 }, { width: 1366, height: 76
       await routes(page, view);
       await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
       const context = page.getByRole("complementary", { name: "目前焦點資訊" });
-      if (viewport.width > 900) await expect(context.getByRole("heading", { name: /^直接關係/ })).toHaveText(`直接關係 ${kind === "none" ? 0 : kind === "parallel" ? 6 : 8}`);
+      if (viewport.width > 900) await expect(context.locator(".focus-relation-summary")).toContainText(kind === "none" ? "目前沒有直接關係" : `${kind === "parallel" ? 6 : 8} 個直接關係`);
       if (kind !== "none") {
-        if (viewport.width <= 900) await page.locator(".focus-relations summary").click();
-        const relation = context.getByRole("list", { name: "直接概念關係" }).getByRole("button").first();
-        await expect(relation).toContainText(view.relations[0].learner_reason);
-        await relation.click();
+        if (kind === "parallel" && viewport.width > 900) {
+          await page.locator(".concept-flow-edge").first().focus();
+          await page.keyboard.press("Enter");
+        } else await openFocusRelation(page, viewport.width <= 900);
         const relationDetail = page.getByRole("dialog", { name: "關係詳情" });
         await expect(relationDetail).toContainText(view.relations[0].learner_reason);
         await expect(relationDetail.getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
         await page.keyboard.press("Escape");
       }
-      await context.getByRole("button", { name: "查看概念與來源", exact: true }).click();
+      if (viewport.width <= 900) await context.getByRole("button", { name: "查看概念與來源", exact: true }).click();
+      else await page.locator(".concept-flow-node.is-focus").click();
       const detail = page.getByRole("dialog", { name: "概念詳情" });
       const explore = detail.locator(".detail-explore");
       await expect(detail.getByRole("heading", { name: "相關概念", exact: true })).toHaveCount(0);
@@ -1082,3 +1104,45 @@ for (const mode of ["學習順序", "總覽", "複習重點"] as const) {
     await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toContainText("接著學習「Stack」");
   });
 }
+
+test("desktop map-first Inspector follows graph node and edge exploration with keyboard recovery", async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  const view = workspaceView(8);
+  view.concepts[0].label = "陣列";
+  view.concepts[1].label = "陣列索引值";
+  await routes(page, view);
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  const context = page.getByRole("complementary", { name: "目前焦點資訊" });
+  const summary = context.locator(".focus-context-content");
+  await expect(summary.getByRole("heading", { name: "目前焦點", exact: true })).toBeVisible();
+  await expect(summary.getByRole("heading", { name: "陣列", exact: true })).toBeVisible();
+  await expect(summary).toContainText("7 個直接關係");
+  await expect(summary).toContainText("點選地圖上的概念或連線查看詳細內容。");
+  await expect(summary.locator(".relation-list, details")).toHaveCount(0);
+  await expect(summary.getByRole("button")).toHaveCount(0);
+  await page.getByRole("button", { name: "顯示完整關係圖", exact: true }).click();
+  await page.getByRole("button", { name: "教材概念：陣列索引值", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "概念詳情" })).toContainText("教材重點");
+  await expect(summary).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(summary.getByRole("heading", { name: "陣列索引值", exact: true })).toBeVisible();
+  await expect(summary).toContainText("1 個直接關係");
+  const edge = await openFocusRelation(page, false);
+  await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("為什麼有這個關係？");
+  await expect(page.getByRole("dialog")).toContainText("教材來源");
+  await expect(edge).toHaveClass(/\bselected\b/);
+  await page.keyboard.press("Escape");
+  await expect(edge).not.toHaveClass(/\bselected\b/);
+  await expect(edge).toBeFocused();
+  for (const key of ["Enter", "Space"]) {
+    const node = page.getByRole("button", { name: "教材概念：陣列索引值", exact: true });
+    await node.focus(); await page.keyboard.press(key);
+    await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeVisible();
+    await page.keyboard.press("Escape"); await expect(node).toBeFocused();
+    await edge.focus(); await page.keyboard.press(key);
+    await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText(view.relations[0].learner_reason);
+    await page.keyboard.press("Escape"); await expect(edge).toBeFocused();
+    await expect(summary.getByRole("heading", { name: "陣列索引值", exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("region", { name: "學習入口" })).toContainText("準備開始學習「陣列索引值」？");
+});

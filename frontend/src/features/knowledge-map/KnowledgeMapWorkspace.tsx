@@ -281,7 +281,7 @@ function FocusContext({ selected, directRelations, conceptById, progress, openCo
   selected: Concept; directRelations: KnowledgeStructureView["relations"]; conceptById: Map<string, Concept>;
   progress: LearnerProgressView | null; openConcept: (id: string) => void; openRelation: (id: string) => void;
 }) {
-  const relations = directRelations.length === 0
+  const relations = mobile && (directRelations.length === 0
     ? <p className="relation-empty">這個概念目前沒有直接連結，可查看教材重點，或從學習順序探索其他概念。</p>
     : <ul className="relation-list" aria-label="直接概念關係">{directRelations.map(relation => <li key={relation.relation_id}>
       <button type="button" onClick={() => openRelation(relation.relation_id)}>
@@ -289,14 +289,18 @@ function FocusContext({ selected, directRelations, conceptById, progress, openCo
         <strong><span className="relation-direction-hint">{relation.source_concept_id === selected.concept_id ? "連向 →" : "來自 ←"}</span><span className="relation-other-concept">{conceptById.get(relation.source_concept_id === selected.concept_id ? relation.target_concept_id : relation.source_concept_id)?.label}</span></strong>
         <small>{relation.learner_reason}</small>
       </button>
-    </li>)}</ul>;
+    </li>)}</ul>);
   return <>
     <header className="focus-context-heading"><h2>目前焦點</h2><h3 title={selected.label}>{selected.label}</h3></header>
     <p className="focus-claim-summary">{selected.claims.find(claim => claim.text.trim())?.text}</p>
     <LearningBadge conceptId={selected.concept_id} progress={progress} />
-    <button className="secondary-button focus-detail-action" type="button" onClick={() => openConcept(selected.concept_id)}>查看概念與來源</button>
-    {mobile ? <details className="focus-relations"><summary>查看關係說明（{directRelations.length}）</summary>{relations}</details>
-      : <section className="focus-direct-relations"><h3>直接關係 <span>{directRelations.length}</span></h3>{relations}</section>}
+    {mobile ? <>
+      <button className="secondary-button focus-detail-action" type="button" onClick={() => openConcept(selected.concept_id)}>查看概念與來源</button>
+      <details className="focus-relations"><summary>查看關係說明（{directRelations.length}）</summary>{relations}</details>
+    </> : <section className="focus-relation-summary">
+      <p>{directRelations.length > 0 ? <><strong>{directRelations.length}</strong> 個直接關係</> : "目前沒有直接關係"}</p>
+      <p className="focus-map-hint">{directRelations.length > 0 ? "點選地圖上的概念或連線查看詳細內容。" : "可以從左側概念導覽選擇其他概念，或切換到「學習順序」探索教材。"}</p>
+    </section>}
   </>;
 }
 
