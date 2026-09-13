@@ -283,8 +283,9 @@ function FocusContext({ selected, directRelations, conceptById, progress, openCo
   </>;
 }
 
-function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRelation, progress, selectedRelationId, detail }: {
+function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRelation, progress, selectedRelationId, detail, studyAction }: {
   detail: ReactNode;
+  studyAction: ReactNode;
   selectedRelationId: string | null;
   progress: LearnerProgressView | null;
   openConcept: (id: string, restoreFocus?: RestoreFocus) => void;
@@ -361,10 +362,6 @@ function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRel
   const focalNode = layoutById.get(selected.concept_id)!;
   const centerX = focalNode.x + focalNode.width / 2;
   const centerY = focalNode.y + focalNode.height / 2;
-  const fitGraph = () => {
-    const element = graphElement.current;
-    if (element) void graphInstance.current?.setViewport(getViewportForBounds(bounds, element.clientWidth, element.clientHeight, 0.1, 1.4, 0.14));
-  };
   const frameFocus = () => {
     const element = graphElement.current;
     if (!element) return;
@@ -423,14 +420,13 @@ function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRel
         <h2 id="focus-title">概念地圖</h2>
         <div className="relation-legend" aria-label="概念關係圖例">{Object.entries(relationLabels).map(([type, label]) => <span className={`is-${type}`} key={type} style={{ color: relationColors[type as RelationType] }}><i className={`relation-swatch${type === "application" || type === "contrast" ? " is-dashed" : ""}`} aria-hidden="true" />{label}</span>)}</div>
       </header>
-      <div className="graph-actions"><button className="text-button" type="button" onClick={() => void graphInstance.current?.setCenter(centerX, centerY, { zoom: 1 })}>聚焦目前概念</button><button className="text-button" type="button" onClick={fitGraph}>顯示所有直接關係</button></div>
     <div className="focus-graph" ref={graphElement} aria-label={`「${selected.label}」與直接相關概念`}>
       <ReactFlow nodeTypes={nodeTypes} nodes={nodes} edges={edges} proOptions={{ hideAttribution: true }}
         ariaLabelConfig={{ "controls.zoomIn.ariaLabel": "放大地圖", "controls.zoomOut.ariaLabel": "縮小地圖", "controls.fitView.ariaLabel": "顯示完整關係圖", "node.a11yDescription.default": "按 Enter 或空白鍵查看概念。", "edge.a11yDescription.default": "按 Enter 或空白鍵查看關係說明。" }} onInit={(instance) => { graphInstance.current = instance; requestAnimationFrame(frameFocus); }}
         minZoom={0.1} maxZoom={1.8} zoomOnScroll={true} preventScrolling={true} nodesConnectable={false} nodesDraggable={false} edgesReconnectable={false}
         onNodeClick={(_, node) => openConcept(node.id, () => restoreGraphFocus(node.id))} onEdgeClick={(_, edge) => openRelation(edge.id, () => restoreGraphFocus(edge.id))}>
         <Background color="var(--border)" gap={28} size={1} />
-        <Controls aria-label="概念地圖縮放與置中控制" showInteractive={false} showFitView={false} />
+        <Controls aria-label="概念地圖縮放與置中控制" showInteractive={false} fitViewOptions={{ minZoom: 0.1, maxZoom: 1.4, padding: 0.14 }} />
       </ReactFlow>
       </div>
     </section>
@@ -440,6 +436,7 @@ function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRel
       </div>
       {detail}
     </aside>
+    {studyAction}
   </section>;
 }
 
@@ -548,6 +545,15 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
     setRelationId(null);
     window.requestAnimationFrame(() => tabs.current.get(nextMode)?.focus());
   };
+  const studyButtonLabel = isLoadingProgress ? "讀取學習進度…" : isStartingStudy ? "正在開始…" : canResume ? "繼續本次學習" : progress ? "開始新的學習" : "開始本次學習";
+  const studyTitle = canResume ? `接著學習「${startConcept?.label ?? "目前概念"}」` : "先探索教材的概念與關係";
+  const studyAction = <button className="primary-button" disabled={isStartingStudy || isLoadingProgress} type="button" onClick={() => onStartStudy(startConceptId)}>
+    <Icon name="learning" />{studyButtonLabel}
+  </button>;
+  const focusStudyAction = <section className="focus-study-action surface" aria-label="學習入口">
+    <div><strong>{canResume ? studyTitle : "準備開始學習？"}</strong><p>{canResume ? "你的學習進度已保留。" : "選好概念後即可開始閱讀與練習。"}</p></div>
+    {studyAction}
+  </section>;
   const detail = selectedRelation || selectedConcept ? <>
         {selectedRelation && <RelationDetail relation={selectedRelation} view={view} apiClient={apiClient} sourceArtifactId={sourceArtifactId} close={closeDetail} openConcept={openConceptDetail} />}
         {selectedConcept && (
@@ -629,20 +635,18 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
             />
           )}
           {mode === "focus" && (
-            <FocusView selectedRelationId={relationId} progress={progress} openRelation={openRelation} openConcept={openConceptDetail} selectedConceptId={selectedConceptId} focusConcept={focusConcept} detail={detail} view={view} />
+            <FocusView selectedRelationId={relationId} progress={progress} openRelation={openRelation} openConcept={openConceptDetail} selectedConceptId={selectedConceptId} focusConcept={focusConcept} detail={detail} studyAction={focusStudyAction} view={view} />
           )}
           {mode === "review" && (progressMessage ? <div className="review-empty"><div><h2>暫時無法顯示複習重點</h2><p>重新讀取進度後，即可查看最近一次學習的複習方向。</p><button className="primary-button" type="button" onClick={onReloadProgress}>重新讀取進度</button></div></div> : <ReviewView openConcept={openConceptDetail} view={view} progress={progress} startStudy={onStartStudy} isStartingStudy={isStartingStudy} />)}
         </div>
         {mode !== "focus" && detail}
       </div>
-      <div className="map-study-bar"><StudyGuide
+      {mode !== "focus" && <div className="map-study-bar"><StudyGuide
         mood={canResume ? "guide" : "welcome"}
-        title={canResume ? `接著學習「${startConcept?.label ?? "目前概念"}」` : "先探索教材的概念與關係"}
+        title={studyTitle}
         message={canResume ? "你的作答進度已保留。回到教材後，我會帶你完成下一個練習重點。" : "點選概念或連線查看內容。學習順序提供參考，選好想學的概念後就能開始閱讀與練習。"}
-        action={<button className="primary-button" disabled={isStartingStudy || isLoadingProgress} type="button" onClick={() => onStartStudy(startConceptId)}>
-          <Icon name="learning" />{isLoadingProgress ? "讀取學習進度…" : isStartingStudy ? "正在開始…" : canResume ? "繼續本次學習" : progress ? "開始新的學習" : "開始本次學習"}
-        </button>}
-      /></div>
+        action={studyAction}
+      /></div>}
     </section>
   );
 }

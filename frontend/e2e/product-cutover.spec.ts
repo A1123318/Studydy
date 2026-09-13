@@ -135,7 +135,7 @@ test("focus, path, and chapter views lead to source-backed learning", async ({ p
   await expect(page).toHaveURL(`http://127.0.0.1:4173/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
   await expect(page.getByRole("heading", { name: "知識地圖", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "概念地圖" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toContainText("學習順序提供參考");
+  await expect(page.getByRole("region", { name: "學習入口" })).toContainText("準備開始學習？");
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   const canvas = await page.locator(".focus-graph").boundingBox();
   const navigator = await page.getByRole("navigation", { name: "概念導覽" }).boundingBox();
@@ -153,6 +153,7 @@ test("focus, path, and chapter views lead to source-backed learning", async ({ p
   await expect(edge).toBeFocused();
   await page.getByRole("tab", { name: "學習順序" }).click();
   await expect(page.locator(".learning-path li")).toHaveCount(2);
+  await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toBeVisible();
   await expect(page.locator(".learning-path")).not.toContainText("document_order");
   await page.locator(".learning-path").getByRole("button", { name: /Array/ }).click();
   await expect(page.getByRole("tab", { name: "學習順序" })).toHaveAttribute("aria-selected", "true");
@@ -555,6 +556,9 @@ test("recovered map reads owned progress and continues the same session without 
   await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeInViewport();
   await page.screenshot({ path: "/tmp/studydy-map-workspace/1366-resumed.png", fullPage: true });
   await page.reload();
+  await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+  await page.getByRole("navigation", { name: "概念導覽" }).getByRole("button", { name: "Array", exact: true }).click();
+  await expect(page.getByRole("region", { name: "學習入口" })).toContainText("接著學習「Stack」");
   await page.getByRole("button", { name: "繼續本次學習", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
   await expect(page.getByRole("button", { name: "開始評量", exact: true })).toBeVisible();
@@ -621,23 +625,36 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
   for (const kind of ["small", "large", "long-names"] as const) {
     test(`focus workspace ${kind} at ${viewport.width}px keeps navigation, context and learning accessible`, async ({ page }) => {
       await page.setViewportSize(viewport);
-      const view = workspaceView(kind === "small" ? 8 : 52, kind === "long-names");
+      const view = workspaceView(kind === "small" ? 6 : 52, kind === "long-names");
       await routes(page, view);
       await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
       const navigator = page.getByRole("navigation", { name: "概念導覽" });
       const context = page.getByRole("complementary", { name: "目前焦點資訊" });
       const graph = page.locator(".focus-graph");
       await expect(navigator).toBeVisible();
+      await expect(page.getByText("聚焦目前概念", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("顯示所有直接關係", { exact: true })).toHaveCount(0);
+      await expect(page.locator(".graph-actions")).toHaveCount(0);
+      for (const name of ["放大地圖", "縮小地圖", "顯示完整關係圖"]) await expect(graph.getByRole("button", { name, exact: true })).toBeVisible();
+      const studyEntry = page.getByRole("region", { name: "學習入口" });
+      await expect(studyEntry).toContainText("準備開始學習？");
+      await expect(studyEntry.locator("img")).toHaveCount(0);
+      await expect(page.locator(".study-guide")).toHaveCount(0);
       await expect(page.getByRole("combobox", { name: "焦點概念" })).toHaveCount(0);
-      await expect(graph.locator(".react-flow__node")).toHaveCount(kind === "small" ? 8 : 9);
-      await expect(graph.locator(".concept-flow-edge")).toHaveCount(kind === "small" ? 7 : 8);
+      await expect(graph.locator(".react-flow__node")).toHaveCount(kind === "small" ? 6 : 9);
+      await expect(graph.locator(".concept-flow-edge")).toHaveCount(kind === "small" ? 5 : 8);
       await expect(context.getByRole("heading", { name: view.concepts[0].label, exact: true })).toBeVisible();
       if (viewport.width > 900) {
         await expect(page.locator(".focus-relations")).toHaveCount(0);
-        await expect(context.getByRole("list", { name: "直接概念關係" }).getByRole("listitem")).toHaveCount(kind === "small" ? 7 : 8);
+        await expect(context.getByRole("list", { name: "直接概念關係" }).getByRole("listitem")).toHaveCount(kind === "small" ? 5 : 8);
         await expect(page.getByRole("button", { name: "開始本次學習", exact: true })).toBeInViewport();
         const graphBox = (await graph.boundingBox())!;
         const contextBox = (await context.boundingBox())!;
+        const entryBox = (await studyEntry.boundingBox())!;
+        expect(Math.abs(entryBox.x - graphBox.x)).toBeLessThan(3);
+        expect(Math.abs(entryBox.x + entryBox.width - contextBox.x - contextBox.width)).toBeLessThan(3);
+        expect(entryBox.height).toBeLessThanOrEqual(64);
+        if (viewport.width >= 1200) expect(entryBox.x).toBeGreaterThan((await navigator.boundingBox())!.x + (await navigator.boundingBox())!.width);
         expect(graphBox.width).toBeGreaterThan(contextBox.width);
         expect(Math.abs(graphBox.y + graphBox.height - contextBox.y - contextBox.height)).toBeLessThan(3);
         if (kind !== "small") expect(await context.locator(".focus-context-content").evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
@@ -660,6 +677,8 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await detailAction.click();
       const conceptDetail = page.getByRole("dialog", { name: "概念詳情" });
       await expect(conceptDetail).toBeFocused();
+      await expect(page.locator(".focus-study-action")).toBeVisible();
+      if (viewport.width > 900) await expect(studyEntry.getByRole("button")).toBeInViewport();
       expect(await conceptDetail.evaluate(element => element.matches(":modal"))).toBe(viewport.width <= 900);
       if (viewport.width <= 900) expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(pageHeight);
       expect(await conceptDetail.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
@@ -672,6 +691,8 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await relation.click();
       const relationDetail = page.getByRole("dialog", { name: "關係詳情" });
       await expect(relationDetail).toBeFocused();
+      await expect(page.locator(".focus-study-action")).toBeVisible();
+      if (viewport.width > 900) await expect(studyEntry.getByRole("button")).toBeInViewport();
       await expect(relationDetail).toContainText(view.relations[0].learner_reason);
       await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-relation.png`, fullPage: true });
       await page.keyboard.press("Escape");
@@ -681,9 +702,9 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
   }
 }
 
-for (const width of [1536, 1366, 1100, 390]) {
+for (const width of [1920, 1536, 1366, 1100, 390]) {
   test(`52-concept navigation and search share focus without opening detail at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 1366 ? 768 : 844 });
+    await page.setViewportSize({ width, height: width === 1366 ? 768 : width === 1920 ? 1080 : width === 1536 ? 1024 : width === 1100 ? 800 : 844 });
     const view = workspaceView();
     await routes(page, view);
     await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
@@ -708,7 +729,7 @@ for (const width of [1536, 1366, 1100, 390]) {
     await expect(page.locator(".relation-empty")).toContainText("沒有直接連結");
     await navigator.getByRole("button", { name: "Concept 52", exact: true }).focus();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "聚焦目前概念", exact: true })).toBeFocused();
+    await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".focus-graph"))).toBe(true);
     await page.screenshot({ path: `/tmp/studydy-map-workspace/${width}-isolated.png`, fullPage: true });
     await page.getByRole("tab", { name: "總覽", exact: true }).click();
     const search = page.getByRole("searchbox", { name: "搜尋概念或關鍵字" });
@@ -732,10 +753,19 @@ for (const width of [1536, 1366, 1100, 390]) {
 
 test("Focus graph utilities and graph-node detail preserve framing and opener", async ({ page }) => {
   await page.setViewportSize({ width: 1536, height: 1024 });
-  const view = workspaceView(8);
+  const view = workspaceView();
   await routes(page, view);
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
-  await page.getByRole("button", { name: "顯示所有直接關係", exact: true }).click();
+  const focal = page.getByRole("button", { name: "教材概念：Concept 1", exact: true });
+  await page.getByRole("button", { name: "放大地圖", exact: true }).click();
+  const graphBox = (await page.locator(".focus-graph").boundingBox())!;
+  await page.mouse.move(graphBox.x + 40, graphBox.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(graphBox.x + 150, graphBox.y + 120, { steps: 5 });
+  await page.mouse.up();
+  const zoomed = (await focal.boundingBox())!;
+  await page.getByRole("button", { name: "顯示完整關係圖", exact: true }).click();
+  await expect.poll(async () => (await focal.boundingBox())!.width).toBeLessThan(zoomed.width);
   await expect.poll(() => page.locator(".focus-graph").evaluate(graph => {
     const bounds = graph.getBoundingClientRect();
     return [...graph.querySelectorAll(".react-flow__node")].every(node => {
@@ -743,9 +773,7 @@ test("Focus graph utilities and graph-node detail preserve framing and opener", 
       return box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
     });
   })).toBe(true);
-  await page.getByRole("button", { name: "聚焦目前概念", exact: true }).click();
-  const focal = page.getByRole("button", { name: "教材概念：Concept 1", exact: true });
-  await expect.poll(async () => (await focal.boundingBox())?.width).toBe(300);
+
   await focal.click();
   await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeFocused();
   await page.getByRole("dialog").getByRole("button", { name: /Concept 2/, exact: false }).click();
@@ -756,7 +784,7 @@ test("Focus graph utilities and graph-node detail preserve framing and opener", 
   await expect(page.locator(".focus-context-heading")).toContainText("Concept 2");
 });
 
-for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 1100, height: 800 }, { width: 390, height: 844 }]) {
   test(`map progress, keyboard tabs and weak-concept review remain available at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await routes(page, structureView(), () => ({ ...progress, concept_states: progress.concept_states.map((state, index) => index ? state : { ...state, status: "needs_review", weak_claim_ids: [firstClaim] }) }));
@@ -775,9 +803,14 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 
     await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "學習順序", exact: true })).toBeFocused();
     await expect(page.locator(".learning-path li")).toHaveCount(2);
+    await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toHaveCount(1);
+    await expect(page.locator(".focus-study-action")).toHaveCount(0);
     await expect(page.locator(".focus-workspace")).toHaveCount(0);
     await page.keyboard.press("End");
     await expect(page.getByRole("tab", { name: "複習重點", exact: true })).toBeFocused();
+    await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toHaveCount(1);
     await expect(page.locator(".review-list")).toContainText("A stack follows LIFO order.");
     const reviewAction = page.getByRole("button", { name: "查看重點", exact: true });
     await reviewAction.click();
@@ -810,4 +843,58 @@ test("map loading and excluded-page/progress notices survive the Focus layout", 
   await page.screenshot({ path: "/tmp/studydy-map-workspace/1366-notices.png", fullPage: true });
   await page.getByRole("tab", { name: "總覽", exact: true }).click();
   await expect(page.getByRole("region", { name: "未能整理的頁面" })).toContainText("第 3 頁未納入概念與練習");
+});
+
+test("compact learning entry shares loading, starting and new-study authority with reading tabs", async ({ page }) => {
+  const view = structureView();
+  await routes(page, view);
+  let loaded!: () => void, started!: () => void;
+  const readingMaterial = new Promise<void>(resolve => { loaded = resolve; });
+  const startingStudy = new Promise<void>(resolve => { started = resolve; });
+  let hasHistory = false, completed = false, creates = 0;
+  await page.route(`**/v1/materials/${materialId}`, async route => {
+    await readingMaterial;
+    return json(route, { schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
+      display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at, latest_attempt: run,
+      available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision, created_at: run.created_at, status: "succeeded" }],
+      study_sessions: hasHistory ? [{ ...session("completed"), run_id: runId }] : [] });
+  });
+  await page.route("**/v1/materials/*/knowledge-structures/*/study-sessions/*/resume?*", route => json(route, {
+    schema: "study-resume/v1", session: session(completed ? "completed" : "active"), run_id: runId,
+    source_artifact_id: artifactId, knowledge_structure: view, progress, assessments: [], selected_assessment_revision: null,
+  }));
+  await page.route("**/v1/study-sessions", async route => {
+    creates++;
+    expect(route.request().postDataJSON()).toEqual({ schema: "study-session-create/v2", material_id: materialId,
+      knowledge_structure_revision: structureRevision, current_concept_id: firstConcept });
+    await startingStudy;
+    completed = false;
+    return json(route, session(), 201);
+  });
+  const mapPath = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
+  await page.goto(mapPath);
+  const entry = page.getByRole("region", { name: "學習入口" });
+  await expect(entry.getByRole("button", { name: "讀取學習進度…", exact: true })).toBeDisabled();
+  loaded();
+  await expect(entry.getByRole("button", { name: "開始本次學習", exact: true })).toBeEnabled();
+  await entry.getByRole("button", { name: "開始本次學習", exact: true }).click();
+  await expect(entry.getByRole("button", { name: "正在開始…", exact: true })).toBeDisabled();
+  await expect.poll(() => creates).toBe(1);
+  started();
+  await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
+  await expect(page.getByRole("button", { name: "開始評量", exact: true })).toBeVisible();
+  hasHistory = true; completed = true;
+  await page.goto(mapPath);
+  await expect(entry.getByRole("button", { name: "開始新的學習", exact: true })).toBeEnabled();
+  for (const name of ["學習順序", "總覽", "複習重點"]) {
+    await page.getByRole("tab", { name, exact: true }).click();
+    const guide = page.getByRole("complementary", { name: "Studydy 學習引導" });
+    await expect(guide).toBeVisible();
+    await expect(guide.getByRole("button", { name: "開始新的學習", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "開始新的學習", exact: true })).toHaveCount(1);
+    await expect(entry).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "開始新的學習", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
+  expect(creates).toBe(2);
 });

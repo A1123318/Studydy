@@ -41,8 +41,6 @@
 .focus-graph .react-flow__controls { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: none; }
 .focus-graph .react-flow__controls-button { width: 36px; height: 36px; }
 .relation-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: 12px; font-weight: 600; }
-.graph-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); padding: 0 var(--space-4) var(--space-2); background: var(--surface); }
-.graph-actions button { min-height: 32px; font-size: 13px; }
 .focus-relations > summary { cursor: pointer; font-weight: 600; padding: 8px 0 0; font-size: 13px; }
 .relation-list { display: grid; gap: var(--space-2); padding: 0; margin: 0; list-style: none; }
 .relation-list button { display: grid; gap: var(--space-1); width: 100%; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-input); color: var(--text-primary); background: var(--surface); text-align: left; }
@@ -184,16 +182,16 @@
 .new-study-note { color: var(--text-secondary); font-size: 12px; }
 .concept-flow-node strong, .concept-flow-node p { overflow-wrap: anywhere; }
 
-/* The map shell is 56px tall. Flex rows reserve the actual header, notices,
-   tabs and study bar heights; only the exploration workspace uses the remainder. */
+/* The map shell is 56px tall. Flex rows reserve the header, notices and tabs;
+   the workspace grid divides the remainder between exploration and learning. */
 .map-workspace.is-focus-mode { display: flex; flex-direction: column; height: calc(100dvh - 56px); min-height: 620px; }
 .is-focus-mode > :not(.map-content) { flex-shrink: 0; }
 .is-focus-mode .map-tabs { position: static; }
 .is-focus-mode .map-content { flex: 1; min-height: 320px; display: block; }
 .is-focus-mode .map-view { height: 100%; padding: 0; border: 0; background: transparent; }
-.focus-workspace { display: grid; grid-template-columns: clamp(220px, 17vw, 250px) minmax(0, 1fr) clamp(280px, 22vw, 320px); gap: var(--space-4); height: 100%; min-height: 0; }
+.focus-workspace { display: grid; grid-template-columns: clamp(220px, 17vw, 250px) minmax(0, 1fr) clamp(280px, 22vw, 320px); grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-4); height: 100%; min-height: 0; }
 .focus-navigator, .focus-main, .focus-context { min-width: 0; min-height: 0; box-shadow: none; }
-.focus-navigator { display: flex; flex-direction: column; position: relative; }
+.focus-navigator { display: flex; flex-direction: column; position: relative; grid-row: 1 / -1; }
 .focus-navigator > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--border); }
 .focus-navigator h2, .focus-graph-header h2, .focus-context-heading h2 { margin: 0; font-size: 16px; }
 .focus-navigator > header > span, .navigator-toggle > span { font-size: 12px; color: var(--text-muted); }
@@ -216,6 +214,11 @@
 .focus-direct-relations { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .focus-direct-relations > h3 { display: flex; justify-content: space-between; margin: 0 0 var(--space-3); font-size: 15px; }
 .focus-direct-relations > h3 > span { color: var(--text-muted); }
+.focus-study-action { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; padding: var(--space-1) var(--space-4); box-shadow: none; }
+.focus-study-action > div { min-width: 0; overflow-wrap: anywhere; }
+.focus-study-action strong { font-size: 14px; }
+.focus-study-action p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: 12px; }
+.focus-study-action > button { flex-shrink: 0; }
 @media (min-width: 901px) {
   .focus-context .detail-panel { position: static; height: 100%; max-height: none; border: 0; border-radius: 0; }
 }
@@ -224,8 +227,9 @@
 .map-workspace .map-study-bar .study-guide__character { animation: none; }
 .map-workspace .map-study-bar .study-guide__action { max-width: 100%; }
 @media (min-width: 901px) and (max-width: 1199px) {
-  .focus-workspace { grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr); }
-  .focus-navigator { grid-column: 1 / -1; z-index: 6; }
+  .focus-workspace { grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .focus-navigator { grid-column: 1 / -1; grid-row: auto; z-index: 6; }
+  .focus-study-action { grid-column: 1 / -1; }
   .focus-navigator.is-expanded .navigator-list { position: absolute; top: calc(100% + var(--space-2)); left: 0; width: 360px; max-height: min(360px, 60dvh); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: 0 4px 12px rgba(20,32,60,.08); }
 }
 @media (max-width: 1199px) {
@@ -237,6 +241,8 @@
   .map-workspace.is-focus-mode { height: auto; min-height: 0; }
   .is-focus-mode .map-content { min-height: 0; }
   .focus-workspace { display: flex; flex-direction: column; height: auto; }
+  .focus-study-action { flex-direction: column; align-items: stretch; padding: var(--space-3); }
+  .focus-study-action > button { width: 100%; }
   .navigator-list { flex: auto; max-height: 320px; }
   .focus-graph { flex: none; height: 360px; }
   .focus-context-content { height: auto; }
