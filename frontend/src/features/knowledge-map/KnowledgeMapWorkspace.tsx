@@ -102,6 +102,17 @@ function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStud
   sourceArtifactId: string;
 }) {
   const resumesCurrent = canResume && progress?.current_concept_id === concept.concept_id;
+  const relatedConcepts = useMemo(() => {
+    const byId = new Map(view.concepts.map(item => [item.concept_id, item]));
+    const related = new Map<string, { concept: Concept; types: Set<RelationType> }>();
+    for (const relation of view.relations) {
+      if (relation.source_concept_id !== concept.concept_id && relation.target_concept_id !== concept.concept_id) continue;
+      const otherId = relation.source_concept_id === concept.concept_id ? relation.target_concept_id : relation.source_concept_id;
+      if (!related.has(otherId)) related.set(otherId, { concept: byId.get(otherId)!, types: new Set() });
+      related.get(otherId)!.types.add(relation.type);
+    }
+    return [...related.values()];
+  }, [concept.concept_id, view.concepts, view.relations]);
   return (
     <DetailPanel label="概念詳情" focusKey={concept.concept_id} close={close}>
       <header>
@@ -121,19 +132,23 @@ function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStud
         <h3>教材重點</h3>
         <ConceptContent claims={concept.claims} apiClient={apiClient} sourceArtifactId={sourceArtifactId} />
       </section>
-      <section>
-        <h3>相關概念</h3>
-        {view.relations.filter((relation) => relation.source_concept_id === concept.concept_id || relation.target_concept_id === concept.concept_id).map((relation) => {
-          const otherId = relation.source_concept_id === concept.concept_id ? relation.target_concept_id : relation.source_concept_id;
-          return <button className="detail-related" key={relation.relation_id} type="button" onClick={() => openConcept(otherId)}>
-            <small>{relationLabels[relation.type]} · {relation.source_concept_id === concept.concept_id ? "連向" : "來自"}</small>
-            <strong>{view.concepts.find((item) => item.concept_id === otherId)?.label}</strong>
-          </button>;
-        })}
-      </section>
       {concept.aliases.length > 0 && (
         <section><h3>教材中的其他名稱</h3><p className="page-list">{concept.aliases.join("、")}</p></section>
       )}
+      {relatedConcepts.length > 0 && <details className="detail-explore" key={concept.concept_id}>
+        <summary onKeyDown={event => {
+          // Keep native disclosure activation out of React Flow's global Space shortcut.
+          if (event.key === " ") event.stopPropagation();
+        }}><span>延伸探索</span><small>{relatedConcepts.length} 個相關概念</small></summary>
+        <p>依知識地圖中的直接關係，探索其他概念。</p>
+        <ul className="detail-explore-list">{relatedConcepts.map(item => {
+          const types = [...item.types].map(type => relationLabels[type]).join("、");
+          return <li key={item.concept.concept_id}><button className="detail-explore-item" type="button"
+            aria-label={`${types}：前往${item.concept.label}`} onClick={() => openConcept(item.concept.concept_id)}>
+            <span><small>{types}</small><strong>{item.concept.label}</strong></span><Icon name="chevron-right" size={16} />
+          </button></li>;
+        })}</ul>
+      </details>}
     </DetailPanel>
   );
 }

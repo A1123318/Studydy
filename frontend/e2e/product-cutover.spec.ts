@@ -782,6 +782,7 @@ test("Focus graph utilities and graph-node detail preserve framing and opener", 
 
   await focal.click();
   await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeFocused();
+  await page.getByRole("dialog").locator(".detail-explore summary").click();
   await page.getByRole("dialog").getByRole("button", { name: /Concept 2/, exact: false }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { name: "Concept 2", exact: true })).toBeVisible();
   await expect(page.locator('.navigator-list [aria-current="true"]')).toHaveText("Concept 2");
@@ -981,4 +982,103 @@ for (const viewport of [{ width: 1536, height: 1024 }, { width: 1366, height: 76
       expect(saved.current_concept_id).toBe(currentId);
     });
   }
+}
+
+for (const viewport of [{ width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  for (const kind of ["many", "none", "parallel", "long"] as const) {
+    test(`Concept Detail secondary exploration ${kind} at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const view = workspaceView(kind === "none" ? 1 : kind === "parallel" ? 6 : 9, kind === "long");
+      view.concepts[0].aliases = ["Document alias"];
+      if (kind === "parallel") view.relations.push(
+        { ...view.relations[0], relation_id: `relation:sha256:${"f".repeat(64)}`, type: "contrast", inference_basis: "comparison", learner_reason: "A different perspective on the same concept." },
+        { ...view.relations[0], relation_id: `relation:sha256:${"e".repeat(64)}`, source_concept_id: view.concepts[2].concept_id, target_concept_id: view.concepts[3].concept_id },
+      );
+      await routes(page, view);
+      await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+      const context = page.getByRole("complementary", { name: "目前焦點資訊" });
+      if (viewport.width > 900) await expect(context.getByRole("heading", { name: /^直接關係/ })).toHaveText(`直接關係 ${kind === "none" ? 0 : kind === "parallel" ? 6 : 8}`);
+      if (kind !== "none") {
+        if (viewport.width <= 900) await page.locator(".focus-relations summary").click();
+        const relation = context.getByRole("list", { name: "直接概念關係" }).getByRole("button").first();
+        await expect(relation).toContainText(view.relations[0].learner_reason);
+        await relation.click();
+        const relationDetail = page.getByRole("dialog", { name: "關係詳情" });
+        await expect(relationDetail).toContainText(view.relations[0].learner_reason);
+        await expect(relationDetail.getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
+        await page.keyboard.press("Escape");
+      }
+      await context.getByRole("button", { name: "查看概念與來源", exact: true }).click();
+      const detail = page.getByRole("dialog", { name: "概念詳情" });
+      const explore = detail.locator(".detail-explore");
+      await expect(detail.getByRole("heading", { name: "相關概念", exact: true })).toHaveCount(0);
+      await expect(detail.getByRole("heading", { name: "教材重點", exact: true })).toBeVisible();
+      await expect(detail.locator(".primary-button")).toHaveCount(0);
+      if (kind === "none") await expect(explore).toHaveCount(0);
+      else {
+        await expect(explore.locator("summary")).toHaveText(`延伸探索${kind === "parallel" ? 5 : 8} 個相關概念`);
+        await expect(explore).not.toHaveAttribute("open", "");
+        expect(await detail.locator(".page-list").evaluate(element => element.parentElement?.nextElementSibling?.matches(".detail-explore"))).toBe(true);
+      }
+      await page.screenshot({ path: `/tmp/studydy-detail-explore/${viewport.width}-${kind}-closed.png`, fullPage: viewport.width > 900 });
+      if (kind === "none") return;
+      const summary = explore.locator("summary");
+      await summary.focus(); await page.keyboard.press("Enter");
+      await expect(explore).toHaveAttribute("open", "");
+      await expect(explore).toContainText("依知識地圖中的直接關係，探索其他概念。");
+      await expect(explore).not.toContainText(/連向|來自/);
+      await expect(explore).not.toContainText(view.relations[0].learner_reason);
+      await expect(explore.locator(".detail-explore-item strong")).toHaveText(view.concepts.slice(1).map(concept => concept.label));
+      if (kind === "parallel") {
+        const other = explore.getByRole("button", { name: "先備、對照：前往Concept 2", exact: true });
+        await expect(other).toHaveCount(1);
+        await expect(other.locator("small")).toHaveText("先備、對照");
+      }
+      expect(await detail.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      await page.screenshot({ path: `/tmp/studydy-detail-explore/${viewport.width}-${kind}-expanded.png`, fullPage: viewport.width > 900 });
+      await summary.focus(); await page.keyboard.press("Space");
+      await expect(explore).not.toHaveAttribute("open", "");
+      await page.keyboard.press("Enter");
+      await detail.evaluate(element => { element.scrollTop = element.scrollHeight; });
+      await explore.getByRole("button").last().click();
+      const target = view.concepts.at(-1)!;
+      await expect(detail.getByRole("heading", { name: target.label, exact: true })).toBeVisible();
+      await expect(detail).toBeFocused();
+      await expect.poll(() => detail.evaluate(element => element.scrollTop)).toBe(0);
+      await expect(detail.locator(".detail-explore")).not.toHaveAttribute("open", "");
+      await expect(page.locator('.navigator-list [aria-current="true"]')).toHaveText(target.label);
+      await expect(page.locator(".concept-flow-node.is-focus")).toContainText(target.label);
+      await page.screenshot({ path: `/tmp/studydy-detail-explore/${viewport.width}-${kind}-navigated.png`, fullPage: viewport.width > 900 });
+    });
+  }
+}
+
+for (const mode of ["學習順序", "總覽", "複習重點"] as const) {
+  test(`${mode} keeps shared secondary concept navigation and reading study actions`, async ({ page }) => {
+    await routes(page, structureView(), () => ({ ...progress,
+      concept_states: progress.concept_states.map((state, index) => index ? state : { ...state, status: "needs_review", weak_claim_ids: [firstClaim] }),
+    }));
+    await page.route(`**/v1/materials/${materialId}`, route => json(route, {
+      schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
+      display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at, latest_attempt: run,
+      available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision, created_at: run.created_at, status: "succeeded" }],
+      study_sessions: [{ ...session(), run_id: runId }],
+    }));
+    await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+    await page.getByRole("tab", { name: mode, exact: true }).click();
+    if (mode === "學習順序") await page.locator(".learning-path").getByRole("button", { name: /Stack/ }).click();
+    else await page.getByRole("button", { name: mode === "總覽" ? "探索這個段落" : "查看重點", exact: true }).click();
+    const detail = page.getByRole("dialog", { name: "概念詳情" });
+    await expect(detail.getByRole("button", { name: "繼續這個概念", exact: true })).toBeVisible();
+    await expect(detail.locator(".detail-explore")).not.toHaveAttribute("open", "");
+    await detail.locator(".detail-explore summary").click();
+    await detail.getByRole("button", { name: "先備：前往Array", exact: true }).click();
+    await expect(detail.getByRole("heading", { name: "Array", exact: true })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "從這裡開始新學習", exact: true })).toBeVisible();
+    await expect(detail.locator(".detail-explore")).not.toHaveAttribute("open", "");
+    await expect(page.getByRole("tab", { name: mode, exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toContainText("接著學習「Stack」");
+  });
 }
