@@ -191,10 +191,12 @@ for (const status of ["succeeded", "partial"] as const) {
       await expect(card.locator(".state-actions button").first()).toHaveText("開啟知識地圖");
       await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
       await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
+      await expect(card).not.toContainText("最新處理：");
       if (studyStatus) await expect(card.getByRole("button", { name: studyStatus === "completed" ? "查看上次學習" : "接續上次學習", exact: true })).toHaveClass("secondary-button");
       await page.screenshot({ path: `/tmp/studydy-map-library/completed-${status}-${studyStatus ?? "none"}.png`, fullPage: true });
       await page.goto("/materials");
       await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass(studyStatus ? "secondary-button" : "primary-button");
+      await expect(card).not.toContainText("最新處理：");
       await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
       if (studyStatus) await expect(card.locator(".primary-button")).toHaveText(studyStatus === "completed" ? "查看上次學習" : "接續上次學習");
     });
@@ -212,6 +214,8 @@ for (const status of ["pending", "running", "failed", "cancelled", "succeeded", 
     await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
     await page.goto("/knowledge-maps");
     const card = page.getByRole("article");
+    await expect(card.locator(".library-state")).toContainText("最新處理：");
+    if (status === "failed" || status === "cancelled") await expect(card.locator(".library-state")).toHaveText(status === "failed" ? "最新處理：處理失敗" : "最新處理：已取消處理");
     await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
     await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("secondary-button");
   });

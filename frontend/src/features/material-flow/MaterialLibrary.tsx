@@ -82,6 +82,7 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
       const available = item.available_structures;
       const latestHasPublishedMap = !!latest && available.some(structure => structure.run_id === latest.run_id);
       const latestCompletedWithMap = !!latest && (latest.status === "succeeded" || latest.status === "partial") && latestHasPublishedMap;
+      const showLatestState = !isCollection || !latestCompletedWithMap;
       const showLatestProcessing = !!latest && (!isCollection || !latestCompletedWithMap);
       const processingPrimary = isCollection && !mapsOnly && !item.study_sessions[0] && !available[0];
       const unpublishedNote = available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>;
@@ -100,7 +101,7 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
         <span className="library-file-icon" aria-hidden="true"><Icon name={mapsOnly ? "map" : "file"} size={25} /></span>
         <h2>{materialId ? item.display_name : <button className="library-title" type="button" onClick={() => writeRoute({ name: "material-detail", materialId: item.material_id })}>{item.display_name}</button>}</h2>
         <p>{new Date(item.created_at).toLocaleString()} · {formatFileSize(item.size_bytes)}</p>
-        <p className={`library-state is-${latest?.status ?? "uploaded"}`}>最新處理：{latest ? materialRunLabel(latest.status, latest.cancel_requested_at) : "已上傳，尚未開始處理"}</p>
+        {showLatestState && <p className={`library-state is-${latest?.status ?? "uploaded"}`}>最新處理：{latest ? materialRunLabel(latest.status, latest.cancel_requested_at) : "已上傳，尚未開始處理"}</p>}
         {latest && (latest.status === "running" || latest.status === "pending") && <p>{materialProgressStageLabel(latest.progress_stage)} · 已完成 {latest.completed_pages} 頁{latest.total_pages !== null && `／共 ${latest.total_pages} 頁`}</p>}
         {latest?.status === "failed" && <p>{materialFailureMessage(latest.error_code ?? "")}{available.length > 0 && " 先前已發布的知識地圖仍可開啟。"}</p>}
         {isCollection && unpublishedNote}

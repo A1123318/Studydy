@@ -92,12 +92,17 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
               : item.available_structures.length ? "開啟知識地圖" : item.latest_attempt ? "查看最新處理" : null;
             await expect(card.locator(".primary-button")).toHaveCount(primary ? 1 : 0);
             if (primary) await expect(card.locator(".primary-button")).toHaveText(primary);
-            else await expect(card).toContainText("已上傳，尚未開始處理");
+            else await expect(card.locator(".library-state")).toHaveText("最新處理：已上傳，尚未開始處理");
+            if (item.latest_attempt?.status === "failed") {
+              await expect(card.locator(".library-state")).toHaveText("最新處理：處理失敗");
+              if (!item.available_structures.length) await expect(card.getByRole("button", { name: "移除教材", exact: true })).toBeVisible();
+            }
           }
           if (["pending", "running"].includes(state)) await expect(library.getByRole("article")).toContainText("已完成 2 頁／共 8 頁");
           if (state === "failed-map") await expect(library.getByRole("article")).toContainText("先前已發布的知識地圖仍可開啟");
           if (["map", "partial", "active", "completed", "long-name"].includes(state)) {
             await expect(library.getByRole("button", { name: "開啟知識地圖", exact: true })).toBeVisible();
+            await expect(library.getByRole("article")).not.toContainText("最新處理：");
             await expect(library.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
           }
           if (state === "multiple" && viewport.width > 1200) {
@@ -155,6 +160,7 @@ test("materials polling updates pending/running, stops at terminal and cancels o
   await expect(page.getByRole("article")).toContainText("正在分析完整教材"); expect(reads).toBe(2);
   const terminal = page.waitForResponse("**/v1/materials"); await page.clock.runFor(3000); await terminal;
   await expect(page.getByRole("article").locator(".primary-button")).toHaveText("開啟知識地圖"); expect(reads).toBe(3);
+  await expect(page.getByRole("article")).not.toContainText("最新處理：");
   await expect(page.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
   await page.clock.runFor(9001); expect(reads).toBe(3);
   running = true;
@@ -171,17 +177,20 @@ test("no-safe studies and unpublished completed runs keep collection-only action
   await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
   await page.route(`**/v1/materials/${materialId}`, route => route.fulfill({ json: item }));
   await page.goto("/materials"); await expect(page.getByRole("article").locator(".primary-button")).toHaveText("接續上次學習");
+  await expect(page.getByRole("article")).not.toContainText("最新處理：");
   await expect(page.getByRole("button", { name: "開啟知識地圖", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
   for (const status of ["succeeded", "partial"] as const) {
     item = { ...base, latest_attempt: { cancel_requested_at: null, ...run, status, progress_stage: "completed", completed_pages: 8 } };
     await page.goto("/materials"); await expect(page.getByRole("article").locator(".primary-button")).toHaveText("查看最新處理");
+    await expect(page.locator(".library-state")).toContainText("最新處理：");
     await page.goto(`/materials/${materialId}`);
     await expect(page.locator(".material-library")).not.toHaveClass(/is-collection/);
     await expect(page.locator(".library-header button")).toHaveText(["返回教材庫", "重新整理", "上傳教材"]);
     const reloaded = page.waitForResponse(`**/v1/materials/${materialId}`);
     await page.getByRole("button", { name: "重新整理", exact: true }).click(); await reloaded;
     await expect(page.getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("secondary-button");
+    await expect(page.locator(".library-state")).toContainText("最新處理：");
     await expect(page.locator(".sidebar-helper")).toBeVisible();
     await page.screenshot({ path: `/tmp/studydy-material-collection/detail-${status}.png`, fullPage: true });
   }
@@ -198,6 +207,9 @@ for (const status of ["pending", "running", "failed", "cancelled", "succeeded", 
     await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
     await page.goto("/materials");
     const card = page.getByRole("article");
+    await expect(card.locator(".library-state")).toContainText("最新處理：");
+    if (status === "failed" || status === "cancelled") await expect(card.locator(".library-state")).toHaveText(status === "failed" ? "最新處理：處理失敗" : "最新處理：已取消處理");
+    if (status === "pending" || status === "running") await expect(card).toContainText("已完成 2 頁／共 8 頁");
     await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
     await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("secondary-button");
     await card.getByRole("button", { name: "查看最新處理", exact: true }).click();
@@ -215,8 +227,10 @@ for (const status of ["succeeded", "partial"] as const) {
     await page.goto("/materials");
     await expect(page.getByRole("button", { name: "開啟知識地圖", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("article")).not.toContainText("最新處理：");
     await page.getByRole("button", { name: item.display_name, exact: true }).click();
     await expect(page.getByRole("heading", { name: "教材詳情", exact: true })).toBeVisible();
+    await expect(page.locator(".library-state")).toContainText("最新處理：");
     await expect(page.getByRole("region", { name: "已發布版本" }).getByRole("button")).toHaveCount(2);
     await expect(page.getByRole("link", { name: "開啟原始 PDF", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "查看最新處理", exact: true }).click();
