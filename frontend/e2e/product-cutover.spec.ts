@@ -124,21 +124,33 @@ async function routes(page: Page, view = structureView(), readProgress = () => p
 
 test("focus, path, and chapter views lead to source-backed learning", async ({ page }) => {
   await routes(page);
-  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await page.route("**/v1/study-sessions", route => {
+    expect(route.request().postDataJSON()).toEqual({ schema: "study-session-create/v2", material_id: materialId,
+      knowledge_structure_revision: structureRevision, current_concept_id: firstConcept });
+    return json(route, session(), 201);
+  });
+  await page.context().route(`**/v1/artifacts/${artifactId}`, route => route.fulfill({ contentType: "text/plain", body: "Synthetic source document" }));
+  await page.goto(`/materials/${materialId}/runs/${runId}`);
+  await page.getByRole("button", { name: "開啟知識地圖", exact: true }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:4173/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
   await expect(page.getByRole("heading", { name: "知識地圖", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "概念地圖" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("complementary", { name: "Studydy 學習引導" })).toContainText("學習順序提供參考");
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   const canvas = await page.locator(".focus-graph").boundingBox();
-  expect(canvas!.x).toBeLessThan(60);
-  expect(canvas!.y).toBeLessThan(350);
-  expect(canvas!.width).toBeGreaterThan(page.viewportSize()!.width - 100);
+  const navigator = await page.getByRole("navigation", { name: "概念導覽" }).boundingBox();
+  const context = await page.getByRole("complementary", { name: "目前焦點資訊" }).boundingBox();
+  expect(canvas!.x).toBeGreaterThan(navigator!.x + navigator!.width);
+  expect(canvas!.x + canvas!.width).toBeLessThan(context!.x);
+  expect(canvas!.width).toBeGreaterThan(context!.width);
+  await expect(page.getByRole("button", { name: "開始本次學習", exact: true })).toBeInViewport();
   const edge = page.locator(".concept-flow-edge.is-prerequisite");
   await edge.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("Stack must be learned before Array traversal.");
   await expect(page.getByRole("dialog", { name: "關係詳情" }).getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(edge).toBeFocused();
   await page.getByRole("tab", { name: "學習順序" }).click();
   await expect(page.locator(".learning-path li")).toHaveCount(2);
   await expect(page.locator(".learning-path")).not.toContainText("document_order");
@@ -150,6 +162,11 @@ test("focus, path, and chapter views lead to source-backed learning", async ({ p
   await expect(page.getByRole("heading", { name: "Data structures", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "探索這個段落" }).click();
   await expect(page.getByRole("button", { name: /原始教材第 1 頁/ })).toBeVisible();
+  const popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: /原始教材第 1 頁/ }).click();
+  const source = await popup;
+  await expect(source).toHaveURL(`http://127.0.0.1:4173/v1/artifacts/${artifactId}#page=1`);
+  await source.close();
   await page.getByRole("button", { name: "從這個概念開始" }).click();
   await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
 });
@@ -171,19 +188,22 @@ test("large maps show a readable focus and keep it in view after resizing", asyn
   await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
   await page.getByRole("tab", { name: "概念地圖" }).click();
   const graph = page.locator(".focus-graph");
-  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(560);
+  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(300);
   const viewport = page.locator(".react-flow__viewport");
   await expect(page.locator(".react-flow__node.is-focus")).toBeVisible();
   const transform = await viewport.getAttribute("style");
-  await page.mouse.move(500, 440);
+  const graphBox = (await graph.boundingBox())!;
+  await page.mouse.move(graphBox.x + graphBox.width / 2, graphBox.y + graphBox.height / 2);
   await page.mouse.wheel(0, 250);
   await expect(viewport).not.toHaveAttribute("style", transform!);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  await page.mouse.move(10, 440);
+  const rail = page.locator(".navigator-list");
+  const railBox = (await rail.boundingBox())!;
+  await page.mouse.move(railBox.x + 50, railBox.y + 100);
   await page.mouse.wheel(0, 250);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-  const select = page.getByRole("combobox", { name: "焦點概念" });
-  await select.selectOption(view.concepts[29].concept_id);
+  await expect.poll(() => rail.evaluate(element => element.scrollTop)).toBeGreaterThan(100);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.getByRole("navigation", { name: "概念導覽" }).getByRole("button", { name: "Concept 30", exact: true }).click();
   await expect(page.getByRole("button", { name: "教材概念：Concept 30", exact: true })).toHaveClass(/is-focus/);
   await expect.poll(async () => {
     const node = await page.locator(".react-flow__node.is-focus").boundingBox();
@@ -192,7 +212,6 @@ test("large maps show a readable focus and keep it in view after resizing", asyn
       && node.y >= graph.y && node.y + node.height <= graph.y + graph.height;
   }).toBe(true);
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
-  await page.evaluate(() => scrollTo(0, 250));
   await page.getByRole("button", { name: "教材概念：Concept 30", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeInViewport();
   await expect.poll(async () => {
@@ -200,7 +219,7 @@ test("large maps show a readable focus and keep it in view after resizing", asyn
     const tabs = await page.getByRole("tablist", { name: "知識地圖檢視" }).boundingBox();
     return !!close && !!tabs && close.y >= tabs.y + tabs.height;
   }).toBe(true);
-  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(560);
+  await expect.poll(async () => (await graph.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(300);
   await expect(page.locator(".map-view")).toHaveCSS("overflow-y", "visible");
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect.poll(async () => {
@@ -281,7 +300,7 @@ test("mobile map has a modal detail drawer with keyboard focus and source links"
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("button", { name: "查看概念與來源" })).toBeFocused();
   await page.locator(".focus-relations summary").click();
-  await page.getByRole("list", { name: "概念關係", exact: true }).getByRole("button").click();
+  await page.getByRole("list", { name: "直接概念關係", exact: true }).getByRole("button").click();
   await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText("Stack must be learned before Array traversal.");
 });
 
@@ -456,13 +475,21 @@ test("parallel relations retain separate labels, paths and details in both direc
     })).toBe(true);
   };
   await assertSeparate();
+  const relationList = page.getByRole("list", { name: "直接概念關係" });
+  await expect(relationList.getByRole("button", { name: /來自 ←/ })).toHaveCount(2);
+  await expect(relationList.getByRole("button", { name: /連向 →/ })).toHaveCount(3);
   for (const relation of view.relations) {
     await page.locator(`.concept-flow-edge.is-${relation.type} .react-flow__edge-textbg`).click();
     await expect(page.getByRole("dialog", { name: "關係詳情" })).toContainText(relation.learner_reason);
     await assertSeparate();
+    if (relation.type === "prerequisite") {
+      await page.getByRole("dialog").getByRole("button", { name: /目標概念/ }).click();
+      await expect(page.getByRole("dialog", { name: "概念詳情" }).getByRole("heading", { name: "Array", exact: true })).toBeVisible();
+    }
     await page.keyboard.press("Escape");
+    await expect(page.locator(`.concept-flow-edge.is-${relation.type}`)).toBeFocused();
   }
-  await page.getByRole("combobox", { name: "焦點概念" }).selectOption(secondConcept);
+  await page.getByRole("navigation", { name: "概念導覽" }).getByRole("button", { name: "Array", exact: true }).click();
   await assertSeparate();
   await page.setViewportSize({ width: 900, height: 800 });
   await assertSeparate();
@@ -509,6 +536,7 @@ test("dense focus fans avoid crossing edges and unrelated cards", async ({ page 
 });
 
 test("recovered map reads owned progress and continues the same session without creating learning", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
   await routes(page);
   await page.route(`**/v1/materials/${materialId}`, route => json(route, {
     schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
@@ -524,6 +552,8 @@ test("recovered map reads owned progress and continues the same session without 
   const path = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
   await page.goto(path);
   await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeInViewport();
+  await page.screenshot({ path: "/tmp/studydy-map-workspace/1366-resumed.png", fullPage: true });
   await page.reload();
   await page.getByRole("button", { name: "繼續本次學習", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/study-sessions/${sessionId}$`));
@@ -560,4 +590,224 @@ test("shared shell density keeps standard pages and map workspace bounded", asyn
       await page.screenshot({ path: `/tmp/studydy-dashboard/shell-${name}-${viewport.width}.png`, fullPage: true });
     }
   }
+});
+
+function workspaceView(count = 52, longNames = false) {
+  const view = structureView();
+  const seed = view.concepts[0];
+  view.concepts = Array.from({ length: count }, (_, index) => ({ ...seed,
+    concept_id: `concept:sha256:${(index + 10).toString(16).padStart(64, "0")}`,
+    label: `Concept ${index + 1}${longNames && index % 3 === 0 ? " — 時間與資料結構的跨章節概念_" + "LongTechnicalConceptName".repeat(3) : ""}`,
+    aliases: index === 29 ? ["target-alias"] : [],
+    section_ids: [`section:sha256:${(Math.floor(index / 6) + 10).toString(16).padStart(64, "0")}`],
+    claims: [{ ...seed.claims[0], claim_id: `claim:sha256:${(index + 100).toString(16).padStart(64, "0")}`,
+      text: index === 29 ? "A searchable unique learning point." : `Learning point ${index + 1}: read the source and explore how these ideas connect.` }],
+  }));
+  view.document_tree.sections = Array.from({ length: Math.ceil(count / 6) }, (_, index) => ({
+    section_id: view.concepts[index * 6].section_ids[0], title: `Section ${index + 1}`, order: index,
+    heading_evidence_id: null, concept_ids: view.concepts.slice(index * 6, index * 6 + 6).map(concept => concept.concept_id),
+  }));
+  view.initial_learning_path = view.concepts.map((concept, index) => ({ position: index + 1, concept_id: concept.concept_id, reason: "document_order" }));
+  view.relations = Array.from({ length: count === 52 ? 47 : count - 1 }, (_, index) => ({ ...view.relations[0],
+    relation_id: `relation:sha256:${(index + 100).toString(16).padStart(64, "0")}`,
+    source_concept_id: view.concepts[index < 8 ? 0 : index].concept_id,
+    target_concept_id: view.concepts[index + 1].concept_id,
+    learner_reason: `Connection ${index + 1}: the source explains why these concepts belong together in this section.`,
+  }));
+  return view;
+}
+
+for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 1100, height: 800 }, { width: 390, height: 844 }]) {
+  for (const kind of ["small", "large", "long-names"] as const) {
+    test(`focus workspace ${kind} at ${viewport.width}px keeps navigation, context and learning accessible`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const view = workspaceView(kind === "small" ? 8 : 52, kind === "long-names");
+      await routes(page, view);
+      await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+      const navigator = page.getByRole("navigation", { name: "概念導覽" });
+      const context = page.getByRole("complementary", { name: "目前焦點資訊" });
+      const graph = page.locator(".focus-graph");
+      await expect(navigator).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "焦點概念" })).toHaveCount(0);
+      await expect(graph.locator(".react-flow__node")).toHaveCount(kind === "small" ? 8 : 9);
+      await expect(graph.locator(".concept-flow-edge")).toHaveCount(kind === "small" ? 7 : 8);
+      await expect(context.getByRole("heading", { name: view.concepts[0].label, exact: true })).toBeVisible();
+      if (viewport.width > 900) {
+        await expect(page.locator(".focus-relations")).toHaveCount(0);
+        await expect(context.getByRole("list", { name: "直接概念關係" }).getByRole("listitem")).toHaveCount(kind === "small" ? 7 : 8);
+        await expect(page.getByRole("button", { name: "開始本次學習", exact: true })).toBeInViewport();
+        const graphBox = (await graph.boundingBox())!;
+        const contextBox = (await context.boundingBox())!;
+        expect(graphBox.width).toBeGreaterThan(contextBox.width);
+        expect(Math.abs(graphBox.y + graphBox.height - contextBox.y - contextBox.height)).toBeLessThan(3);
+        if (kind !== "small") expect(await context.locator(".focus-context-content").evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+      } else {
+        await expect(graph).toHaveCSS("height", "360px");
+        await expect(page.locator(".focus-relations")).not.toHaveAttribute("open", "");
+      }
+      if (viewport.width < 1200) await navigator.getByRole("button", { name: /概念導覽/ }).click();
+      await expect(navigator.locator('[aria-current="true"]')).toBeInViewport();
+      if (kind !== "small") expect(await navigator.locator(".navigator-list").evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+      if (viewport.width < 1200 && kind === "large") {
+        await expect(navigator.locator(".navigator-list")).toBeInViewport();
+        await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-navigator.png`, fullPage: true });
+      }
+      if (viewport.width < 1200) await navigator.getByRole("button", { name: /概念導覽/ }).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-context.png`, fullPage: true });
+      const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      const detailAction = context.getByRole("button", { name: "查看概念與來源", exact: true });
+      await detailAction.click();
+      const conceptDetail = page.getByRole("dialog", { name: "概念詳情" });
+      await expect(conceptDetail).toBeFocused();
+      expect(await conceptDetail.evaluate(element => element.matches(":modal"))).toBe(viewport.width <= 900);
+      if (viewport.width <= 900) expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(pageHeight);
+      expect(await conceptDetail.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      await expect(page.locator(".map-content > .detail-panel")).toHaveCount(0);
+      await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-concept.png`, fullPage: true });
+      if (viewport.width <= 900) await page.mouse.click(1, 1); else await page.keyboard.press("Escape");
+      await expect(detailAction).toBeFocused();
+      if (viewport.width <= 900) await page.locator(".focus-relations summary").click();
+      const relation = context.getByRole("list", { name: "直接概念關係" }).getByRole("button").first();
+      await relation.click();
+      const relationDetail = page.getByRole("dialog", { name: "關係詳情" });
+      await expect(relationDetail).toBeFocused();
+      await expect(relationDetail).toContainText(view.relations[0].learner_reason);
+      await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-${kind}-relation.png`, fullPage: true });
+      await page.keyboard.press("Escape");
+      await expect(relation).toBeFocused();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+    });
+  }
+}
+
+for (const width of [1536, 1366, 1100, 390]) {
+  test(`52-concept navigation and search share focus without opening detail at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1366 ? 768 : 844 });
+    const view = workspaceView();
+    await routes(page, view);
+    await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+    const navigator = page.getByRole("navigation", { name: "概念導覽" });
+    if (width < 1200) await navigator.getByRole("button", { name: /概念導覽/ }).click();
+    const target = navigator.getByRole("button", { name: "Concept 30", exact: true });
+    await target.click();
+    await expect(target).toHaveAttribute("aria-current", "true");
+    await expect(target).toBeFocused();
+    await expect(page.locator(".concept-flow-node.is-focus")).toContainText("Concept 30");
+    await expect(page.locator(".focus-context-heading")).toContainText("Concept 30");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const inRail = () => target.evaluate(element => {
+      const item = element.getBoundingClientRect(), rail = element.closest(".navigator-list")!.getBoundingClientRect();
+      return item.top >= rail.top - 1 && item.bottom <= rail.bottom + 1;
+    });
+    await expect.poll(inRail).toBe(true);
+    await navigator.getByRole("button", { name: "Concept 52", exact: true }).click();
+    await expect(page.locator(".react-flow__node")).toHaveCount(1);
+    await expect(page.locator(".concept-flow-edge")).toHaveCount(0);
+    if (width <= 900) await page.locator(".focus-relations summary").click();
+    await expect(page.locator(".relation-empty")).toContainText("沒有直接連結");
+    await navigator.getByRole("button", { name: "Concept 52", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "聚焦目前概念", exact: true })).toBeFocused();
+    await page.screenshot({ path: `/tmp/studydy-map-workspace/${width}-isolated.png`, fullPage: true });
+    await page.getByRole("tab", { name: "總覽", exact: true }).click();
+    const search = page.getByRole("searchbox", { name: "搜尋概念或關鍵字" });
+    for (const query of ["Concept 30", "target-alias", "searchable unique"]) {
+      await search.fill(query); await search.press("ArrowDown"); await page.keyboard.press("Enter");
+      await expect(search).toBeFocused();
+      await expect(search).toHaveValue("");
+      await expect(page.getByRole("tab", { name: "概念地圖", exact: true })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.locator(".concept-flow-node.is-focus")).toContainText("Concept 30");
+      await expect(page.locator(".focus-context-heading")).toContainText("Concept 30");
+    }
+    if (width < 1200) await navigator.getByRole("button", { name: /概念導覽/ }).click();
+    await expect.poll(inRail).toBe(true);
+    await expect(target).toHaveAttribute("aria-current", "true");
+    await search.fill("Concept"); await search.press("Escape");
+    await expect(search).toHaveValue("");
+    await expect(page.locator(".map-search-results")).toHaveCount(0);
+  });
+}
+
+test("Focus graph utilities and graph-node detail preserve framing and opener", async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  const view = workspaceView(8);
+  await routes(page, view);
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await page.getByRole("button", { name: "顯示所有直接關係", exact: true }).click();
+  await expect.poll(() => page.locator(".focus-graph").evaluate(graph => {
+    const bounds = graph.getBoundingClientRect();
+    return [...graph.querySelectorAll(".react-flow__node")].every(node => {
+      const box = node.getBoundingClientRect();
+      return box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
+    });
+  })).toBe(true);
+  await page.getByRole("button", { name: "聚焦目前概念", exact: true }).click();
+  const focal = page.getByRole("button", { name: "教材概念：Concept 1", exact: true });
+  await expect.poll(async () => (await focal.boundingBox())?.width).toBe(300);
+  await focal.click();
+  await expect(page.getByRole("dialog", { name: "概念詳情" })).toBeFocused();
+  await page.getByRole("dialog").getByRole("button", { name: /Concept 2/, exact: false }).click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Concept 2", exact: true })).toBeVisible();
+  await expect(page.locator('.navigator-list [aria-current="true"]')).toHaveText("Concept 2");
+  await page.keyboard.press("Escape");
+  await expect(focal).toBeFocused();
+  await expect(page.locator(".focus-context-heading")).toContainText("Concept 2");
+});
+
+for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  test(`map progress, keyboard tabs and weak-concept review remain available at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await routes(page, structureView(), () => ({ ...progress, concept_states: progress.concept_states.map((state, index) => index ? state : { ...state, status: "needs_review", weak_claim_ids: [firstClaim] }) }));
+    await page.route(`**/v1/materials/${materialId}`, route => json(route, {
+      schema: "material-library-item/v2", material_id: materialId, source_artifact_id: artifactId,
+      display_name: "Data structures.pdf", size_bytes: 100, created_at: run.created_at, latest_attempt: run,
+      available_structures: [{ run_id: runId, knowledge_structure_revision: structureRevision, created_at: run.created_at, status: "succeeded" }],
+      study_sessions: [{ ...session(), run_id: runId }],
+    }));
+    await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+    if (viewport.width > 900) await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeInViewport();
+    await expect(page.locator(".focus-context .map-learning-badge")).toHaveText("需要複習");
+    await page.screenshot({ path: `/tmp/studydy-map-workspace/${viewport.width}-progress.png`, fullPage: true });
+    await page.getByRole("tab", { name: "概念地圖", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "學習順序", exact: true })).toBeFocused();
+    await expect(page.locator(".learning-path li")).toHaveCount(2);
+    await expect(page.locator(".focus-workspace")).toHaveCount(0);
+    await page.keyboard.press("End");
+    await expect(page.getByRole("tab", { name: "複習重點", exact: true })).toBeFocused();
+    await expect(page.locator(".review-list")).toContainText("A stack follows LIFO order.");
+    const reviewAction = page.getByRole("button", { name: "查看重點", exact: true });
+    await reviewAction.click();
+    await expect(page.getByRole("dialog", { name: "概念詳情" })).toContainText("Stack");
+    await page.keyboard.press("Escape"); await expect(reviewAction).toBeFocused();
+    await page.getByRole("tab", { name: "複習重點", exact: true }).focus();
+    await page.keyboard.press("Home");
+    await expect(page.getByRole("tab", { name: "概念地圖", exact: true })).toBeFocused();
+  });
+}
+
+test("map loading and excluded-page/progress notices survive the Focus layout", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const view = structureView();
+  view.status = { processing: "partial", quality: "needs_review", decision: "review", reason_codes: ["EXCLUDED_PAGES"] };
+  view.excluded_pages = [{ page_ref: `page:sha256:${"3".repeat(64)}`, page: 3, stage: "evidence", reason_code: "NO_USABLE_EVIDENCE" }];
+  await routes(page, view);
+  await page.route(`**/v1/material-processing-runs/${runId}`, route => json(route, { ...run, status: "partial", completed_pages: 3, total_pages: 3,
+    output_binding: { ...run.output_binding, page_count: 3, processing: "partial", quality: "needs_review", decision: "review", reason_codes: ["EXCLUDED_PAGES"] } }));
+  let release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/v1/materials/*/knowledge-structures/**", async route => { await ready; return json(route, view); });
+  await page.route(`**/v1/materials/${materialId}`, route => json(route, { schema: "api-error/v1", request_id: materialId, reason_code: "STORAGE_UNAVAILABLE", retryable: true, message: "Request could not be completed." }, 503));
+  await page.goto(`/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`);
+  await expect(page.getByRole("heading", { name: "正在讀取知識地圖", exact: true })).toBeVisible();
+  release();
+  await expect(page.getByRole("status").filter({ hasText: "第 3 頁未能整理" })).toBeVisible();
+  await expect(page.locator(".partial-banner")).toContainText("暫時無法讀取最近的學習進度");
+  await expect(page.getByRole("button", { name: "開始本次學習", exact: true })).toBeInViewport();
+  await page.screenshot({ path: "/tmp/studydy-map-workspace/1366-notices.png", fullPage: true });
+  await page.getByRole("tab", { name: "總覽", exact: true }).click();
+  await expect(page.getByRole("region", { name: "未能整理的頁面" })).toContainText("第 3 頁未納入概念與練習");
 });

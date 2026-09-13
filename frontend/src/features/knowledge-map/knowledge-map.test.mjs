@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
+import { conceptNavigationGroups, focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
 
 const view = {
   concepts: ["a", "b", "c", "d"].map(concept_id => ({ concept_id })),
@@ -34,4 +34,21 @@ test("first visit starts with a connected concept without changing the learning 
   assert.equal(initialFocusConceptId(map), "b");
   assert.equal(map.initial_learning_path[0].concept_id, "cover");
   assert.equal(initialFocusConceptId({ ...map, relations: [] }), "cover");
+});
+
+test("navigation uses section order once per concept and keeps unassigned concepts reachable", () => {
+  const map = { document_tree: { sections: [
+    { section_id: "later", title: "Later", order: 2 },
+    { section_id: "first", title: "First", order: 0 },
+    { section_id: "empty", title: "Empty", order: 1 },
+  ] }, concepts: [
+    { concept_id: "a", section_ids: ["later", "first"] },
+    { concept_id: "b", section_ids: ["later"] },
+    { concept_id: "c", section_ids: [] },
+    { concept_id: "d", section_ids: ["missing"] },
+  ] };
+  const original = structuredClone(map);
+  assert.deepEqual(conceptNavigationGroups(map).map(group => [group.title, group.concepts.map(concept => concept.concept_id)]),
+    [["First", ["a"]], ["Later", ["b"]], ["其他概念", ["c", "d"]]]);
+  assert.deepEqual(map, original);
 });

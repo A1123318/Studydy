@@ -2,6 +2,19 @@ import type { KnowledgeStructureView } from "../../api/contracts";
 
 type MapNode = { id: string; side: "center" | "left" | "right"; x: number; y: number; width: number; height: number };
 
+// Browse each concept once, under its first section in the document's own order.
+export function conceptNavigationGroups(view: KnowledgeStructureView) {
+  const groups = [...view.document_tree.sections].sort((a, b) => a.order - b.order)
+    .map(section => ({ id: section.section_id, title: section.title, concepts: [] as KnowledgeStructureView["concepts"] }));
+  const sectionIndex = new Map(groups.map((group, index) => [group.id, index]));
+  const other = { id: "ungrouped", title: "其他概念", concepts: [] as KnowledgeStructureView["concepts"] };
+  for (const concept of view.concepts) {
+    const indices = concept.section_ids.flatMap(id => sectionIndex.has(id) ? [sectionIndex.get(id)!] : []);
+    (indices.length ? groups[Math.min(...indices)] : other).concepts.push(concept);
+  }
+  return [...groups, other].filter(group => group.concepts.length > 0);
+}
+
 // A local view of canonical relations; document hierarchy and learning order stay intact.
 export function focusLayout(view: KnowledgeStructureView, selectedId: string): MapNode[] {
   const incoming = new Set<string>();
