@@ -2,26 +2,17 @@ import type { KnowledgeStructureView } from "../../api/contracts";
 
 type MapNode = { id: string; side: "center" | "left" | "right"; x: number; y: number; width: number; height: number };
 
-// Section labels separate consecutive steps; they never regroup or reorder the path.
-export function learningNavigationGroups(view: KnowledgeStructureView) {
+// Keep canonical steps intact; unnumbered extras are only defensive browsing.
+export function learningNavigationItems(view: KnowledgeStructureView) {
   type Item = { concept: KnowledgeStructureView["concepts"][number]; step: KnowledgeStructureView["initial_learning_path"][number] | null };
   const byId = new Map(view.concepts.map(concept => [concept.concept_id, concept]));
-  const sections = [...view.document_tree.sections].sort((a, b) => a.order - b.order);
-  const groups: { id: string; sectionId: string | null; title: string; items: Item[] }[] = [];
-  const inPath = new Set<string>();
-  for (const step of [...view.initial_learning_path].sort((a, b) => a.position - b.position)) {
-    const concept = byId.get(step.concept_id)!;
-    const section = sections.find(section => concept.section_ids.includes(section.section_id));
-    const sectionId = section?.section_id ?? null;
-    if (!groups.length || groups.at(-1)!.sectionId !== sectionId) {
-      groups.push({ id: `step-${step.position}`, sectionId, title: section?.title ?? "教材概念", items: [] });
-    }
-    groups.at(-1)!.items.push({ concept, step });
-    inPath.add(step.concept_id);
-  }
-  const other = view.concepts.filter(concept => !inPath.has(concept.concept_id));
-  if (other.length) groups.push({ id: "other", sectionId: null, title: "其他概念", items: other.map(concept => ({ concept, step: null })) });
-  return groups;
+  const items: Item[] = [...view.initial_learning_path].sort((a, b) => a.position - b.position).map(step => {
+    const concept = byId.get(step.concept_id);
+    if (!concept) throw new Error("UNKNOWN_PATH_CONCEPT");
+    return { concept, step };
+  });
+  const inPath = new Set(view.initial_learning_path.map(step => step.concept_id));
+  return [...items, ...view.concepts.filter(concept => !inPath.has(concept.concept_id)).map(concept => ({ concept, step: null }))];
 }
 
 // A local view of canonical relations; document hierarchy and learning order stay intact.

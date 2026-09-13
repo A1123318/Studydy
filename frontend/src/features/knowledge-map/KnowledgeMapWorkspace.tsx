@@ -22,7 +22,7 @@ import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
 import { StudyGuide } from "../../ui/StudyGuide";
 import {
-  learningNavigationGroups,
+  learningNavigationItems,
   focusLayout,
   initialFocusConceptId,
 } from "./knowledge-map";
@@ -199,9 +199,9 @@ function LearningNavigator({ view, selectedConceptId, focusConcept, progress }: 
   progress: LearnerProgressView | null;
   view: KnowledgeStructureView; selectedConceptId: string; focusConcept: (id: string) => void;
 }) {
-  const groups = useMemo(() => learningNavigationGroups(view), [view]);
+  const items = useMemo(() => learningNavigationItems(view), [view]);
   const states = useMemo(() => new Map(progress?.concept_states.map(state => [state.concept_id, state])), [progress]);
-  const firstStep = groups[0]?.items[0]?.step;
+  const firstStep = items[0]?.step;
   const currentStep = view.initial_learning_path.find(step => step.concept_id === progress?.current_concept_id);
   const mastered = progress?.concept_states.filter(state => state.status === "mastered").length ?? 0;
   const nextId = progress && ["advance", "review_prerequisite", "resume"].includes(progress.next_action.action) ? progress.next_action.target_concept_id : null;
@@ -228,38 +228,32 @@ function LearningNavigator({ view, selectedConceptId, focusConcept, progress }: 
       <strong>學習導覽</strong><span>{view.concepts.length} 個概念 · {expanded ? "收合" : "展開"}</span>
     </button>
     {(progress || firstStep) && <p className="navigator-summary">
-      {progress ? currentStep && `目前第 ${currentStep.position} / ${view.initial_learning_path.length} 個概念` : `建議從第 ${firstStep!.position} 個概念開始`}
-      {progress && <span>已掌握 {mastered} 個</span>}
+      {progress ? <>{currentStep && `第 ${currentStep.position} / ${view.initial_learning_path.length} 個 · `}已掌握 {mastered} 個</> : `建議從第 ${firstStep!.position} 個概念開始`}
     </p>}
     <div className="navigator-list" id="focus-concept-list" ref={list}>
-      {groups.map(group => <section key={group.id}>
-        <h3>{group.title}</h3>
-        <ul>{group.items.map(({ concept, step }) => {
+      <ul>{items.map(({ concept, step }, index) => {
           const selected = concept.concept_id === selectedConceptId;
           const learningCurrent = concept.concept_id === progress?.current_concept_id;
           const status = states.get(concept.concept_id)?.status;
-          const next = concept.concept_id === nextId;
-          const recommended = !progress && !!step && step.position === firstStep?.position;
-          const prerequisite = step?.reason === "prerequisite";
-          const stateLabel = status === "mastered" ? "已掌握" : status === "needs_review" ? "需要複習" : status === "learning" && !learningCurrent ? "學習中" : "";
+          const next = concept.concept_id === nextId && !learningCurrent;
+          const stateLabel = status === "mastered" ? "已掌握" : status === "needs_review" ? "需要複習" : "";
           const name = [step ? `第 ${step.position} 個，${concept.label}` : concept.label,
-            learningCurrent && "目前學習", stateLabel, next && "建議下一步", recommended && "建議起點", prerequisite && "依先備關係安排"].filter(Boolean).join("；");
-          return <li key={concept.concept_id}><button
+            learningCurrent && "目前學習", stateLabel, next && "下一步"].filter(Boolean).join("；");
+          return <li key={concept.concept_id}>
+            {!step && (index === 0 || items[index - 1].step) && <h3 className="navigator-other">其他概念</h3>}
+            <button
             ref={selected ? selectedRow : undefined} type="button" aria-label={name} aria-current={selected ? "true" : undefined}
             className={[selected && "is-selected", learningCurrent && "is-learning-current", status === "mastered" && "is-mastered", status === "needs_review" && "is-needs-review", next && "is-next-suggested"].filter(Boolean).join(" ")}
             onClick={() => focusConcept(concept.concept_id)}>
             <span className="navigator-position" aria-hidden="true">{step?.position}</span>
             <span className="navigator-concept"><span className="navigator-label">{concept.label}</span>
-              <span className="navigator-notes">
-                {learningCurrent && <span className="navigator-current">目前學習</span>}
-                {recommended && <span>建議起點</span>}{next && <span>建議下一步</span>}
-                {prerequisite && <span>依先備關係安排</span>}
-              </span>
+              {(learningCurrent || next) && <span className="navigator-notes">
+                {learningCurrent ? <span className="navigator-current">目前學習</span> : <span>下一步</span>}
+              </span>}
             </span>
-            {stateLabel && <span className="navigator-state" title={stateLabel} aria-hidden="true"><Icon name={status === "mastered" ? "check" : status === "needs_review" ? "warning" : "clock"} size={15} /></span>}
+            {stateLabel && <span className="navigator-state" title={stateLabel} aria-hidden="true"><Icon name={status === "mastered" ? "check" : "warning"} size={15} /></span>}
           </button></li>;
-        })}</ul>
-      </section>)}
+      })}</ul>
     </div>
   </nav>;
 }

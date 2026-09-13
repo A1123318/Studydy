@@ -188,14 +188,12 @@
 .focus-navigator > header > span, .navigator-toggle > span { font-size: 12px; color: var(--text-muted); }
 .navigator-toggle { display: none; }
 .navigator-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-2); scrollbar-gutter: stable; }
-.navigator-list h3 { margin: var(--space-3) var(--space-2) var(--space-1); color: var(--text-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.navigator-list section:first-child h3 { margin-top: var(--space-2); }
+.navigator-other { margin: var(--space-3) var(--space-2) var(--space-1); color: var(--text-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .navigator-list ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .navigator-list button { width: 100%; min-height: 40px; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-input); color: var(--text-primary); background: transparent; font-size: 14px; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
 .navigator-list button:hover { background: var(--page-cool-2); }
 .navigator-list button[aria-current="true"] { color: var(--studydy-blue); background: var(--studydy-blue-soft); border-color: var(--studydy-blue); font-weight: 600; }
 .navigator-summary { margin: 0; padding: var(--space-2) var(--space-4); color: var(--text-secondary); font-size: 12px; }
-.navigator-summary > span { display: block; margin-top: var(--space-1); color: var(--text-muted); }
 .navigator-list button { display: flex; align-items: flex-start; gap: var(--space-2); }
 .navigator-position { flex: 0 0 22px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .navigator-concept { flex: 1; min-width: 0; }

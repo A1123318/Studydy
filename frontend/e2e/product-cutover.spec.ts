@@ -1173,14 +1173,14 @@ function learningMap(count: number, reordered = false, longNames = false) {
   return view;
 }
 
-async function learningMapRoutes(page: Page, view: ReturnType<typeof structureView>, hasProgress: boolean, action = "advance") {
-  const currentId = view.concepts[2].concept_id;
+async function learningMapRoutes(page: Page, view: ReturnType<typeof structureView>, hasProgress: boolean, action = "advance", currentIndex = 2, nextIndex = 3) {
+  const currentId = view.concepts[currentIndex].concept_id;
   const saved = { ...session(), current_concept_id: currentId };
   const snapshot = { ...progress, current_concept_id: currentId,
     concept_states: view.concepts.map((concept, index) => ({ ...progress.concept_states[0], concept_id: concept.concept_id, label: concept.label,
       status: index < 2 ? "mastered" : index === 2 || index === 5 ? "learning" : index === 4 ? "needs_review" : "not_started",
       mastered_claim_ids: index < 2 ? [concept.claims[0].claim_id] : [], weak_claim_ids: index === 4 ? [concept.claims[0].claim_id] : [] })),
-    next_action: { ...progress.next_action, action, target_concept_id: view.concepts[3].concept_id, target_claim_id: null },
+    next_action: { ...progress.next_action, action, target_concept_id: view.concepts[nextIndex].concept_id, target_claim_id: null },
   };
   await routes(page, view, () => snapshot);
   await page.route(`**/v1/materials/${materialId}`, route => json(route, {
@@ -1211,22 +1211,22 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
       await expect(navigator.locator(".navigator-position")).toHaveText(Array.from({ length: count }, (_, index) => String(index + 1)));
       await expect(navigator).not.toContainText("依教材順序");
       await expect(navigator).not.toContainText("已完成");
-      await expect(navigationConcept(page, order[1].label)).toContainText("依先備關係安排");
-      await expect(navigationConcept(page, order[0].label)).not.toContainText("依先備關係安排");
+      await expect(navigator).not.toContainText(/依先備關係安排|建議起點|依教材順序/);
+      await expect(navigator.locator(".navigator-list h3")).toHaveCount(0);
+      expect(await navigator.locator(".navigator-list button").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label")).filter(name => /依先備關係安排|依教材順序|建議起點|prerequisite|document_order/.test(name ?? "")))).toEqual([]);
       if (!hasProgress) {
         await expect(navigator.locator(".navigator-summary")).toHaveText("建議從第 1 個概念開始");
-        await expect(navigator.getByText("建議起點", { exact: true })).toHaveCount(1);
-        await expect(navigationConcept(page, order[0].label)).toContainText("建議起點");
+        await expect(navigator.locator(".navigator-notes")).toHaveCount(0);
         await expect(navigator.locator(".is-learning-current, .navigator-state")).toHaveCount(0);
         await expect(navigator).not.toContainText("已掌握");
       } else {
-        await expect(navigator.locator(".navigator-summary")).toContainText(`目前第 3 / ${count} 個概念`);
+        await expect(navigator.locator(".navigator-summary")).toHaveText(`第 3 / ${count} 個 · 已掌握 2 個`);
         await expect(navigator.locator(".navigator-summary")).toContainText("已掌握 2 個");
         await expect(navigator.locator(".is-mastered .navigator-state")).toHaveCount(2);
         await expect(navigationConcept(page, view.concepts[0].label)).toHaveAttribute("aria-label", /第 1 個，.*已掌握/);
         await expect(navigationConcept(page, view.concepts[4].label)).toHaveAttribute("aria-label", /需要複習/);
-        await expect(navigationConcept(page, view.concepts[5].label)).toHaveAttribute("aria-label", /學習中/);
-        expect((await navigator.locator("section h3").allTextContents()).slice(0, 4)).toEqual(["Section A", "Section B", "Section A", "Section B"]);
+        await expect(navigationConcept(page, view.concepts[5].label).locator(".navigator-notes, .navigator-state")).toHaveCount(0);
+        await expect(navigator.locator(".navigator-list")).not.toContainText(/已掌握|需要複習|學習中/);
       }
       const target = navigationConcept(page, view.concepts[3].label);
       await target.click();
@@ -1236,7 +1236,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1536, height: 10
         await expect(navigationConcept(page, view.concepts[2].label)).toContainText("目前學習");
         await expect(navigationConcept(page, view.concepts[2].label)).not.toHaveAttribute("aria-current", "true");
         await expect(target).not.toContainText("目前學習");
-        await expect(target).toContainText("建議下一步");
+        await expect(target).toContainText("下一步");
         await expect(navigator.locator(".is-learning-current")).toHaveCount(1);
       }
       await expect(page.locator(".concept-flow-node.is-focus")).toContainText(view.concepts[3].label);
@@ -1272,7 +1272,7 @@ for (const action of ["advance", "review_prerequisite", "resume", "assess", "no_
     await navigationConcept(page, view.concepts[5].label).click();
     const nav = page.getByRole("navigation", { name: "學習導覽" });
     await expect(nav.locator(".is-next-suggested")).toHaveCount(["advance", "review_prerequisite", "resume"].includes(action) ? 1 : 0);
-    if (["advance", "review_prerequisite", "resume"].includes(action)) await expect(navigationConcept(page, "D")).toContainText("建議下一步");
+    if (["advance", "review_prerequisite", "resume"].includes(action)) await expect(navigationConcept(page, "D")).toContainText("下一步");
     await expect(navigationConcept(page, "C")).toContainText("目前學習");
     await expect(navigationConcept(page, view.concepts[5].label)).toHaveAttribute("aria-current", "true");
     await expect(navigationConcept(page, view.concepts[5].label)).not.toContainText("目前學習");
@@ -1313,3 +1313,44 @@ test("learning summary returns to the Focus navigator without a standalone path 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".path-section, .learning-path")).toHaveCount(0);
 });
+
+for (const viewport of [{ width: 1536, height: 1024 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  test(`flat learning navigation keeps current 4, selected 20 and next 5 distinct at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const view = learningMap(56);
+    await learningMapRoutes(page, view, true, "advance", 3, 4);
+    const pathBefore = structuredClone(view.initial_learning_path);
+    const map = `/materials/${materialId}/runs/${runId}/knowledge-structures/${encodeURIComponent(structureRevision)}`;
+    await page.goto(map);
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+    const navigator = page.getByRole("navigation", { name: "學習導覽" });
+    if (viewport.width <= 900) await navigator.getByRole("button", { name: /學習導覽/ }).click();
+    await expect(navigator.locator(".navigator-list").getByRole("heading")).toHaveCount(0);
+    await expect(navigator.locator(".navigator-summary")).toHaveText("第 4 / 56 個 · 已掌握 2 個");
+    await expect(navigationConcept(page, view.concepts[3].label)).toContainText("目前學習");
+    await expect(navigationConcept(page, view.concepts[4].label)).toContainText("下一步");
+    await expect(navigator.getByText("下一步", { exact: true })).toHaveCount(1);
+    await page.screenshot({ path: `/tmp/studydy-learning-density/${viewport.width}-current-next.png`, fullPage: true });
+    const selected = navigationConcept(page, view.concepts[19].label);
+    await selected.click();
+    await expect(selected).toHaveAttribute("aria-current", "true");
+    await expect(selected.locator(".navigator-position")).toHaveText("20");
+    await expect(selected.locator(".navigator-notes")).toHaveCount(0);
+    await expect(navigator.locator(".is-learning-current .navigator-position")).toHaveText("4");
+    await expect(navigator.locator(".is-next-suggested .navigator-position")).toHaveText("5");
+    await expect(navigator.locator(".navigator-summary")).toHaveText("第 4 / 56 個 · 已掌握 2 個");
+    await expect(page.locator(".concept-flow-node.is-focus")).toContainText(view.concepts[19].label);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+    expect(view.initial_learning_path).toEqual(pathBefore);
+    expect(view.initial_learning_path[1].reason).toBe("prerequisite");
+    await page.screenshot({ path: `/tmp/studydy-learning-density/${viewport.width}-selected-20.png`, fullPage: true });
+    await learningMapRoutes(page, view, true, "advance", 3, 3);
+    await page.goto(map);
+    await expect(page.getByRole("button", { name: "繼續本次學習", exact: true })).toBeEnabled();
+    if (viewport.width <= 900) await navigator.getByRole("button", { name: /學習導覽/ }).click();
+    await expect(navigator.getByText("目前學習", { exact: true })).toHaveCount(1);
+    await expect(navigator.getByText("下一步", { exact: true })).toHaveCount(0);
+    await expect(navigator.locator(".is-learning-current")).not.toHaveAttribute("aria-label", /下一步/);
+    await expect(navigator.locator(".is-next-suggested")).toHaveCount(0);
+  });
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { learningNavigationGroups, focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
+import { learningNavigationItems, focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
 
 const view = {
   concepts: ["a", "b", "c", "d"].map(concept_id => ({ concept_id })),
@@ -53,12 +53,12 @@ const navigation = {
   ],
 };
 
-test("path positions govern navigation and revisited sections stay consecutive separators", () => {
+test("flat navigation preserves path positions and canonical reasons regardless of sections", () => {
   const original = structuredClone(navigation);
-  const groups = learningNavigationGroups(navigation);
-  assert.deepEqual(groups.map(group => [group.title, group.items.map(item => [item.concept.concept_id, item.step.position])]),
-    [["Section A", [["a1", 1]]], ["Section B", [["b1", 2]]], ["Section A", [["a2", 3]]]]);
-  assert.equal(groups[1].items[0].step.reason, "prerequisite");
+  const items = learningNavigationItems(navigation);
+  assert.deepEqual(items.map(item => [item.concept.concept_id, item.step.position]), [["a1", 1], ["b1", 2], ["a2", 3]]);
+  assert.equal(items[1].step.reason, "prerequisite");
+  assert.equal(items[1].step, navigation.initial_learning_path[2]);
   assert.deepEqual(navigation, original);
 });
 
@@ -68,14 +68,13 @@ test("a path can order C before A and B independently of document order", () => 
     { position: 2, concept_id: "a1", reason: "document_order" },
     { position: 3, concept_id: "b1", reason: "prerequisite" },
   ] };
-  assert.deepEqual(learningNavigationGroups(map).flatMap(group => group.items.map(item => item.concept.concept_id)), ["a2", "a1", "b1"]);
+  assert.deepEqual(learningNavigationItems(map).map(item => item.concept.concept_id), ["a2", "a1", "b1"]);
 });
 
 test("defensive concepts outside the path get no invented position; broken references fail", () => {
   const map = { ...navigation, concepts: [...navigation.concepts, { concept_id: "extra", section_ids: [] }] };
-  const other = learningNavigationGroups(map).at(-1);
-  assert.equal(other.title, "其他概念");
-  assert.equal(other.items[0].concept.concept_id, "extra");
-  assert.equal(other.items[0].step, null);
-  assert.throws(() => learningNavigationGroups({ ...navigation, concepts: [] }));
+  const other = learningNavigationItems(map).at(-1);
+  assert.equal(other.concept.concept_id, "extra");
+  assert.equal(other.step, null);
+  assert.throws(() => learningNavigationItems({ ...navigation, concepts: [] }));
 });
