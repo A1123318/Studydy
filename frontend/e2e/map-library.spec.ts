@@ -175,3 +175,44 @@ test("unpublished processing states remain truthful and pending polling still di
   await expect(page.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
   expect(reads).toBe(2);
 });
+
+for (const status of ["succeeded", "partial"] as const) {
+  for (const studyStatus of [null, "active", "no_safe", "completed"] as const) {
+    test(`map collection ${status} with ${studyStatus ?? "no"} study hides completed processing action`, async ({ page }) => {
+      await page.setViewportSize({ width: 1536, height: 1024 });
+      await session(page);
+      const item: MaterialLibraryItem = { ...published,
+        latest_attempt: { ...published.latest_attempt!, run_id: publishedRun, status, error_code: null, progress_stage: "completed", completed_pages: 2 },
+        available_structures: [{ ...published.available_structures[0], status }],
+        study_sessions: studyStatus ? [{ ...active, status: studyStatus }] : [] };
+      await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
+      await page.goto("/knowledge-maps");
+      const card = page.getByRole("article");
+      await expect(card.locator(".state-actions button").first()).toHaveText("開啟知識地圖");
+      await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
+      await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
+      if (studyStatus) await expect(card.getByRole("button", { name: studyStatus === "completed" ? "查看上次學習" : "接續上次學習", exact: true })).toHaveClass("secondary-button");
+      await page.screenshot({ path: `/tmp/studydy-map-library/completed-${status}-${studyStatus ?? "none"}.png`, fullPage: true });
+      await page.goto("/materials");
+      await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass(studyStatus ? "secondary-button" : "primary-button");
+      await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveCount(0);
+      if (studyStatus) await expect(card.locator(".primary-button")).toHaveText(studyStatus === "completed" ? "查看上次學習" : "接續上次學習");
+    });
+  }
+}
+
+for (const status of ["pending", "running", "failed", "cancelled", "succeeded", "partial"] as const) {
+  test(`map collection retains latest ${status} action when only an older map exists`, async ({ page }) => {
+    await session(page);
+    const completed = status === "succeeded" || status === "partial";
+    const item = { ...published, latest_attempt: { ...published.latest_attempt!, status,
+      progress_stage: completed ? "completed" : status === "pending" ? "queued" : "semantics",
+      completed_pages: completed ? 2 : 0, error_code: status === "failed" ? "STORAGE_UNAVAILABLE" : null,
+      cancel_requested_at: status === "cancelled" ? published.created_at : null } };
+    await page.route("**/v1/materials", route => route.fulfill({ json: { schema: "material-library/v2", materials: [item] } }));
+    await page.goto("/knowledge-maps");
+    const card = page.getByRole("article");
+    await expect(card.getByRole("button", { name: "開啟知識地圖", exact: true })).toHaveClass("primary-button");
+    await expect(card.getByRole("button", { name: "查看最新處理", exact: true })).toHaveClass("secondary-button");
+  });
+}

@@ -80,6 +80,9 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
     {visibleItems.map(item => {
       const latest = item.latest_attempt;
       const available = item.available_structures;
+      const latestHasPublishedMap = !!latest && available.some(structure => structure.run_id === latest.run_id);
+      const latestCompletedWithMap = !!latest && (latest.status === "succeeded" || latest.status === "partial") && latestHasPublishedMap;
+      const showLatestProcessing = !!latest && (!isCollection || !latestCompletedWithMap);
       const processingPrimary = isCollection && !mapsOnly && !item.study_sessions[0] && !available[0];
       const unpublishedNote = available.length === 0 && <p>目前沒有可開啟的已發布知識地圖。</p>;
       const studyAction = item.study_sessions[0] && <button className={mapsOnly ? "secondary-button" : "primary-button"} type="button" onClick={() => openStudy(item, item.study_sessions[0])}>{item.study_sessions[0].status === "completed" ? "查看上次學習" : "接續上次學習"}</button>;
@@ -104,7 +107,7 @@ export function MaterialLibrary({ apiClient, materialId, mapsOnly = false }: { a
         <div className="state-actions">
           {mapsOnly ? mapAction : studyAction}
           {mapsOnly ? studyAction : mapAction}
-          {latest && <button className={processingPrimary ? "primary-button" : "secondary-button"} type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
+          {showLatestProcessing && <button className={processingPrimary ? "primary-button" : "secondary-button"} type="button" onClick={() => writeRoute({ name: "material-run", materialId: item.material_id, runId: latest.run_id })}>查看最新處理</button>}
           {isCollection && removeControl}
           {materialId && <a className="secondary-button" href={apiClient.sourceArtifactUrl(item.source_artifact_id)} target="_blank" rel="noreferrer">開啟原始 PDF</a>}
         </div>
