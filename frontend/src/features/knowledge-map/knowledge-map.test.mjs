@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conceptNavigationGroups, focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
+import { learningNavigationGroups, focusLayout, initialFocusConceptId } from "./knowledge-map.ts";
 
 const view = {
   concepts: ["a", "b", "c", "d"].map(concept_id => ({ concept_id })),
@@ -36,19 +36,46 @@ test("first visit starts with a connected concept without changing the learning 
   assert.equal(initialFocusConceptId({ ...map, relations: [] }), "cover");
 });
 
-test("navigation uses section order once per concept and keeps unassigned concepts reachable", () => {
-  const map = { document_tree: { sections: [
-    { section_id: "later", title: "Later", order: 2 },
-    { section_id: "first", title: "First", order: 0 },
-    { section_id: "empty", title: "Empty", order: 1 },
-  ] }, concepts: [
-    { concept_id: "a", section_ids: ["later", "first"] },
-    { concept_id: "b", section_ids: ["later"] },
-    { concept_id: "c", section_ids: [] },
-    { concept_id: "d", section_ids: ["missing"] },
+const navigation = {
+  document_tree: { sections: [
+    { section_id: "a", title: "Section A", order: 0 },
+    { section_id: "b", title: "Section B", order: 1 },
+  ] },
+  concepts: [
+    { concept_id: "a1", section_ids: ["a"] },
+    { concept_id: "b1", section_ids: ["b"] },
+    { concept_id: "a2", section_ids: ["a"] },
+  ],
+  initial_learning_path: [
+    { position: 3, concept_id: "a2", reason: "document_order" },
+    { position: 1, concept_id: "a1", reason: "document_order" },
+    { position: 2, concept_id: "b1", reason: "prerequisite" },
+  ],
+};
+
+test("path positions govern navigation and revisited sections stay consecutive separators", () => {
+  const original = structuredClone(navigation);
+  const groups = learningNavigationGroups(navigation);
+  assert.deepEqual(groups.map(group => [group.title, group.items.map(item => [item.concept.concept_id, item.step.position])]),
+    [["Section A", [["a1", 1]]], ["Section B", [["b1", 2]]], ["Section A", [["a2", 3]]]]);
+  assert.equal(groups[1].items[0].step.reason, "prerequisite");
+  assert.deepEqual(navigation, original);
+});
+
+test("a path can order C before A and B independently of document order", () => {
+  const map = { ...navigation, initial_learning_path: [
+    { position: 1, concept_id: "a2", reason: "document_order" },
+    { position: 2, concept_id: "a1", reason: "document_order" },
+    { position: 3, concept_id: "b1", reason: "prerequisite" },
   ] };
-  const original = structuredClone(map);
-  assert.deepEqual(conceptNavigationGroups(map).map(group => [group.title, group.concepts.map(concept => concept.concept_id)]),
-    [["First", ["a"]], ["Later", ["b"]], ["其他概念", ["c", "d"]]]);
-  assert.deepEqual(map, original);
+  assert.deepEqual(learningNavigationGroups(map).flatMap(group => group.items.map(item => item.concept.concept_id)), ["a2", "a1", "b1"]);
+});
+
+test("defensive concepts outside the path get no invented position; broken references fail", () => {
+  const map = { ...navigation, concepts: [...navigation.concepts, { concept_id: "extra", section_ids: [] }] };
+  const other = learningNavigationGroups(map).at(-1);
+  assert.equal(other.title, "其他概念");
+  assert.equal(other.items[0].concept.concept_id, "extra");
+  assert.equal(other.items[0].step, null);
+  assert.throws(() => learningNavigationGroups({ ...navigation, concepts: [] }));
 });

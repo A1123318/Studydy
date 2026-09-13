@@ -22,18 +22,17 @@ import { Icon } from "../../ui/Icon";
 import { StateView } from "../../ui/StateView";
 import { StudyGuide } from "../../ui/StudyGuide";
 import {
-  conceptNavigationGroups,
+  learningNavigationGroups,
   focusLayout,
   initialFocusConceptId,
 } from "./knowledge-map";
 
 type Concept = KnowledgeStructureView["concepts"][number];
-type Mode = "overview" | "path" | "focus" | "review";
+type Mode = "overview" | "focus" | "review";
 type RestoreFocus = () => void;
 
 const modes: { id: Mode; label: string }[] = [
   { id: "focus", label: "概念地圖" },
-  { id: "path", label: "學習順序" },
   { id: "overview", label: "總覽" },
   { id: "review", label: "複習重點" },
 ];
@@ -178,48 +177,6 @@ function Overview({ openConcept, view, progress }: {
   </section>;
 }
 
-function PathView({ onFocusConcept, selectedConceptId, view, progress }: {
-  progress: LearnerProgressView | null;
-  onFocusConcept: (id: string) => void;
-  selectedConceptId: string;
-  view: KnowledgeStructureView;
-}) {
-  const groups: { id: string; title: string; steps: KnowledgeStructureView["initial_learning_path"] }[] = [];
-  for (const step of view.initial_learning_path) {
-    const concept = view.concepts.find((item) => item.concept_id === step.concept_id)!;
-    const section = view.document_tree.sections.find((item) => concept.section_ids.includes(item.section_id));
-    const id = section?.section_id ?? "ungrouped";
-    if (groups.at(-1)?.id !== id) groups.push({ id, title: section?.title ?? "教材重點", steps: [] });
-    groups.at(-1)!.steps.push(step);
-  }
-  return (
-    <section aria-labelledby="path-title">
-      <div className="view-heading">
-        <div><h2 id="path-title">教材建議學習順序</h2><p>由前置概念到後續重點，選擇一步查看內容與教材來源。</p></div>
-
-      </div>
-      {groups.map((group) => <details className="path-section" key={`${group.id}:${group.steps[0].position}`} open={group.steps.some((step) => step.concept_id === selectedConceptId)}>
-      <summary><span>{group.title}</span><small>{group.steps.length} 個概念</small></summary>
-      <ol className="learning-path">
-        {group.steps.map((step) => {
-          const concept = view.concepts.find((item) => item.concept_id === step.concept_id)!;
-          return (
-            <li className={step.concept_id === selectedConceptId ? "is-current" : undefined} key={step.concept_id}>
-              <button type="button" onClick={() => onFocusConcept(step.concept_id)}>
-                <span>{step.position}</span>
-                <div><strong>{concept.label}</strong><small>{step.concept_id === selectedConceptId ? "目前選取 · " : ""}{step.reason === "prerequisite" ? "依前置概念安排" : "依教材順序"}</small></div>
-                <LearningBadge conceptId={concept.concept_id} progress={progress} />
-                <Icon name="chevron-right" />
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-      </details>)}
-    </section>
-  );
-}
-
 type ConceptHandle = { id: string; type: "source" | "target"; position: Position; offset: number };
 type ConceptNode = Node<{ label: ReactNode; handles: ConceptHandle[] }, "concept">;
 
@@ -238,18 +195,24 @@ const relationColors: Record<RelationType, string> = {
   prerequisite: "#5B8DEF", part_of: "#22C55E", application: "#06B6D4", example: "#F59E0B", contrast: "#EF4444",
 };
 
-function ConceptNavigator({ view, selectedConceptId, focusConcept }: {
+function LearningNavigator({ view, selectedConceptId, focusConcept, progress }: {
+  progress: LearnerProgressView | null;
   view: KnowledgeStructureView; selectedConceptId: string; focusConcept: (id: string) => void;
 }) {
-  const groups = useMemo(() => conceptNavigationGroups(view), [view]);
+  const groups = useMemo(() => learningNavigationGroups(view), [view]);
+  const states = useMemo(() => new Map(progress?.concept_states.map(state => [state.concept_id, state])), [progress]);
+  const firstStep = groups[0]?.items[0]?.step;
+  const currentStep = view.initial_learning_path.find(step => step.concept_id === progress?.current_concept_id);
+  const mastered = progress?.concept_states.filter(state => state.status === "mastered").length ?? 0;
+  const nextId = progress && ["advance", "review_prerequisite", "resume"].includes(progress.next_action.action) ? progress.next_action.target_concept_id : null;
   const [expanded, setExpanded] = useState(false);
   const list = useRef<HTMLDivElement>(null);
-  const current = useRef<HTMLButtonElement>(null);
+  const selectedRow = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const rail = list.current!;
     const reveal = () => {
-      if (!current.current || !rail.clientHeight) return;
-      const item = current.current.getBoundingClientRect();
+      if (!selectedRow.current || !rail.clientHeight) return;
+      const item = selectedRow.current.getBoundingClientRect();
       const bounds = rail.getBoundingClientRect();
       if (item.top < bounds.top) rail.scrollTop += item.top - bounds.top;
       else if (item.bottom > bounds.bottom) rail.scrollTop += item.bottom - bounds.bottom;
@@ -259,18 +222,43 @@ function ConceptNavigator({ view, selectedConceptId, focusConcept }: {
     observer.observe(rail);
     return () => observer.disconnect();
   }, [selectedConceptId, expanded]);
-  return <nav className={`focus-navigator surface${expanded ? " is-expanded" : ""}`} aria-label="概念導覽">
-    <header><h2>概念導覽</h2><span>{view.concepts.length} 個概念</span></header>
+  return <nav className={`focus-navigator surface${expanded ? " is-expanded" : ""}`} aria-label="學習導覽">
+    <header><h2>學習導覽</h2><span>{view.concepts.length} 個概念</span></header>
     <button className="navigator-toggle" type="button" aria-expanded={expanded} aria-controls="focus-concept-list" onClick={() => setExpanded(value => !value)}>
-      <strong>概念導覽</strong><span>{view.concepts.length} 個概念 · {expanded ? "收合" : "展開"}</span>
+      <strong>學習導覽</strong><span>{view.concepts.length} 個概念 · {expanded ? "收合" : "展開"}</span>
     </button>
+    {(progress || firstStep) && <p className="navigator-summary">
+      {progress ? currentStep && `目前第 ${currentStep.position} / ${view.initial_learning_path.length} 個概念` : `建議從第 ${firstStep!.position} 個概念開始`}
+      {progress && <span>已掌握 {mastered} 個</span>}
+    </p>}
     <div className="navigator-list" id="focus-concept-list" ref={list}>
       {groups.map(group => <section key={group.id}>
         <h3>{group.title}</h3>
-        <ul>{group.concepts.map(concept => <li key={concept.concept_id}><button
-          ref={concept.concept_id === selectedConceptId ? current : undefined}
-          type="button" aria-current={concept.concept_id === selectedConceptId ? "true" : undefined}
-          onClick={() => focusConcept(concept.concept_id)}>{concept.label}</button></li>)}</ul>
+        <ul>{group.items.map(({ concept, step }) => {
+          const selected = concept.concept_id === selectedConceptId;
+          const learningCurrent = concept.concept_id === progress?.current_concept_id;
+          const status = states.get(concept.concept_id)?.status;
+          const next = concept.concept_id === nextId;
+          const recommended = !progress && !!step && step.position === firstStep?.position;
+          const prerequisite = step?.reason === "prerequisite";
+          const stateLabel = status === "mastered" ? "已掌握" : status === "needs_review" ? "需要複習" : status === "learning" && !learningCurrent ? "學習中" : "";
+          const name = [step ? `第 ${step.position} 個，${concept.label}` : concept.label,
+            learningCurrent && "目前學習", stateLabel, next && "建議下一步", recommended && "建議起點", prerequisite && "依先備關係安排"].filter(Boolean).join("；");
+          return <li key={concept.concept_id}><button
+            ref={selected ? selectedRow : undefined} type="button" aria-label={name} aria-current={selected ? "true" : undefined}
+            className={[selected && "is-selected", learningCurrent && "is-learning-current", status === "mastered" && "is-mastered", status === "needs_review" && "is-needs-review", next && "is-next-suggested"].filter(Boolean).join(" ")}
+            onClick={() => focusConcept(concept.concept_id)}>
+            <span className="navigator-position" aria-hidden="true">{step?.position}</span>
+            <span className="navigator-concept"><span className="navigator-label">{concept.label}</span>
+              <span className="navigator-notes">
+                {learningCurrent && <span className="navigator-current">目前學習</span>}
+                {recommended && <span>建議起點</span>}{next && <span>建議下一步</span>}
+                {prerequisite && <span>依先備關係安排</span>}
+              </span>
+            </span>
+            {stateLabel && <span className="navigator-state" title={stateLabel} aria-hidden="true"><Icon name={status === "mastered" ? "check" : status === "needs_review" ? "warning" : "clock"} size={15} /></span>}
+          </button></li>;
+        })}</ul>
       </section>)}
     </div>
   </nav>;
@@ -282,7 +270,7 @@ function FocusContext({ selected, directRelations, conceptById, progress, openCo
   progress: LearnerProgressView | null; openConcept: (id: string) => void; openRelation: (id: string) => void;
 }) {
   const relations = mobile && (directRelations.length === 0
-    ? <p className="relation-empty">這個概念目前沒有直接連結，可查看教材重點，或從學習順序探索其他概念。</p>
+    ? <p className="relation-empty">這個概念目前沒有直接連結，可查看教材重點，或從學習導覽探索其他概念。</p>
     : <ul className="relation-list" aria-label="直接概念關係">{directRelations.map(relation => <li key={relation.relation_id}>
       <button type="button" onClick={() => openRelation(relation.relation_id)}>
         <span style={{ color: relationColors[relation.type] }}>{relationLabels[relation.type]}</span>
@@ -299,7 +287,7 @@ function FocusContext({ selected, directRelations, conceptById, progress, openCo
       <details className="focus-relations"><summary>查看關係說明（{directRelations.length}）</summary>{relations}</details>
     </> : <section className="focus-relation-summary">
       <p>{directRelations.length > 0 ? <><strong>{directRelations.length}</strong> 個直接關係</> : "目前沒有直接關係"}</p>
-      <p className="focus-map-hint">{directRelations.length > 0 ? "點選地圖上的概念或連線查看詳細內容。" : "可以從左側概念導覽選擇其他概念，或切換到「學習順序」探索教材。"}</p>
+      <p className="focus-map-hint">{directRelations.length > 0 ? "點選地圖上的概念或連線查看詳細內容。" : "可以從學習導覽選擇其他概念，或切換到「總覽」探索教材。"}</p>
     </section>}
   </>;
 }
@@ -435,7 +423,7 @@ function FocusView({ openConcept, selectedConceptId, focusConcept, view, openRel
     };
   });
   return <section className="focus-workspace" aria-labelledby="focus-title">
-    <ConceptNavigator view={view} selectedConceptId={selected.concept_id} focusConcept={focusConcept} />
+    <LearningNavigator progress={progress} view={view} selectedConceptId={selected.concept_id} focusConcept={focusConcept} />
     <section className="focus-main surface">
       <header className="focus-graph-header">
         <h2 id="focus-title">概念地圖</h2>
@@ -519,10 +507,9 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
   const selectedRelation = view.relations.find((relation) => relation.relation_id === relationId);
   const query = searchQuery.trim().toLocaleLowerCase();
   const searchResults = query ? view.concepts.filter((concept) => [concept.label, ...concept.aliases, ...concept.claims.map((claim) => claim.text)].some((text) => text.toLocaleLowerCase().includes(query))) : [];
-  const selectedPathIndex = view.initial_learning_path.findIndex((step) => step.concept_id === selectedConceptId);
-  const guidanceApplies = selectedConceptId === progress?.current_concept_id && progress.next_action.action !== "assess";
-  const nextConcept = view.concepts.find((concept) => concept.concept_id === (guidanceApplies ? progress.next_action.target_concept_id : view.initial_learning_path[selectedPathIndex + 1]?.concept_id));
-  const nextCaption = guidanceApplies ? "建議接著學習" : "教材下一步";
+  const nextConcept = progress && ["advance", "review_prerequisite", "resume"].includes(progress.next_action.action)
+    ? view.concepts.find(concept => concept.concept_id === progress.next_action.target_concept_id) : undefined;
+  const nextCaption = nextConcept ? "建議接著學習" : "教材導覽";
   const weakCount = progress?.concept_states.filter((state) => state.status === "needs_review").length ?? 0;
   const masteredCount = progress?.concept_states.filter((state) => state.status === "mastered").length ?? 0;
   const startConceptId = canResume && progress?.current_concept_id ? progress.current_concept_id : selectedConceptId;
@@ -650,21 +637,13 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
       {view.excluded_pages.length > 0 && <p className="form-error" role="status">第 {view.excluded_pages.map((item) => item.page).join("、")} 頁未能整理，可在總覽查看說明。</p>}
       {progress && <details className="map-summary-container"><summary>學習摘要</summary><div className="map-learning-summary has-progress" aria-label="探索摘要">
         <button type="button" onClick={() => openConceptDetail(selectedConceptId)}><Icon name="book" /><span><small>目前焦點</small><strong>{view.concepts.find((concept) => concept.concept_id === selectedConceptId)?.label}</strong></span><Icon name="chevron-right" /></button>
-        <button type="button" onClick={() => nextConcept ? openConceptDetail(nextConcept.concept_id) : selectMode("path")}><Icon name="learning" /><span><small>{nextCaption}</small><strong>{nextConcept?.label ?? "查看完整學習順序"}</strong></span><Icon name="chevron-right" /></button>
+        <button type="button" onClick={() => nextConcept ? openConceptDetail(nextConcept.concept_id) : selectMode("focus")}><Icon name="learning" /><span><small>{nextCaption}</small><strong>{nextConcept?.label ?? "查看學習導覽"}</strong></span><Icon name="chevron-right" /></button>
         <button type="button" onClick={() => selectMode("review")}><Icon name="warning" /><span><small>複習重點</small><strong>{`${weakCount} 個概念`}</strong></span></button>
         <div className="summary-progress"><Icon name="check" /><span><small>最近一次學習</small><strong>{`${masteredCount} / ${view.concepts.length} 已掌握`}</strong></span></div>
       </div></details>}
       <div className="map-content">
         <div aria-labelledby={`map-tab-${mode}`} className="map-view" id={`map-panel-${mode}`} role="tabpanel" tabIndex={0}>
           {mode === "overview" && <Overview openConcept={openConceptDetail} view={view} progress={progress} />}
-          {mode === "path" && (
-            <PathView
-              progress={progress}
-              onFocusConcept={openConceptDetail}
-              selectedConceptId={selectedConceptId}
-              view={view}
-            />
-          )}
           {mode === "focus" && (
             <FocusView selectedRelationId={relationId} progress={progress} openRelation={openRelation} openConcept={openConceptDetail} selectedConceptId={selectedConceptId} focusConcept={focusConcept} detail={detail} studyAction={focusStudyAction} view={view} />
           )}
@@ -675,7 +654,7 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
       {mode !== "focus" && <div className="map-study-bar"><StudyGuide
         mood={canResume ? "guide" : "welcome"}
         title={studyTitle}
-        message={canResume ? "你的作答進度已保留。回到教材後，我會帶你完成下一個練習重點。" : "點選概念或連線查看內容。學習順序提供參考，選好想學的概念後就能開始閱讀與練習。"}
+        message={canResume ? "你的作答進度已保留。回到教材後，我會帶你完成下一個練習重點。" : "點選概念或連線查看內容。學習導覽提供建議順序，選好想學的概念後就能開始閱讀與練習。"}
         action={studyAction}
       /></div>}
     </section>

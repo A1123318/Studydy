@@ -2,17 +2,26 @@ import type { KnowledgeStructureView } from "../../api/contracts";
 
 type MapNode = { id: string; side: "center" | "left" | "right"; x: number; y: number; width: number; height: number };
 
-// Browse each concept once, under its first section in the document's own order.
-export function conceptNavigationGroups(view: KnowledgeStructureView) {
-  const groups = [...view.document_tree.sections].sort((a, b) => a.order - b.order)
-    .map(section => ({ id: section.section_id, title: section.title, concepts: [] as KnowledgeStructureView["concepts"] }));
-  const sectionIndex = new Map(groups.map((group, index) => [group.id, index]));
-  const other = { id: "ungrouped", title: "其他概念", concepts: [] as KnowledgeStructureView["concepts"] };
-  for (const concept of view.concepts) {
-    const indices = concept.section_ids.flatMap(id => sectionIndex.has(id) ? [sectionIndex.get(id)!] : []);
-    (indices.length ? groups[Math.min(...indices)] : other).concepts.push(concept);
+// Section labels separate consecutive steps; they never regroup or reorder the path.
+export function learningNavigationGroups(view: KnowledgeStructureView) {
+  type Item = { concept: KnowledgeStructureView["concepts"][number]; step: KnowledgeStructureView["initial_learning_path"][number] | null };
+  const byId = new Map(view.concepts.map(concept => [concept.concept_id, concept]));
+  const sections = [...view.document_tree.sections].sort((a, b) => a.order - b.order);
+  const groups: { id: string; sectionId: string | null; title: string; items: Item[] }[] = [];
+  const inPath = new Set<string>();
+  for (const step of [...view.initial_learning_path].sort((a, b) => a.position - b.position)) {
+    const concept = byId.get(step.concept_id)!;
+    const section = sections.find(section => concept.section_ids.includes(section.section_id));
+    const sectionId = section?.section_id ?? null;
+    if (!groups.length || groups.at(-1)!.sectionId !== sectionId) {
+      groups.push({ id: `step-${step.position}`, sectionId, title: section?.title ?? "教材概念", items: [] });
+    }
+    groups.at(-1)!.items.push({ concept, step });
+    inPath.add(step.concept_id);
   }
-  return [...groups, other].filter(group => group.concepts.length > 0);
+  const other = view.concepts.filter(concept => !inPath.has(concept.concept_id));
+  if (other.length) groups.push({ id: "other", sectionId: null, title: "其他概念", items: other.map(concept => ({ concept, step: null })) });
+  return groups;
 }
 
 // A local view of canonical relations; document hierarchy and learning order stay intact.
