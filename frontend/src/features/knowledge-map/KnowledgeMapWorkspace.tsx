@@ -88,7 +88,8 @@ function nodeKeyboardAction(open: () => void, title: string) {
   };
 }
 
-function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStudy, sourceArtifactId, view, openConcept, progress, canResume }: {
+function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStudy, sourceArtifactId, view, openConcept, progress, canResume, showStudyAction }: {
+  showStudyAction: boolean;
   view: KnowledgeStructureView;
   progress: LearnerProgressView | null;
   canResume: boolean;
@@ -108,13 +109,14 @@ function ConceptDetail({ apiClient, concept, close, isStartingStudy, onStartStud
         <button aria-label="關閉概念詳情" className="panel-close" type="button" onClick={close}>×</button>
       </header>
       <LearningBadge conceptId={concept.concept_id} progress={progress} />
-      <button
+      {showStudyAction && <><button
         className="primary-button detail-start"
         disabled={isStartingStudy}
         type="button"
         onClick={() => onStartStudy(concept.concept_id)}
       ><Icon name="learning" />{isStartingStudy ? "請稍候…" : resumesCurrent ? "繼續這個概念" : progress ? "從這裡開始新學習" : "從這個概念開始"}</button>
       {progress && !resumesCurrent && <p className="new-study-note">會建立新的學習紀錄，原有紀錄仍保留。</p>}
+      </>}
       <section>
         <h3>教材重點</h3>
         <ConceptContent claims={concept.claims} apiClient={apiClient} sourceArtifactId={sourceArtifactId} />
@@ -545,19 +547,29 @@ export function KnowledgeMapWorkspace({ apiClient, progress, isLoadingProgress, 
     setRelationId(null);
     window.requestAnimationFrame(() => tabs.current.get(nextMode)?.focus());
   };
-  const studyButtonLabel = isLoadingProgress ? "讀取學習進度…" : isStartingStudy ? "正在開始…" : canResume ? "繼續本次學習" : progress ? "開始新的學習" : "開始本次學習";
+  const busyStudyLabel = isLoadingProgress ? "讀取學習進度…" : isStartingStudy ? "正在開始…" : null;
+  const studyButtonLabel = busyStudyLabel ?? (canResume ? "繼續本次學習" : progress ? "開始新的學習" : "開始本次學習");
   const studyTitle = canResume ? `接著學習「${startConcept?.label ?? "目前概念"}」` : "先探索教材的概念與關係";
   const studyAction = <button className="primary-button" disabled={isStartingStudy || isLoadingProgress} type="button" onClick={() => onStartStudy(startConceptId)}>
     <Icon name="learning" />{studyButtonLabel}
   </button>;
+  const focusStudyConceptId = selectedConceptId;
+  const focusStudyLabel = view.concepts.find(concept => concept.concept_id === focusStudyConceptId)?.label ?? "目前概念";
+  const selectedIsCurrentSessionConcept = canResume && progress?.current_concept_id === focusStudyConceptId;
+  const focusStudyTitle = selectedIsCurrentSessionConcept ? `接著學習「${focusStudyLabel}」`
+    : canResume ? `從「${focusStudyLabel}」開始新的學習？` : `準備開始學習「${focusStudyLabel}」？`;
+  const focusStudyButtonLabel = busyStudyLabel ?? (selectedIsCurrentSessionConcept ? "繼續本次學習" : progress ? "開始新的學習" : "開始學習");
   const focusStudyAction = <section className="focus-study-action surface" aria-label="學習入口">
-    <div><strong>{canResume ? studyTitle : "準備開始學習？"}</strong><p>{canResume ? "你的學習進度已保留。" : "選好概念後即可開始閱讀與練習。"}</p></div>
-    {studyAction}
+    <div><strong>{focusStudyTitle}</strong><p>{selectedIsCurrentSessionConcept ? "你的學習進度已保留。" : canResume ? "原有學習紀錄會保留。" : "選好概念後即可開始閱讀與練習。"}</p></div>
+    <button className="primary-button" disabled={isStartingStudy || isLoadingProgress} type="button" onClick={() => onStartStudy(focusStudyConceptId)}>
+      <Icon name="learning" />{focusStudyButtonLabel}
+    </button>
   </section>;
   const detail = selectedRelation || selectedConcept ? <>
         {selectedRelation && <RelationDetail relation={selectedRelation} view={view} apiClient={apiClient} sourceArtifactId={sourceArtifactId} close={closeDetail} openConcept={openConceptDetail} />}
         {selectedConcept && (
           <ConceptDetail
+            showStudyAction={mode !== "focus"}
             apiClient={apiClient}
             close={closeDetail}
             view={view}
